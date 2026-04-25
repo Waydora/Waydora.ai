@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Layout, Logo } from "@/components/layout";
+import { TravelBackdrop } from "@/components/travel-backdrop";
 import { ItineraryTimeline } from "@/components/itinerary";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -154,55 +155,58 @@ export default function Home() {
 
   return (
     <Layout>
-      <div className="flex-1 flex flex-col w-full max-w-5xl mx-auto p-4 md:p-6 lg:p-8 min-h-0">
+      <div className="flex-1 flex flex-col w-full min-h-0">
         {isInitialState && (
-          <div className="flex-1 flex flex-col items-center justify-center py-12 md:py-24 space-y-16">
-            <Logo />
-            
-            <div className="w-full max-w-3xl relative group">
-              <div className="absolute -inset-1.5 bg-gradient-to-r from-primary/30 to-accent/30 rounded-2xl blur-lg opacity-40 group-hover:opacity-60 transition duration-1000 group-hover:duration-200" />
-              <div className="relative flex flex-col sm:flex-row gap-3 bg-background rounded-2xl shadow-xl border border-primary/10 p-3">
-                <Textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSubmit();
-                    }
-                  }}
-                  placeholder="Describe your dream trip — destination, dates, vibe, budget..."
-                  className="min-h-[70px] max-h-[250px] border-0 focus-visible:ring-0 resize-none text-lg md:text-xl px-5 py-4 placeholder:text-muted-foreground/50 shadow-none bg-transparent"
-                />
-                <Button
-                  onClick={() => handleSubmit()}
-                  disabled={!input.trim()}
-                  className="h-auto sm:h-auto py-4 px-8 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-lg font-bold shadow-md shrink-0 transition-all active:scale-95"
-                >
-                  <Sparkles className="w-5 h-5 mr-2" />
-                  Plan It
-                </Button>
-              </div>
-            </div>
+          <div className="flex-1 relative overflow-y-auto">
+            <TravelBackdrop />
+            <div className="relative z-10 flex flex-col items-center justify-start min-h-full py-14 md:py-20 px-4 md:px-6 space-y-14 max-w-5xl mx-auto">
+              <Logo />
 
-            {suggestions && suggestions.length > 0 && (
-              <div className="w-full space-y-5 overflow-hidden">
-                <div className="flex items-center gap-2 text-sm font-semibold tracking-wide text-muted-foreground px-2 uppercase">
-                  <Heart className="w-4 h-4 text-accent" />
-                  <span>Featured inspiration</span>
-                </div>
-                <div className="flex overflow-x-auto pb-8 -mx-4 px-4 md:mx-0 md:px-0 gap-6 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                  {suggestions.map((suggestion) => (
-                    <div key={suggestion.slug} className="snap-start">
-                      <SuggestionCard
-                        suggestion={suggestion}
-                        onClick={() => handleSubmit(suggestion.prompt)}
-                      />
-                    </div>
-                  ))}
+              <div className="w-full max-w-3xl relative group">
+                <div className="absolute -inset-1.5 bg-gradient-to-r from-accent/40 to-white/20 rounded-2xl blur-xl opacity-60 transition duration-1000" />
+                <div className="relative flex flex-col sm:flex-row gap-3 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-white/40 p-3">
+                  <Textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSubmit();
+                      }
+                    }}
+                    placeholder="Describe your dream trip — destination, dates, vibe, budget..."
+                    className="min-h-[70px] max-h-[250px] border-0 focus-visible:ring-0 resize-none text-lg md:text-xl px-5 py-4 placeholder:text-muted-foreground/60 shadow-none bg-transparent text-foreground"
+                  />
+                  <Button
+                    onClick={() => handleSubmit()}
+                    disabled={!input.trim()}
+                    className="h-auto sm:h-auto py-4 px-8 rounded-xl bg-accent hover:bg-accent/90 text-accent-foreground text-lg font-bold shadow-lg shrink-0 transition-all active:scale-95"
+                  >
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Plan It
+                  </Button>
                 </div>
               </div>
-            )}
+
+              {suggestions && suggestions.length > 0 && (
+                <div className="w-full space-y-5 overflow-hidden">
+                  <div className="flex items-center gap-2 text-sm font-semibold tracking-[0.2em] text-white/80 px-2 uppercase">
+                    <Heart className="w-4 h-4 text-accent" />
+                    <span>Featured inspiration</span>
+                  </div>
+                  <div className="flex overflow-x-auto pb-8 -mx-4 px-4 md:mx-0 md:px-0 gap-6 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                    {suggestions.map((suggestion) => (
+                      <div key={suggestion.slug} className="snap-start">
+                        <SuggestionCard
+                          suggestion={suggestion}
+                          onClick={() => handleSubmit(suggestion.prompt)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

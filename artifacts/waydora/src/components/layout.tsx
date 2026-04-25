@@ -10,19 +10,28 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useListItineraries } from "@workspace/api-client-react";
+import waydoraLogo from "@assets/Travel_simple,_everywhere!_(2)_1777134832372.png";
 
-export function Logo() {
-  return (
-    <div className="flex flex-col items-center justify-center">
-      <Link href="/" className="inline-flex items-center gap-2 group">
-        <span className="font-serif text-4xl md:text-5xl font-bold tracking-tight text-primary">
-          Waydora<span className="text-accent">.</span>
-        </span>
+export function Logo({ variant = "hero" }: { variant?: "hero" | "header" }) {
+  if (variant === "header") {
+    return (
+      <Link href="/" className="inline-flex items-center group">
+        <img
+          src={waydoraLogo}
+          alt="Waydora — Travel simple, everywhere!"
+          className="h-9 md:h-10 w-auto object-contain"
+        />
       </Link>
-      <p className="text-base font-medium text-muted-foreground mt-2 tracking-wide">
-        Travel simple, everywhere!
-      </p>
-    </div>
+    );
+  }
+  return (
+    <Link href="/" className="inline-flex flex-col items-center justify-center group">
+      <img
+        src={waydoraLogo}
+        alt="Waydora — Travel simple, everywhere!"
+        className="w-[280px] md:w-[420px] h-auto drop-shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
+      />
+    </Link>
   );
 }
 
@@ -31,18 +40,18 @@ export function Header() {
   const [, setLocation] = useLocation();
 
   return (
-    <header className="shrink-0 sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md">
+    <header className="shrink-0 sticky top-0 z-50 w-full border-b border-white/10 bg-primary/95 backdrop-blur-md">
       <div className="container mx-auto px-4 flex h-16 items-center justify-between">
-        <Link href="/" className="inline-flex items-center gap-1 group">
-          <span className="font-serif text-xl font-bold text-primary">
-            Waydora<span className="text-accent">.</span>
-          </span>
-        </Link>
+        <Logo variant="header" />
 
         <div className="flex items-center gap-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-2 font-medium">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-2 font-medium text-white hover:bg-white/10 hover:text-white"
+              >
                 <Map className="w-4 h-4 text-accent" />
                 <span className="hidden sm:inline">Saved Trips</span>
               </Button>
