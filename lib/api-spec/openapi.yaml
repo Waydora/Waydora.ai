@@ -3,20 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Waydora API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: chat
+    description: Conversational itinerary planning
+  - name: itineraries
+    description: Saved itinerary management
+  - name: suggestions
+    description: Featured itinerary templates
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +29,142 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /chat:
+    post:
+      operationId: chat
+      tags: [chat]
+      summary: Send a message and receive a generated/updated itinerary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Chat reply with optional itinerary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+
+  /suggestions:
+    get:
+      operationId: listSuggestions
+      tags: [suggestions]
+      summary: List featured itinerary templates
+      responses:
+        "200":
+          description: Featured itinerary templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Suggestion"
+
+  /itineraries:
+    get:
+      operationId: listItineraries
+      tags: [itineraries]
+      summary: List all saved itineraries
+      responses:
+        "200":
+          description: Saved itineraries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SavedItinerary"
+    post:
+      operationId: saveItinerary
+      tags: [itineraries]
+      summary: Save an itinerary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveItineraryBody"
+      responses:
+        "201":
+          description: Saved itinerary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedItinerary"
+
+  /itineraries/{id}:
+    get:
+      operationId: getItinerary
+      tags: [itineraries]
+      summary: Get a saved itinerary by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Saved itinerary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedItinerary"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteItinerary
+      tags: [itineraries]
+      summary: Delete a saved itinerary
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /itineraries/share/{slug}:
+    get:
+      operationId: getSharedItinerary
+      tags: [itineraries]
+      summary: Get an itinerary by its public share slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Shared itinerary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedItinerary"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +175,216 @@ components:
       required:
         - status
 
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    ChatMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: ["user", "assistant"]
+        content:
+          type: string
+      required:
+        - role
+        - content
+
+    AffiliateLink:
+      type: object
+      properties:
+        provider:
+          type: string
+          description: Provider name e.g. Booking, Airbnb, GetYourGuide
+        label:
+          type: string
+        url:
+          type: string
+      required:
+        - provider
+        - label
+        - url
+
+    ItineraryActivity:
+      type: object
+      properties:
+        time:
+          type: string
+          description: Local time hint (e.g. "09:00", "Morning")
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: ["stay", "food", "experience", "transport", "sightseeing", "nightlife"]
+        estimatedCost:
+          type: string
+        affiliate:
+          $ref: "#/components/schemas/AffiliateLink"
+      required:
+        - time
+        - title
+        - description
+        - category
+
+    ItineraryDay:
+      type: object
+      properties:
+        day:
+          type: integer
+        title:
+          type: string
+        summary:
+          type: string
+        activities:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItineraryActivity"
+      required:
+        - day
+        - title
+        - summary
+        - activities
+
+    PackingCategory:
+      type: object
+      properties:
+        category:
+          type: string
+        items:
+          type: array
+          items:
+            type: string
+      required:
+        - category
+        - items
+
+    ItineraryData:
+      type: object
+      properties:
+        title:
+          type: string
+        destination:
+          type: string
+        durationDays:
+          type: integer
+        vibe:
+          type: string
+          description: Short vibe / theme of the trip
+        totalBudget:
+          type: string
+        bestSeason:
+          type: string
+        heroEmoji:
+          type: string
+          description: Single emoji hint used as a fallback hero illustration
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItineraryDay"
+        packingList:
+          type: array
+          items:
+            $ref: "#/components/schemas/PackingCategory"
+      required:
+        - title
+        - destination
+        - durationDays
+        - vibe
+        - totalBudget
+        - bestSeason
+        - days
+        - packingList
+
+    ChatRequest:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        existingItinerary:
+          $ref: "#/components/schemas/ItineraryData"
+      required:
+        - messages
+
+    ChatResponse:
+      type: object
+      properties:
+        reply:
+          type: string
+        itinerary:
+          $ref: "#/components/schemas/ItineraryData"
+      required:
+        - reply
+        - itinerary
+
+    Suggestion:
+      type: object
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        tagline:
+          type: string
+        description:
+          type: string
+        durationDays:
+          type: integer
+        budgetTier:
+          type: string
+          enum: ["low", "mid", "high"]
+        season:
+          type: string
+        accent:
+          type: string
+          description: Theme accent color hint (CSS color)
+        heroEmoji:
+          type: string
+        prompt:
+          type: string
+          description: Suggested chat prompt to seed conversation
+      required:
+        - slug
+        - title
+        - tagline
+        - description
+        - durationDays
+        - budgetTier
+        - season
+        - accent
+        - heroEmoji
+        - prompt
+
+    SaveItineraryBody:
+      type: object
+      properties:
+        itinerary:
+          $ref: "#/components/schemas/ItineraryData"
+      required:
+        - itinerary
+
+    SavedItinerary:
+      type: object
+      properties:
+        id:
+          type: integer
+        shareSlug:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        itinerary:
+          $ref: "#/components/schemas/ItineraryData"
+      required:
+        - id
+        - shareSlug
+        - createdAt
+        - itinerary
