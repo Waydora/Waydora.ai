@@ -41,6 +41,10 @@ export const ChatBody = zod.object({
           day: zod.number(),
           title: zod.string(),
           summary: zod.string(),
+          weather: zod
+            .string()
+            .optional()
+            .describe('Short weather hint, e.g. \"Soleggiato 24°C\"'),
           activities: zod.array(
             zod.object({
               time: zod
@@ -57,6 +61,18 @@ export const ChatBody = zod.object({
                 "nightlife",
               ]),
               estimatedCost: zod.string().optional(),
+              coordinates: zod
+                .object({
+                  lat: zod.number(),
+                  lng: zod.number(),
+                })
+                .optional(),
+              photoQuery: zod
+                .string()
+                .optional()
+                .describe(
+                  'Short search query for a representative photo (e.g. \"santorini blue dome\")',
+                ),
               affiliate: zod
                 .object({
                   provider: zod
@@ -100,6 +116,10 @@ export const ChatResponse = zod.object({
         day: zod.number(),
         title: zod.string(),
         summary: zod.string(),
+        weather: zod
+          .string()
+          .optional()
+          .describe('Short weather hint, e.g. \"Soleggiato 24°C\"'),
         activities: zod.array(
           zod.object({
             time: zod
@@ -116,6 +136,18 @@ export const ChatResponse = zod.object({
               "nightlife",
             ]),
             estimatedCost: zod.string().optional(),
+            coordinates: zod
+              .object({
+                lat: zod.number(),
+                lng: zod.number(),
+              })
+              .optional(),
+            photoQuery: zod
+              .string()
+              .optional()
+              .describe(
+                'Short search query for a representative photo (e.g. \"santorini blue dome\")',
+              ),
             affiliate: zod
               .object({
                 provider: zod
@@ -178,6 +210,10 @@ export const ListItinerariesResponseItem = zod.object({
         day: zod.number(),
         title: zod.string(),
         summary: zod.string(),
+        weather: zod
+          .string()
+          .optional()
+          .describe('Short weather hint, e.g. \"Soleggiato 24°C\"'),
         activities: zod.array(
           zod.object({
             time: zod
@@ -194,6 +230,18 @@ export const ListItinerariesResponseItem = zod.object({
               "nightlife",
             ]),
             estimatedCost: zod.string().optional(),
+            coordinates: zod
+              .object({
+                lat: zod.number(),
+                lng: zod.number(),
+              })
+              .optional(),
+            photoQuery: zod
+              .string()
+              .optional()
+              .describe(
+                'Short search query for a representative photo (e.g. \"santorini blue dome\")',
+              ),
             affiliate: zod
               .object({
                 provider: zod
@@ -237,6 +285,10 @@ export const SaveItineraryBody = zod.object({
         day: zod.number(),
         title: zod.string(),
         summary: zod.string(),
+        weather: zod
+          .string()
+          .optional()
+          .describe('Short weather hint, e.g. \"Soleggiato 24°C\"'),
         activities: zod.array(
           zod.object({
             time: zod
@@ -253,6 +305,18 @@ export const SaveItineraryBody = zod.object({
               "nightlife",
             ]),
             estimatedCost: zod.string().optional(),
+            coordinates: zod
+              .object({
+                lat: zod.number(),
+                lng: zod.number(),
+              })
+              .optional(),
+            photoQuery: zod
+              .string()
+              .optional()
+              .describe(
+                'Short search query for a representative photo (e.g. \"santorini blue dome\")',
+              ),
             affiliate: zod
               .object({
                 provider: zod
@@ -302,6 +366,10 @@ export const GetItineraryResponse = zod.object({
         day: zod.number(),
         title: zod.string(),
         summary: zod.string(),
+        weather: zod
+          .string()
+          .optional()
+          .describe('Short weather hint, e.g. \"Soleggiato 24°C\"'),
         activities: zod.array(
           zod.object({
             time: zod
@@ -318,6 +386,18 @@ export const GetItineraryResponse = zod.object({
               "nightlife",
             ]),
             estimatedCost: zod.string().optional(),
+            coordinates: zod
+              .object({
+                lat: zod.number(),
+                lng: zod.number(),
+              })
+              .optional(),
+            photoQuery: zod
+              .string()
+              .optional()
+              .describe(
+                'Short search query for a representative photo (e.g. \"santorini blue dome\")',
+              ),
             affiliate: zod
               .object({
                 provider: zod
@@ -348,6 +428,13 @@ export const DeleteItineraryParams = zod.object({
 });
 
 /**
+ * @summary Public counters
+ */
+export const GetStatsResponse = zod.object({
+  tripsPlanned: zod.number(),
+});
+
+/**
  * @summary Get an itinerary by its public share slug
  */
 export const GetSharedItineraryParams = zod.object({
@@ -374,6 +461,10 @@ export const GetSharedItineraryResponse = zod.object({
         day: zod.number(),
         title: zod.string(),
         summary: zod.string(),
+        weather: zod
+          .string()
+          .optional()
+          .describe('Short weather hint, e.g. \"Soleggiato 24°C\"'),
         activities: zod.array(
           zod.object({
             time: zod
@@ -390,6 +481,18 @@ export const GetSharedItineraryResponse = zod.object({
               "nightlife",
             ]),
             estimatedCost: zod.string().optional(),
+            coordinates: zod
+              .object({
+                lat: zod.number(),
+                lng: zod.number(),
+              })
+              .optional(),
+            photoQuery: zod
+              .string()
+              .optional()
+              .describe(
+                'Short search query for a representative photo (e.g. \"santorini blue dome\")',
+              ),
             affiliate: zod
               .object({
                 provider: zod

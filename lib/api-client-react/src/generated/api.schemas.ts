@@ -33,6 +33,11 @@ export interface AffiliateLink {
   url: string;
 }
 
+export interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
 export type ItineraryActivityCategory =
   (typeof ItineraryActivityCategory)[keyof typeof ItineraryActivityCategory];
 
@@ -52,6 +57,9 @@ export interface ItineraryActivity {
   description: string;
   category: ItineraryActivityCategory;
   estimatedCost?: string;
+  coordinates?: Coordinates;
+  /** Short search query for a representative photo (e.g. "santorini blue dome") */
+  photoQuery?: string;
   affiliate?: AffiliateLink;
 }
 
@@ -59,6 +67,8 @@ export interface ItineraryDay {
   day: number;
   title: string;
   summary: string;
+  /** Short weather hint, e.g. "Soleggiato 24°C" */
+  weather?: string;
   activities: ItineraryActivity[];
 }
 
@@ -113,6 +123,10 @@ export interface Suggestion {
   heroEmoji: string;
   /** Suggested chat prompt to seed conversation */
   prompt: string;
+}
+
+export interface Stats {
+  tripsPlanned: number;
 }
 
 export interface SaveItineraryBody {

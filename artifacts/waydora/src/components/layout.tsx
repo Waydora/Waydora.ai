@@ -40,7 +40,7 @@ export function Header() {
   const [, setLocation] = useLocation();
 
   return (
-    <header className="shrink-0 sticky top-0 z-50 w-full border-b border-white/10 bg-primary/95 backdrop-blur-md">
+    <header className="shrink-0 sticky top-0 z-50 w-full border-b border-white/10 bg-[#031621]/95 backdrop-blur-md">
       <div className="container mx-auto px-4 flex h-16 items-center justify-between">
         <Logo variant="header" />
 
@@ -53,11 +53,11 @@ export function Header() {
                 className="gap-2 font-medium text-white hover:bg-white/10 hover:text-white"
               >
                 <Map className="w-4 h-4 text-accent" />
-                <span className="hidden sm:inline">Saved Trips</span>
+                <span className="hidden sm:inline">I miei viaggi</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>Your Itineraries</DropdownMenuLabel>
+              <DropdownMenuLabel>I tuoi itinerari</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {isLoading ? (
                 <div className="p-4 flex justify-center">
@@ -65,22 +65,22 @@ export function Header() {
                 </div>
               ) : itineraries?.length ? (
                 itineraries.map((saved) => (
-                  <DropdownMenuItem 
-                    key={saved.id} 
+                  <DropdownMenuItem
+                    key={saved.id}
                     className="cursor-pointer flex flex-col items-start gap-1 p-3"
                     onClick={() => setLocation(`/trip/${saved.shareSlug}`)}
                   >
                     <span className="font-medium line-clamp-1 text-foreground">{saved.itinerary.title}</span>
                     <span className="text-xs text-muted-foreground">
-                      {saved.itinerary.destination} • {saved.itinerary.durationDays} days
+                      {saved.itinerary.destination} • {saved.itinerary.durationDays} giorni
                     </span>
                   </DropdownMenuItem>
                 ))
               ) : (
                 <div className="p-4 text-center text-sm text-muted-foreground">
-                  No saved trips yet.
+                  Nessun viaggio salvato.
                   <br />
-                  Start chatting to create one!
+                  Inizia a chattare per crearne uno!
                 </div>
               )}
             </DropdownMenuContent>

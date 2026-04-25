@@ -1,36 +1,30 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { PHOTO_POOL } from "@/lib/photos";
 
-const BASE = import.meta.env.BASE_URL;
+const ROTATE_INTERVAL_MS = 6000;
 
-const PHOTOS = [
-  { src: `${BASE}bg/bg-1.jpg`, place: "Santorini · Greece" },
-  { src: `${BASE}bg/bg-2.jpg`, place: "Kyoto · Japan" },
-  { src: `${BASE}bg/bg-3.jpg`, place: "Ubud · Bali" },
-  { src: `${BASE}bg/bg-4.jpg`, place: "Machu Picchu · Peru" },
-  { src: `${BASE}bg/bg-5.jpg`, place: "Vík · Iceland" },
-  { src: `${BASE}bg/bg-7.jpg`, place: "Marrakech · Morocco" },
-  { src: `${BASE}bg/bg-8.jpg`, place: "Wanaka · New Zealand" },
-];
-
-export function TravelBackdrop() {
-  const [index, setIndex] = useState(0);
+export function TravelBackdrop({ rotate = true }: { rotate?: boolean }) {
+  const [index, setIndex] = useState(() =>
+    Math.floor((Date.now() / (1000 * 60 * 60)) % PHOTO_POOL.length),
+  );
 
   useEffect(() => {
-    PHOTOS.forEach((p) => {
+    PHOTO_POOL.forEach((p) => {
       const img = new Image();
       img.src = p.src;
     });
   }, []);
 
   useEffect(() => {
+    if (!rotate) return;
     const id = setInterval(() => {
-      setIndex((i) => (i + 1) % PHOTOS.length);
-    }, 6000);
+      setIndex((i) => (i + 1) % PHOTO_POOL.length);
+    }, ROTATE_INTERVAL_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [rotate]);
 
-  const current = PHOTOS[index]!;
+  const current = PHOTO_POOL[index]!;
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -49,18 +43,18 @@ export function TravelBackdrop() {
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(180deg, rgba(5,34,50,0.55) 0%, rgba(5,34,50,0.65) 50%, rgba(5,34,50,0.85) 100%)",
+            "linear-gradient(180deg, rgba(5,34,50,0.55) 0%, rgba(5,34,50,0.7) 60%, rgba(5,34,50,0.92) 100%)",
         }}
       />
-      <div className="absolute bottom-4 right-5 z-10">
+      <div className="absolute bottom-4 right-5 z-10 pointer-events-none">
         <AnimatePresence mode="wait">
           <motion.span
             key={current.place}
             initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 0.8, y: 0 }}
+            animate={{ opacity: 0.85, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.6 }}
-            className="text-[11px] font-medium tracking-[0.2em] uppercase text-white/80 px-3 py-1.5 rounded-full bg-black/30 backdrop-blur-sm"
+            className="text-[11px] font-medium tracking-[0.2em] uppercase text-white/85 px-3 py-1.5 rounded-full bg-black/40 backdrop-blur-sm"
           >
             {current.place}
           </motion.span>

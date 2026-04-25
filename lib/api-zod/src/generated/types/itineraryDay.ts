@@ -11,5 +11,7 @@ export interface ItineraryDay {
   day: number;
   title: string;
   summary: string;
+  /** Short weather hint, e.g. "Soleggiato 24°C" */
+  weather?: string;
   activities: ItineraryActivity[];
 }

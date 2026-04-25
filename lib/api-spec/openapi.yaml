@@ -16,6 +16,8 @@ tags:
     description: Saved itinerary management
   - name: suggestions
     description: Featured itinerary templates
+  - name: stats
+    description: Public counters and statistics
 paths:
   /healthz:
     get:
@@ -140,6 +142,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
 
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: Public counters
+      responses:
+        "200":
+          description: Public counters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stats"
+
   /itineraries/share/{slug}:
     get:
       operationId: getSharedItinerary
@@ -210,6 +225,17 @@ components:
         - label
         - url
 
+    Coordinates:
+      type: object
+      properties:
+        lat:
+          type: number
+        lng:
+          type: number
+      required:
+        - lat
+        - lng
+
     ItineraryActivity:
       type: object
       properties:
@@ -225,6 +251,11 @@ components:
           enum: ["stay", "food", "experience", "transport", "sightseeing", "nightlife"]
         estimatedCost:
           type: string
+        coordinates:
+          $ref: "#/components/schemas/Coordinates"
+        photoQuery:
+          type: string
+          description: Short search query for a representative photo (e.g. "santorini blue dome")
         affiliate:
           $ref: "#/components/schemas/AffiliateLink"
       required:
@@ -242,6 +273,9 @@ components:
           type: string
         summary:
           type: string
+        weather:
+          type: string
+          description: Short weather hint, e.g. "Soleggiato 24°C"
         activities:
           type: array
           items:
@@ -362,6 +396,14 @@ components:
         - accent
         - heroEmoji
         - prompt
+
+    Stats:
+      type: object
+      properties:
+        tripsPlanned:
+          type: integer
+      required:
+        - tripsPlanned
 
     SaveItineraryBody:
       type: object

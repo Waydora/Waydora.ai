@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AffiliateLink } from "./affiliateLink";
+import type { Coordinates } from "./coordinates";
 import type { ItineraryActivityCategory } from "./itineraryActivityCategory";
 
 export interface ItineraryActivity {
@@ -15,5 +16,8 @@ export interface ItineraryActivity {
   description: string;
   category: ItineraryActivityCategory;
   estimatedCost?: string;
+  coordinates?: Coordinates;
+  /** Short search query for a representative photo (e.g. "santorini blue dome") */
+  photoQuery?: string;
   affiliate?: AffiliateLink;
 }
