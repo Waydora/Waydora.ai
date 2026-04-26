@@ -25,6 +25,7 @@ import type {
   SavedItinerary,
   Stats,
   Suggestion,
+  TripTemplate,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -601,6 +602,81 @@ export const useDeleteItinerary = <
 > => {
   return useMutation(getDeleteItineraryMutationOptions(options));
 };
+
+/**
+ * @summary Pre-built starter itineraries the user can clone and edit
+ */
+export const getListTemplatesUrl = () => {
+  return `/api/templates`;
+};
+
+export const listTemplates = async (
+  options?: RequestInit,
+): Promise<TripTemplate[]> => {
+  return customFetch<TripTemplate[]>(getListTemplatesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListTemplatesQueryKey = () => {
+  return [`/api/templates`] as const;
+};
+
+export const getListTemplatesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTemplates>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTemplates>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListTemplatesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listTemplates>>> = ({
+    signal,
+  }) => listTemplates({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTemplates>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTemplatesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTemplates>>
+>;
+export type ListTemplatesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Pre-built starter itineraries the user can clone and edit
+ */
+
+export function useListTemplates<
+  TData = Awaited<ReturnType<typeof listTemplates>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTemplates>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTemplatesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Public counters

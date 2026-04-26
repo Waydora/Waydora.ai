@@ -43,7 +43,7 @@ export function TravelBackdrop({ rotate = true }: { rotate?: boolean }) {
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(180deg, rgba(5,34,50,0.55) 0%, rgba(5,34,50,0.7) 60%, rgba(5,34,50,0.92) 100%)",
+            "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.7) 60%, rgba(0,0,0,0.95) 100%)",
         }}
       />
       <div className="absolute bottom-4 right-5 z-10 pointer-events-none">

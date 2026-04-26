@@ -428,6 +428,86 @@ export const DeleteItineraryParams = zod.object({
 });
 
 /**
+ * @summary Pre-built starter itineraries the user can clone and edit
+ */
+export const ListTemplatesResponseItem = zod.object({
+  slug: zod.string(),
+  title: zod.string(),
+  subtitle: zod.string(),
+  heroEmoji: zod.string(),
+  coverPhotoQuery: zod.string().optional(),
+  itinerary: zod.object({
+    title: zod.string(),
+    destination: zod.string(),
+    durationDays: zod.number(),
+    vibe: zod.string().describe("Short vibe \/ theme of the trip"),
+    totalBudget: zod.string(),
+    bestSeason: zod.string(),
+    heroEmoji: zod
+      .string()
+      .optional()
+      .describe("Single emoji hint used as a fallback hero illustration"),
+    days: zod.array(
+      zod.object({
+        day: zod.number(),
+        title: zod.string(),
+        summary: zod.string(),
+        weather: zod
+          .string()
+          .optional()
+          .describe('Short weather hint, e.g. \"Soleggiato 24°C\"'),
+        activities: zod.array(
+          zod.object({
+            time: zod
+              .string()
+              .describe('Local time hint (e.g. \"09:00\", \"Morning\")'),
+            title: zod.string(),
+            description: zod.string(),
+            category: zod.enum([
+              "stay",
+              "food",
+              "experience",
+              "transport",
+              "sightseeing",
+              "nightlife",
+            ]),
+            estimatedCost: zod.string().optional(),
+            coordinates: zod
+              .object({
+                lat: zod.number(),
+                lng: zod.number(),
+              })
+              .optional(),
+            photoQuery: zod
+              .string()
+              .optional()
+              .describe(
+                'Short search query for a representative photo (e.g. \"santorini blue dome\")',
+              ),
+            affiliate: zod
+              .object({
+                provider: zod
+                  .string()
+                  .describe("Provider name e.g. Booking, Airbnb, GetYourGuide"),
+                label: zod.string(),
+                url: zod.string(),
+              })
+              .optional(),
+          }),
+        ),
+      }),
+    ),
+    packingList: zod.array(
+      zod.object({
+        category: zod.string(),
+        items: zod.array(zod.string()),
+      }),
+    ),
+  }),
+});
+export const ListTemplatesResponse = zod.array(ListTemplatesResponseItem);
+
+/**
  * @summary Public counters
  */
 export const GetStatsResponse = zod.object({

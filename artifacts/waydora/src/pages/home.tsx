@@ -12,11 +12,13 @@ import {
 } from "lucide-react";
 import {
   useListSuggestions,
+  useListTemplates,
   useChat,
   useSaveItinerary,
   type ChatMessage,
   type ItineraryData,
   type Suggestion,
+  type TripTemplate,
 } from "@workspace/api-client-react";
 import { Layout, Logo } from "@/components/layout";
 import { TravelBackdrop } from "@/components/travel-backdrop";
@@ -48,6 +50,48 @@ import {
 } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { pickPhoto } from "@/lib/photos";
+
+function TemplateCard({
+  template,
+  onClick,
+}: {
+  template: TripTemplate;
+  onClick: () => void;
+}) {
+  const photo = pickPhoto(template.coverPhotoQuery || template.itinerary.destination, template.itinerary.destination);
+  const dayCount = template.itinerary.days.length;
+  return (
+    <Card
+      className="cursor-pointer overflow-hidden group hover:shadow-2xl hover:border-accent/40 transition-all duration-300 border-border/60 bg-card flex flex-col"
+      onClick={onClick}
+    >
+      <div className="relative h-44 bg-cover bg-center" style={{ backgroundImage: `url(${photo.src})` }}>
+        <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
+        <div className="absolute top-3 left-3 text-3xl drop-shadow-lg">{template.heroEmoji}</div>
+        <div className="absolute top-3 right-3 text-[10px] font-bold px-2.5 py-1 rounded-full bg-black/70 text-white uppercase tracking-widest">
+          {dayCount} {dayCount === 1 ? "giorno" : "giorni"}
+        </div>
+        <div className="absolute bottom-3 right-3 text-[10px] font-semibold px-2.5 py-1 rounded-full bg-accent text-accent-foreground">
+          Già pronto
+        </div>
+      </div>
+      <CardContent className="p-5 space-y-2 flex-1 flex flex-col">
+        <h3 className="font-serif text-lg font-bold text-foreground leading-tight group-hover:text-accent transition-colors">
+          {template.title}
+        </h3>
+        <p className="text-sm text-muted-foreground leading-relaxed flex-1">
+          {template.subtitle}
+        </p>
+        <div className="flex items-center justify-between pt-2 mt-auto">
+          <span className="text-xs text-muted-foreground">{template.itinerary.totalBudget}</span>
+          <span className="text-xs font-bold text-accent group-hover:translate-x-1 transition-transform">
+            Apri e modifica →
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function SuggestionCard({
   suggestion,
@@ -140,6 +184,7 @@ export default function Home() {
   const resultsScrollRef = useRef<HTMLDivElement>(null);
 
   const { data: suggestions } = useListSuggestions();
+  const { data: templates } = useListTemplates();
   const chatMutation = useChat();
   const saveMutation = useSaveItinerary();
 
@@ -218,6 +263,20 @@ export default function Home() {
     setInput("");
   };
 
+  const handleTemplateClick = (template: TripTemplate) => {
+    setCurrentItinerary(template.itinerary);
+    setMessages([
+      {
+        role: "assistant",
+        content: `Eccoti il viaggio di partenza: ${template.itinerary.title}.\nL'ho già caricato a destra. Scrivimi cosa vuoi cambiare — posso aggiungere giorni, modificare il budget, sostituire ristoranti, aggiungere una gita fuori porta o cambiare il tono.`,
+      },
+    ]);
+    setInput("");
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  };
+
   const isInitialState = messages.length === 0;
 
   if (isInitialState) {
@@ -278,6 +337,31 @@ export default function Home() {
               )}
             </div>
           </section>
+
+          {templates && templates.length > 0 && (
+            <section className="py-20 md:py-28 px-4 max-w-6xl mx-auto">
+              <div className="text-center mb-12 space-y-3">
+                <span className="text-xs font-bold uppercase tracking-[0.25em] text-accent">
+                  Già pianificati per te
+                </span>
+                <h2 className="font-serif text-3xl md:text-5xl font-bold text-foreground">
+                  Parti da un viaggio già pronto
+                </h2>
+                <p className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
+                  Scegli un itinerario completo e modificalo come vuoi: aggiungi giorni, cambia città, ristoranti o budget. La chat è già aperta.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {templates.map((t) => (
+                  <TemplateCard
+                    key={t.slug}
+                    template={t}
+                    onClick={() => handleTemplateClick(t)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           <HowItWorks />
           <TripCounter />

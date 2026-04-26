@@ -53,7 +53,7 @@ function ActivityCard({
   destination: string;
 }) {
   const Icon = CATEGORY_ICON[activity.category] ?? Sparkles;
-  const photo = pickPhoto(activity.photoQuery || `${destination} ${activity.title}`);
+  const photo = pickPhoto(activity.photoQuery || activity.title, destination);
 
   return (
     <motion.div

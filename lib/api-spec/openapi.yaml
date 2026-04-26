@@ -142,6 +142,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
 
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [suggestions]
+      summary: Pre-built starter itineraries the user can clone and edit
+      responses:
+        "200":
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TripTemplate"
+
   /stats:
     get:
       operationId: getStats
@@ -404,6 +419,28 @@ components:
           type: integer
       required:
         - tripsPlanned
+
+    TripTemplate:
+      type: object
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: string
+        heroEmoji:
+          type: string
+        coverPhotoQuery:
+          type: string
+        itinerary:
+          $ref: "#/components/schemas/ItineraryData"
+      required:
+        - slug
+        - title
+        - subtitle
+        - heroEmoji
+        - itinerary
 
     SaveItineraryBody:
       type: object

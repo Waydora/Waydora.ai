@@ -40,7 +40,7 @@ export function Header() {
   const [, setLocation] = useLocation();
 
   return (
-    <header className="shrink-0 sticky top-0 z-50 w-full border-b border-white/10 bg-[#031621]/95 backdrop-blur-md">
+    <header className="shrink-0 sticky top-0 z-50 w-full border-b border-white/10 bg-black/95 backdrop-blur-md">
       <div className="container mx-auto px-4 flex h-16 items-center justify-between">
         <Logo variant="header" />
 

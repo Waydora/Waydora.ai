@@ -31,7 +31,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 Italian-flavored conversational travel planner. Tagline: "Travel simple, everywhere!".
 
 - `artifacts/waydora` — React + Vite frontend. Brand palette: deep blue `#1B4F8A` + warm orange `#FF8C42` on cream. Routes: `/` (home/planner with chat + suggestion cards) and `/trip/:slug` (saved itinerary with packing list + share link).
-- `artifacts/api-server` — Express API. Routes: `/healthz`, `/chat` (OpenAI structured JSON itinerary generation), `/suggestions` (3 hardcoded templates), `/itineraries` CRUD + `/itineraries/share/:slug`.
+- `artifacts/api-server` — Express API. Routes: `/healthz`, `/chat` (OpenAI structured JSON itinerary generation), `/suggestions` (carousel prompts), `/templates` (4 full pre-built itineraries the user can clone & edit via chat — Barcellona 3gg low budget, Roma weekend romantico, Lisbona 4gg mid, Tokyo 7gg prima volta), `/itineraries` CRUD + `/itineraries/share/:slug`.
 - `lib/db/src/schema/itineraries.ts` — single table storing the JSON itinerary blob with a public `shareSlug`.
 - `lib/api-spec/openapi.yaml` — source of truth for typed hooks (`@workspace/api-client-react`) and Zod schemas (`@workspace/api-zod`).
 - AI: uses the `openai` SDK pointed at the Replit AI Integrations proxy (`AI_INTEGRATIONS_OPENAI_*` env vars). Model `gpt-5.4` with `response_format: json_object`. Affiliate links are real provider search URLs (Booking, Airbnb, GetYourGuide, Viator).

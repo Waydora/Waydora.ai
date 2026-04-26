@@ -129,6 +129,15 @@ export interface Stats {
   tripsPlanned: number;
 }
 
+export interface TripTemplate {
+  slug: string;
+  title: string;
+  subtitle: string;
+  heroEmoji: string;
+  coverPhotoQuery?: string;
+  itinerary: ItineraryData;
+}
+
 export interface SaveItineraryBody {
   itinerary: ItineraryData;
 }

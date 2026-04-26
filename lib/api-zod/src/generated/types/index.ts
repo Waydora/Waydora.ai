@@ -24,3 +24,4 @@ export * from "./saveItineraryBody";
 export * from "./stats";
 export * from "./suggestion";
 export * from "./suggestionBudgetTier";
+export * from "./tripTemplate";
