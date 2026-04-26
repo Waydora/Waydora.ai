@@ -193,6 +193,17 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const handler = () => {
+      setMessages([]);
+      setCurrentItinerary(undefined);
+      setInput("");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    window.addEventListener("waydora:reset-home", handler);
+    return () => window.removeEventListener("waydora:reset-home", handler);
+  }, []);
+
+  useEffect(() => {
     chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, chatMutation.isPending]);
 

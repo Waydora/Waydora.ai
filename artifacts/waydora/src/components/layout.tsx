@@ -15,7 +15,13 @@ import waydoraLogo from "@assets/Travel_simple,_everywhere!_(2)_1777134832372.pn
 export function Logo({ variant = "hero" }: { variant?: "hero" | "header" }) {
   if (variant === "header") {
     return (
-      <Link href="/" className="inline-flex items-center group">
+      <Link
+        href="/"
+        className="inline-flex items-center group"
+        onClick={() => {
+          window.dispatchEvent(new Event("waydora:reset-home"));
+        }}
+      >
         <img
           src={waydoraLogo}
           alt="Waydora — Travel simple, everywhere!"
