@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   MessageSquare,
@@ -145,15 +146,60 @@ export function HowItWorks() {
   );
 }
 
+function useAnimatedNumber(target: number, durationMs: number = 1400) {
+  const [value, setValue] = useState(target);
+  const fromRef = useRef(target);
+  const startRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (target === value) return;
+    fromRef.current = value;
+    startRef.current = null;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+    const tick = (now: number) => {
+      if (startRef.current === null) startRef.current = now;
+      const t = Math.min(1, (now - startRef.current) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const next = Math.round(fromRef.current + (target - fromRef.current) * eased);
+      setValue(next);
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  return value;
+}
+
 export function TripCounter() {
-  const { data } = useGetStats();
-  const count = data?.tripsPlanned ?? 12_847;
-  const formatted = new Intl.NumberFormat("it-IT").format(count);
+  const { data } = useGetStats({
+    query: {
+      refetchInterval: 12_000,
+      refetchIntervalInBackground: false,
+    } as never,
+  });
+  const target = data?.tripsPlanned ?? 12_847;
+  const animated = useAnimatedNumber(target);
+  const formatted = new Intl.NumberFormat("it-IT").format(animated);
 
   return (
     <section className="py-16 px-4">
-      <div className="max-w-4xl mx-auto text-center space-y-3">
-        <div className="text-6xl md:text-8xl font-serif font-bold text-accent tracking-tight">
+      <div className="max-w-4xl mx-auto text-center space-y-4">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 border border-accent/30">
+          <span className="relative flex w-2 h-2">
+            <span className="absolute inset-0 rounded-full bg-accent animate-ping opacity-75" />
+            <span className="relative rounded-full bg-accent w-2 h-2" />
+          </span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">
+            in tempo reale
+          </span>
+        </div>
+        <div className="text-6xl md:text-8xl font-serif font-bold text-accent tracking-tight tabular-nums">
           {formatted}
         </div>
         <p className="text-base md:text-lg uppercase tracking-[0.25em] font-bold text-muted-foreground">
