@@ -6,8 +6,9 @@ import {
   Star,
   ChevronDown,
   Mail,
-  Globe,
+  FileText,
 } from "lucide-react";
+import waydoraLogo from "@assets/Travel_simple,_everywhere!_(2)_1777134832372.png";
 import {
   Accordion,
   AccordionContent,
@@ -269,10 +270,14 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-border/40 bg-card/40 backdrop-blur mt-12">
       <div className="max-w-6xl mx-auto px-4 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-sm">
-        <div className="col-span-2 md:col-span-2 space-y-3">
-          <div className="font-serif text-2xl font-bold text-foreground">
-            Waydora<span className="text-accent">.</span>
-          </div>
+        <div className="col-span-2 md:col-span-2 space-y-4">
+          <a href="/" className="inline-flex items-center">
+            <img
+              src={waydoraLogo}
+              alt="Waydora"
+              className="h-10 w-auto object-contain"
+            />
+          </a>
           <p className="text-muted-foreground max-w-sm leading-relaxed">
             Il tuo concierge di viaggio AI. Pianifica, prenota, parti — tutto in italiano.
           </p>
@@ -280,16 +285,35 @@ export function SiteFooter() {
         <div className="space-y-3">
           <div className="text-xs font-bold uppercase tracking-wider text-foreground">Legale</div>
           <ul className="space-y-2 text-muted-foreground">
-            <li><a href="#" className="hover:text-foreground transition-colors">Privacy</a></li>
-            <li><a href="#" className="hover:text-foreground transition-colors">Termini</a></li>
-            <li><a href="#" className="hover:text-foreground transition-colors">Cookie</a></li>
+            <li>
+              <a href="/legale/privacy" className="inline-flex items-center gap-2 hover:text-accent transition-colors">
+                <FileText className="w-3.5 h-3.5" />
+                Privacy Policy
+              </a>
+            </li>
+            <li>
+              <a href="/legale/termini" className="inline-flex items-center gap-2 hover:text-accent transition-colors">
+                <FileText className="w-3.5 h-3.5" />
+                Termini e Condizioni
+              </a>
+            </li>
+            <li>
+              <a href="/legale/cookie" className="inline-flex items-center gap-2 hover:text-accent transition-colors">
+                <FileText className="w-3.5 h-3.5" />
+                Cookie Policy
+              </a>
+            </li>
           </ul>
         </div>
         <div className="space-y-3">
           <div className="text-xs font-bold uppercase tracking-wider text-foreground">Contatti</div>
           <ul className="space-y-2 text-muted-foreground">
-            <li className="flex items-center gap-2"><Mail className="w-3.5 h-3.5" />ciao@waydora.it</li>
-            <li className="flex items-center gap-2"><Globe className="w-3.5 h-3.5" />waydora.it</li>
+            <li>
+              <a href="mailto:waydora.ai@gmail.com" className="inline-flex items-center gap-2 hover:text-accent transition-colors">
+                <Mail className="w-3.5 h-3.5" />
+                waydora.ai@gmail.com
+              </a>
+            </li>
           </ul>
         </div>
       </div>

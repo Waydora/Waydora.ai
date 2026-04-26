@@ -14,7 +14,7 @@ const aff = (provider: string, dest: string, label: string) => {
           : provider === "Viator"
             ? `https://www.viator.com/searchResults/all?text=${d}`
             : provider === "TheFork"
-              ? `https://www.thefork.it/search/?cityName=${d}`
+              ? `https://www.thefork.it/ricerca?searchText=${d}`
               : provider === "Trainline"
                 ? `https://www.trainline.com/it/search?destination=${d}`
                 : `https://www.skyscanner.it/transport/voli-per/${d.toLowerCase()}/`;

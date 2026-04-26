@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Map, Loader2 } from "lucide-react";
+import { Heart, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,7 +29,7 @@ export function Logo({ variant = "hero" }: { variant?: "hero" | "header" }) {
       <img
         src={waydoraLogo}
         alt="Waydora — Travel simple, everywhere!"
-        className="w-[280px] md:w-[420px] h-auto drop-shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
+        className="w-[200px] md:w-[300px] h-auto drop-shadow-[0_4px_24px_rgba(0,0,0,0.35)]"
       />
     </Link>
   );
@@ -52,7 +52,7 @@ export function Header() {
                 size="sm"
                 className="gap-2 font-medium text-white hover:bg-white/10 hover:text-white"
               >
-                <Map className="w-4 h-4 text-accent" />
+                <Heart className="w-4 h-4 text-accent fill-accent" />
                 <span className="hidden sm:inline">I miei viaggi</span>
               </Button>
             </DropdownMenuTrigger>

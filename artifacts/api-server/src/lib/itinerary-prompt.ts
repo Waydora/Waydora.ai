@@ -49,7 +49,7 @@ Regole obbligatorie:
   - https://www.airbnb.it/s/<destinazione>/homes
   - https://www.getyourguide.it/s/?q=<destinazione>
   - https://www.viator.com/searchResults/all?text=<destinazione>
-  - https://www.thefork.it/search/?cityName=<destinazione>
+  - https://www.thefork.it/ricerca?searchText=<destinazione>
   - https://www.trainline.com/
 - Ogni giornata ha 4-7 attività dal mattino alla sera.
 - Packing list: 3-5 categorie su misura per destinazione, stagione e vibe.
