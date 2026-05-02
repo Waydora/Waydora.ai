@@ -1,0 +1,10 @@
+{
+  "buildCommand": "cd artifacts/waydora && pnpm run build",
+  "outputDirectory": "artifacts/waydora/dist/public",
+  "installCommand": "pnpm install --force",
+  "framework": null,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/artifacts/waydora/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
