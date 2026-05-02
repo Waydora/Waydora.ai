@@ -1,6 +1,7 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm install -g pnpm && pnpm install && pnpm run build"
+buildCommand = "npm install -g pnpm && pnpm install --no-frozen-lockfile && pnpm run build"
+nixpacksPlan = '{"phases":{"install":{"cmds":[]}}}'
 
 [deploy]
 startCommand = "pnpm run start"
