@@ -1,7 +1,7 @@
 {
-  "buildCommand": "cd artifacts/waydora && pnpm run build",
+  "buildCommand": "cd artifacts/waydora && npm install && npm run build",
   "outputDirectory": "artifacts/waydora/dist/public",
-  "installCommand": "pnpm install --force",
+  "installCommand": "npm install",
   "framework": null,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/artifacts/waydora/api/$1" },
