@@ -17,7 +17,13 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Card, CardContent } from "@/components/ui/card";
-import { useGetStats } from "@workspace/api-client-react";
+const useGetStats = () => ({
+  data: {
+    trips: 1280,
+    users: 540,
+    countries: 42
+  }
+});
 
 const STEPS = [
   {
@@ -48,8 +54,8 @@ const PARTNERS = [
 const REVIEWS = [
   {
     name: "Giulia M.",
-    city: "Milano",
-    rating: 5,
+    city: "Padova",
+    rating: 4,
     text: "In 30 secondi avevo l'itinerario di 5 giorni in Marocco perfetto. Ho prenotato tutto direttamente dai link, niente da limare.",
     initials: "GM",
   },
@@ -62,7 +68,7 @@ const REVIEWS = [
   },
   {
     name: "Sara B.",
-    city: "Torino",
+    city: "Pescara",
     rating: 5,
     text: "Ho aggiustato l'itinerario chattando come con un'amica esperta. Mi ha messo i ristoranti giusti e una cena vista mare a Cefalù.",
     initials: "SB",

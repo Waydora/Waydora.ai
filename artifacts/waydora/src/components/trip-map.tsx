@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { ItineraryData } from "@workspace/api-client-react";
+type ItineraryData = any;
 
 type MarkerData = {
   key: string;

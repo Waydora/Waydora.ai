@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { Loader2, ArrowLeft, Share2, Copy, Map, Mail } from "lucide-react";
-import { useGetSharedItinerary, getGetSharedItineraryQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { ItineraryResults, PackingList } from "@/components/itinerary-results";
 import { TripMap } from "@/components/trip-map";
@@ -15,16 +14,30 @@ import {
 } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
+import { useQuery } from "@tanstack/react-query";
+
 export default function Trip() {
   const params = useParams();
   const slug = params.slug || "";
 
-  const { data: saved, isLoading, error } = useGetSharedItinerary(slug, {
-    query: {
-      enabled: !!slug,
-      queryKey: getGetSharedItineraryQueryKey(slug),
-    },
-  });
+const {
+  data: saved,
+  isLoading,
+  error,
+} = useQuery({
+  queryKey: ["trip", slug],
+  enabled: !!slug,
+  queryFn: async () => {
+    const response = await fetch(`/api/trip/${slug}`);
+
+    if (!response.ok) {
+      throw new Error("Trip non trovato");
+    }
+
+    return response.json();
+  },
+});
+
   const { toast } = useToast();
 
   useEffect(() => {

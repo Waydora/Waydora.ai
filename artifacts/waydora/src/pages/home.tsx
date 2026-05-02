@@ -2,15 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
-  Send,
-  Loader2,
-  Sparkles,
-  Save,
-  Heart,
-  PlusCircle,
-  MessageSquare,
-} from "lucide-react";
-import {
   useListSuggestions,
   useListTemplates,
   useChat,
@@ -19,7 +10,17 @@ import {
   type ItineraryData,
   type Suggestion,
   type TripTemplate,
-} from "@workspace/api-client-react";
+} from "@/hooks/api";
+import {
+  Send,
+  Loader2,
+  Sparkles,
+  Save,
+  Heart,
+  PlusCircle,
+  MessageSquare,
+} from "lucide-react";
+
 import { Layout, Logo } from "@/components/layout";
 import { TravelBackdrop } from "@/components/travel-backdrop";
 import { ItineraryResults, PackingList } from "@/components/itinerary-results";

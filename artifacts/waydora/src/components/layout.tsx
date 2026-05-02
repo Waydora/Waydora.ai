@@ -9,7 +9,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useListItineraries } from "@workspace/api-client-react";
 import waydoraLogo from "@assets/Travel_simple,_everywhere!_(2)_1777134832372.png";
 
 export function Logo({ variant = "hero" }: { variant?: "hero" | "header" }) {
@@ -42,7 +41,8 @@ export function Logo({ variant = "hero" }: { variant?: "hero" | "header" }) {
 }
 
 export function Header() {
-  const { data: itineraries, isLoading } = useListItineraries();
+const itineraries: any[] = [];
+const isLoading = false;
   const [, setLocation] = useLocation();
 
   return (

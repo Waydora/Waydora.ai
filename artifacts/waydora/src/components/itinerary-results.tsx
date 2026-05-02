@@ -14,11 +14,10 @@ import {
   Cloud,
   type LucideIcon,
 } from "lucide-react";
-import type {
-  ItineraryData,
-  ItineraryActivity,
-  PackingCategory,
-} from "@workspace/api-client-react";
+type ItineraryData = any;
+type ItineraryActivity = any;
+type PackingCategory = any;
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
