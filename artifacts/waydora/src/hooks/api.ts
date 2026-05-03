@@ -71,7 +71,7 @@ export type SavedItinerary = {
   itinerary: ItineraryData;
 };
 
-const API_BASE = "/api";
+const API_BASE = "https://waydoraai-production.up.railway.app/api";
 
 export function useListSuggestions() {
   return useQuery({
