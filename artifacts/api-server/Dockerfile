@@ -1,7 +1,7 @@
 FROM node:20-slim
 WORKDIR /app
 RUN npm install -g pnpm
-COPY package.json pnpm-lock.yaml ./
+COPY package.json ./
 RUN pnpm install --no-frozen-lockfile
 COPY . .
 RUN pnpm run build
