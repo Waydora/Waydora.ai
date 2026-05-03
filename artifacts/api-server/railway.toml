@@ -1,9 +1,6 @@
 [build]
-builder = "nixpacks"
-buildCommand = "npm install -g pnpm && pnpm install --no-frozen-lockfile && pnpm run build"
-
-[build.nixpacksConfig]
-noInstallPhase = true
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "pnpm run start"
