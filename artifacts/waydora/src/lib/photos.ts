@@ -6,7 +6,6 @@ const FALLBACK_IMAGE =
 export async function fetchPhoto(query: string): Promise<string> {
   const normalized = query.trim().toLowerCase();
 
-  // Cache
   if (cache.has(normalized)) {
     return cache.get(normalized)!;
   }
@@ -14,7 +13,6 @@ export async function fetchPhoto(query: string): Promise<string> {
   try {
     const apiKey = import.meta.env.VITE_PEXELS_API_KEY;
 
-    // Se manca la key
     if (!apiKey) {
       console.error("VITE_PEXELS_API_KEY non trovata");
       return FALLBACK_IMAGE;
@@ -31,7 +29,6 @@ export async function fetchPhoto(query: string): Promise<string> {
       }
     );
 
-    // Se Pexels risponde con errore
     if (!response.ok) {
       console.error("Errore Pexels:", response.status);
       return FALLBACK_IMAGE;
@@ -39,12 +36,10 @@ export async function fetchPhoto(query: string): Promise<string> {
 
     const data = await response.json();
 
-    // Nessuna foto trovata
     if (!data.photos || data.photos.length === 0) {
       return FALLBACK_IMAGE;
     }
 
-    // Foto casuale tra le prime 10
     const randomIndex = Math.floor(Math.random() * data.photos.length);
 
     const selectedPhoto =
@@ -52,7 +47,6 @@ export async function fetchPhoto(query: string): Promise<string> {
       data.photos[randomIndex]?.src?.large ||
       FALLBACK_IMAGE;
 
-    // Salva in cache
     cache.set(normalized, selectedPhoto);
 
     return selectedPhoto;
@@ -62,3 +56,22 @@ export async function fetchPhoto(query: string): Promise<string> {
     return FALLBACK_IMAGE;
   }
 }
+
+// Compatibilità col resto del progetto
+export async function pickPhoto(query: string): Promise<string> {
+  return fetchPhoto(query);
+}
+
+export async function dayPhoto(
+  destination: string,
+  activity?: string
+): Promise<string> {
+  const search = activity
+    ? `${destination} ${activity}`
+    : destination;
+
+  return fetchPhoto(search);
+}
+
+// Per eventuali componenti vecchi
+export const PHOTO_POOL: string[] = [FALLBACK_IMAGE];
