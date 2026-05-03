@@ -38,7 +38,8 @@ function callClaude(messages, existingItinerary) {
       res.on("end", () => {
         try {
           const parsed = JSON.parse(data);
-          const text = parsed.content?.[0]?.text || "";
+          let text = parsed.content?.[0]?.text || "";
+text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
           resolve(text);
         } catch (e) {
           reject(e);
