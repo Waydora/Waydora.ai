@@ -2,8 +2,8 @@ FROM node:20-slim
 WORKDIR /app
 RUN npm install -g pnpm
 COPY package.json ./
-RUN pnpm install --no-frozen-lockfile
+RUN echo '{"name":"workspace","version":"0.0.0","private":true}' > /tmp/root-package.json
+RUN pnpm install --no-frozen-lockfile --ignore-workspace
 COPY . .
-RUN pnpm run build
 EXPOSE 3000
-CMD ["pnpm", "run", "start"]
+CMD ["node", "dist/index.js"]
