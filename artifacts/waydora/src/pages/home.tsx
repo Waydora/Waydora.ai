@@ -97,6 +97,7 @@ const NAV_ITEMS = [
   { id: "saved", label: "Viaggi salvati", icon: BookMarked },
   { id: "inspire", label: "Lasciati ispirare", icon: Compass },
   { id: "group", label: "Gruppi vacanza", icon: Users },
+  { id: "create", label: "Crea viaggio", icon: PlusCircle },
 ];
 
 function Sidebar({
@@ -201,6 +202,14 @@ function Sidebar({
             </div>
           )}
         </motion.aside>
+      )}
+     {active === "create" && (
+        <div className="flex-1 flex flex-col items-center justify-center p-4 text-center gap-2">
+            <PlusCircle className="w-8 h-8 text-accent/50" />
+            <p className="text-sm font-medium text-foreground">Crea viaggio</p>
+            <p className="text-xs text-muted-foreground">Crea il tuo itinerario e condividilo con la community</p>
+            <span className="text-xs text-accent font-semibold">Prossimamente</span>
+          </div>
       )}
     </AnimatePresence>
   );
@@ -422,7 +431,7 @@ export default function Home() {
         />
 
         {/* CHAT + ITINERARIO */}
-        <section className="flex-1 min-h-0 flex flex-col border-r border-border/40">
+        <section className="w-[380px] xl:w-[420px] min-h-0 flex flex-col border-r border-border/40 shrink-0">
           <div className="px-5 py-3 border-b border-border/40 flex items-center justify-between bg-card/40 backdrop-blur shrink-0">
             <div className="flex items-center gap-2">
               {!sidebarOpen && (
@@ -473,7 +482,7 @@ export default function Home() {
         </section>
 
         {/* MAPPA + STRUMENTI */}
-        <aside className="w-[380px] xl:w-[420px] min-h-0 flex flex-col shrink-0">
+        <aside className="w-[480px] xl:w-[520px] min-h-0 flex flex-col shrink-0">
           <MapToolbar active={activeTool} onChange={setActiveTool} />
           <div className="flex-1 min-h-0">
             {activeTool === "map" ? (
