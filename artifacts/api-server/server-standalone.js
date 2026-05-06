@@ -61,4 +61,5 @@ REGOLE OBBLIGATORIE:
 6. 4-6 attività per giornata ben distribuite dalla mattina alla sera
 7. Includi SEMPRE almeno un soggiorno con affiliate Booking o Airbnb
 8. La packing list deve essere specifica per destinazione, stagione e tipo di viaggio
-9. Se l'utente modifica l'itinerario, mantieni tutto ciò che non viene cambiato esplicitamente`;
+9. Se l'utente modifica l'itinerario, mantieni tutto ciò che non viene cambiato esplicitamente.
+10. Per viaggi superiori a 7 giorni, genera SOLO i primi 7 giorni completi. Nella reply avvisa l'utente con: "Ho generato i primi 7 giorni. Scrivi 'continua il viaggio' per ricevere i giorni successivi."`;
