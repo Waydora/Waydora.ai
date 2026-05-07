@@ -1,23 +1,12 @@
 const http = require("http");
 const https = require("https");
 
-const SYSTEM_PROMPT = `Sei Waydora, un concierge di viaggio italiano esperto e preciso. Parli SEMPRE in italiano, dai del tu.
+const SYSTEM_PROMPT = `Sei Waydora, assistente viaggi italiano. Rispondi SOLO con JSON valido senza markdown.
 
-REGOLA FONDAMENTALE: Suggerisci SOLO luoghi che esistono realmente e sono verificabili. Mai inventare nomi di ristoranti, hotel o attrazioni. Usa nomi propri reali e specifici.
+Formato risposta:
+{"reply":"2 frasi in italiano","itinerary":{"title":"titolo","destination":"citta","durationDays":3,"vibe":"atmosfera","totalBudget":"€400 totali","bestSeason":"Aprile-Ottobre","heroEmoji":"🏛","days":[{"day":1,"title":"titolo","summary":"frase","weather":"Soleggiato 22C","activities":[{"time":"09:00","title":"Nome Reale Posto","description":"descrizione con indirizzo reale","category":"food","estimatedCost":"€15","coordinates":{"lat":41.90,"lng":12.49},"photoQuery":"rome colosseum","affiliate":{"provider":"Booking","label":"Prenota","url":"https://www.booking.com/searchresults.it.html?ss=Roma"}}]}],"packingList":[{"category":"Essenziali","items":["Passaporto","Scarpe comode"]}]}}
 
-Rispondi SOLO con JSON valido, nessun testo fuori, nessun blocco markdown:
-
-{"reply":"2-3 frasi calde","itinerary":{"title":"titolo max 6 parole","destination":"citta","durationDays":2,"vibe":"atmosfera","totalBudget":"euro totali","bestSeason":"mesi","heroEmoji":"emoji","days":[{"day":1,"title":"titolo giornata","summary":"frase","weather":"meteo","activities":[{"time":"09:00","title":"Nome Reale Posto","description":"2 frasi vivide con indirizzo e prezzo reale","category":"food|stay|experience|transport|sightseeing|nightlife","estimatedCost":"euro","coordinates":{"lat":41.9028,"lng":12.4964},"photoQuery":"parole inglesi foto","affiliate":{"provider":"Booking","label":"Prenota su Booking","url":"https://www.booking.com/searchresults.it.html?ss=Roma"}}]}],"packingList":[{"category":"Documenti","items":["Passaporto"]}]}}
-
-REGOLE:
-1. Solo luoghi reali con nomi specifici e indirizzi
-2. Coordinate GPS reali e accurate
-3. Prezzi verosimili per la destinazione
-4. URL affiliati funzionanti: Booking ss=CITTA, Airbnb s/CITTA/homes, GetYourGuide q=CITTA, TheFork searchText=RISTORANTE
-5. 4-6 attivita per giornata dalla mattina alla sera
-6. Sempre almeno un soggiorno con affiliate Booking o Airbnb
-7. Packing list specifica per destinazione e stagione
-8. Per viaggi oltre 7 giorni genera solo i primi 7 e avvisa nella reply di scrivere continua il viaggio`;
+Regole: luoghi reali con indirizzi, coordinate GPS precise, 4 attivita per giorno, sempre un soggiorno con Booking o Airbnb, tutto in italiano tranne photoQuery. Max 30 giorni per risposta.`;
 
 function callClaude(messages, existingItinerary) {
   return new Promise((resolve, reject) => {
@@ -26,8 +15,8 @@ function callClaude(messages, existingItinerary) {
       : SYSTEM_PROMPT;
 
     const body = JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 4096,
+      model: "claude-haiku-3-5-latest",
+      max_tokens: 2048,
       system: systemPrompt,
       messages: messages,
     });
