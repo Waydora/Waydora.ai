@@ -6,7 +6,8 @@ const SYSTEM_PROMPT = `Sei Waydora, assistente viaggi italiano. Rispondi SOLO co
 Formato risposta:
 {"reply":"2 frasi in italiano","itinerary":{"title":"titolo","destination":"citta","durationDays":3,"vibe":"atmosfera","totalBudget":"€400 totali","bestSeason":"Aprile-Ottobre","heroEmoji":"🏛","days":[{"day":1,"title":"titolo","summary":"frase","weather":"Soleggiato 22C","activities":[{"time":"09:00","title":"Nome Reale Posto","description":"descrizione con indirizzo reale","category":"food","estimatedCost":"€15","coordinates":{"lat":41.90,"lng":12.49},"photoQuery":"rome colosseum","affiliate":{"provider":"Booking","label":"Prenota","url":"https://www.booking.com/searchresults.it.html?ss=Roma"}}]}],"packingList":[{"category":"Essenziali","items":["Passaporto","Scarpe comode"]}]}}
 
-Regole: luoghi reali con indirizzi, coordinate GPS precise, 4 attivita per giorno, sempre un soggiorno con Booking o Airbnb, tutto in italiano tranne photoQuery. Max 30 giorni per risposta.`;
+Regole: Non interrompere mai il JSON. Se il JSON rischia di essere troppo lungo, riduci le descrizioni. Tutte le stringhe devono essere JSON-safe. 
+Luoghi reali con indirizzi, coordinate GPS precise, 4 attivita per giorno, sempre un soggiorno con Booking o Airbnb, tutto in italiano tranne photoQuery. Max 30 giorni per risposta.`;
 
 function callClaude(messages, existingItinerary) {
   return new Promise((resolve, reject) => {
@@ -94,7 +95,33 @@ const server = http.createServer(async (req, res) => {
       try {
         const { messages, existingItinerary } = JSON.parse(body);
         const raw = await callClaude(messages, existingItinerary);
-        const payload = JSON.parse(raw);
+        let payload;
+
+try {
+  payload = JSON.parse(raw);
+} catch (err) {
+  console.error("JSON ROTTO:");
+  console.error(raw);
+
+  // tenta recupero automatico
+  try {
+    const fixed = raw
+      .replace(/,\s*}/g, "}")
+      .replace(/,\s*]/g, "]");
+
+    payload = JSON.parse(fixed);
+  } catch {
+    res.writeHead(502, { "Content-Type": "application/json" });
+
+    res.end(
+      JSON.stringify({
+        error: "L'AI ha generato una risposta non valida. Riprova.",
+      })
+    );
+
+    return;
+  }
+}
 
         if (!payload.reply || !payload.itinerary) {
           res.writeHead(502, { "Content-Type": "application/json" });
