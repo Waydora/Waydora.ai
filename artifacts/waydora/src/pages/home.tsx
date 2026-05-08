@@ -431,7 +431,7 @@ export default function Home() {
         />
 
         {/* CHAT + ITINERARIO */}
-        <section className="w-[380px] xl:w-[420px] min-h-0 flex flex-col border-r border-border/40 shrink-0">
+        <section className="w-[35vw] min-h-0 flex flex-col border-r border-border/40 shrink-0">
           <div className="px-5 py-3 border-b border-border/40 flex items-center justify-between bg-card/40 backdrop-blur shrink-0">
             <div className="flex items-center gap-2">
               {!sidebarOpen && (
@@ -482,7 +482,7 @@ export default function Home() {
         </section>
 
         {/* MAPPA + STRUMENTI */}
-        <aside className="w-[480px] xl:w-[520px] min-h-0 flex flex-col shrink-0">
+        <aside className="w-[45vw] min-h-0 flex flex-col shrink-0">
           <MapToolbar active={activeTool} onChange={setActiveTool} />
           <div className="flex-1 min-h-0">
             {activeTool === "map" ? (
