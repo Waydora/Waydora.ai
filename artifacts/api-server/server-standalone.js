@@ -44,8 +44,8 @@ function callClaude(messages, existingItinerary) {
       : SYSTEM_PROMPT;
 
     const body = JSON.stringify({
-      model: "claude-3-5-haiku-latest",
-      max_tokens: 2500,
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1500,
       system: systemPrompt,
       messages: messages,
     });
@@ -188,7 +188,7 @@ const server = http.createServer(async (req, res) => {
           raw = await callClaude(messages, existingItinerary);
           console.log("Claude OK");
         } catch (err) {
-          console.error("Claude fallito, uso OpenAI...");
+          console.error("Claude fallito:", JSON.stringify(err));
           raw = await callOpenAI(messages, existingItinerary);
           console.log("OpenAI OK");
         }
