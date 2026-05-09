@@ -26,12 +26,13 @@ const CATEGORY_LABEL: Record<string, string> = {
   transport: "Trasporto", sightseeing: "Visita", nightlife: "Nightlife",
 };
 
-function usePhoto(query: string) {
-  const [src, setSrc] = useState(FALLBACK);
+function usePhoto(query: string | null, directUrl?: string) {
+  const [src, setSrc] = useState(directUrl || FALLBACK);
   useEffect(() => {
+    if (directUrl) { setSrc(directUrl); return; }
     if (!query) return;
     fetchPhoto(query).then(setSrc).catch(() => setSrc(FALLBACK));
-  }, [query]);
+  }, [query, directUrl]);
   return src;
 }
 
@@ -39,7 +40,10 @@ function ActivityCard({ activity, index, destination }: {
   activity: ItineraryActivity; index: number; destination: string;
 }) {
   const Icon = CATEGORY_ICON[activity.category] ?? Sparkles;
-  const photoSrc = usePhoto(activity.photoQuery || `${destination} ${activity.title}`);
+  const photoSrc = usePhoto(
+    activity.photoUrl ? null : (activity.photoQuery || `${destination} ${activity.title}`),
+    activity.photoUrl
+  );
 
   return (
     <motion.div

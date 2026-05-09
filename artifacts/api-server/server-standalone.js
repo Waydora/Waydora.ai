@@ -3,8 +3,9 @@ const https = require("https");
 
 const SYSTEM_PROMPT = `Sei Waydora, assistente viaggi. Rispondi SOLO con JSON valido e ben formato, zero testo fuori.
 
-{"reply":"1-2 frasi italiane","itinerary":{"title":"titolo breve","destination":"citta","durationDays":3,"vibe":"atmosfera","totalBudget":"budget","bestSeason":"stagione","heroEmoji":"emoji","days":[{"day":1,"title":"titolo","summary":"frase","weather":"meteo","activities":[{"time":"09:00","title":"Nome Posto Reale","description":"descrizione breve con indirizzo","category":"sightseeing","estimatedCost":"€15","coordinates":{"lat":41.90,"lng":12.49},"photoQuery":"rome italy","affiliate":{"provider":"GetYourGuide","label":"Prenota","url":"https://www.getyourguide.it/s/?q=roma"}}]}],"packingList":[{"category":"Essenziali","items":["Passaporto"]}]}}
 
+{"reply":"1-2 frasi italiane","itinerary":{"title":"titolo breve","destination":"citta","durationDays":3,"vibe":"atmosfera","totalBudget":"budget","bestSeason":"stagione","heroEmoji":"emoji","days":[{"day":1,"title":"titolo","summary":"frase","weather":"meteo","activities":[{"time":"09:00","title":"Nome Posto Reale","description":"descrizione breve con indirizzo","category":"sightseeing","estimatedCost":"€15","coordinates":{"lat":41.90,"lng":12.49},"photoQuery":"rome italy","affiliate":{"provider":"GetYourGuide","label":"Prenota","url":"https://www.getyourguide.it/s/?q=roma"}}]}],"packingList":[{"category":"Essenziali","items":["Passaporto"]}]}}
+photoQuery deve includere sempre il nome della citta es. "isernia molise fontana" non solo "fontana"
 IMPORTANTE: Massimo 2 giorni per risposta, 3 attivita per giorno. JSON DEVE essere completo e valido. Coordinate reali. Luoghi reali. Se richiesti piu giorni avvisa nella reply.`;
 
 function callClaude(messages, existingItinerary) {
@@ -56,6 +57,48 @@ function callClaude(messages, existingItinerary) {
     req.on("error", reject);
     req.write(body);
     req.end();
+  });
+}
+
+function enrichWithGooglePlaces(itinerary) {
+  return new Promise(async (resolve) => {
+    const apiKey = process.env.GOOGLE_MAPS_KEY;
+    if (!apiKey) { resolve(itinerary); return; }
+
+    for (const day of itinerary.days) {
+      for (const activity of day.activities) {
+        try {
+          const query = encodeURIComponent(`${activity.title} ${itinerary.destination}`);
+          const url = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${query}&inputtype=textquery&fields=geometry,photos,name&key=${apiKey}`;
+          
+          const data = await new Promise((res, rej) => {
+            https.get(url, (response) => {
+              let d = "";
+              response.on("data", chunk => d += chunk);
+              response.on("end", () => res(JSON.parse(d)));
+            }).on("error", rej);
+          });
+
+          if (data.candidates?.[0]) {
+            const place = data.candidates[0];
+            // Aggiorna coordinate reali
+            if (place.geometry?.location) {
+              activity.coordinates = {
+                lat: place.geometry.location.lat,
+                lng: place.geometry.location.lng
+              };
+            }
+            // Aggiorna foto con Google Places
+            if (place.photos?.[0]?.photo_reference) {
+              activity.photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${place.photos[0].photo_reference}&key=${apiKey}`;
+            }
+          }
+        } catch (e) {
+          // Mantieni dati originali se Places fallisce
+        }
+      }
+    }
+    resolve(itinerary);
   });
 }
 

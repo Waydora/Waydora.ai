@@ -40,7 +40,10 @@ export default async function handler(req, res) {
     } catch {
       return res.status(502).json({ error: "Risposta non valida. Riprova." });
     }
+    // Arricchisci con Google Places
+    payload.itinerary = await enrichWithGooglePlaces(payload.itinerary);
 
+  
     if (!payload.reply || !payload.itinerary) {
       return res.status(502).json({ error: "Risposta incompleta. Riprova." });
     }
