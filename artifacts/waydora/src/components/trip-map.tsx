@@ -71,7 +71,7 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
 
       googleMapRef.current = new google.maps.Map(mapRef.current, {
         center,
-        zoom: 13,
+        zoom: 10,
         mapTypeId: "roadmap",
         styles: [
           { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
@@ -150,7 +150,7 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
 
       // Fit bounds
       if (markers.length > 1) {
-        googleMapRef.current.fitBounds(bounds, 40);
+        googleMapRef.current.fitBounds(bounds, 80);
       }
     };
 

@@ -68,8 +68,8 @@ function enrichWithGooglePlaces(itinerary) {
     for (const day of itinerary.days) {
       for (const activity of day.activities) {
         try {
-          const query = encodeURIComponent(`${activity.title} ${itinerary.destination}`);
-          const url = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${query}&inputtype=textquery&fields=geometry,photos,name&key=${apiKey}`;
+          const query = encodeURIComponent(`${activity.title} ${itinerary.destination} ${activity.description?.substring(0, 50) || ""}`);
+          const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&fields=geometry,photos,name,place_id&key=${apiKey}`;
           
           const data = await new Promise((res, rej) => {
             https.get(url, (response) => {
@@ -79,8 +79,8 @@ function enrichWithGooglePlaces(itinerary) {
             }).on("error", rej);
           });
 
-          if (data.candidates?.[0]) {
-            const place = data.candidates[0];
+          if (data.results?.[0]) {
+            const place = data.results[0];
             // Aggiorna coordinate reali
             if (place.geometry?.location) {
               activity.coordinates = {
