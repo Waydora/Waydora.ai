@@ -70,16 +70,27 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
         : { lat: 41.9028, lng: 12.4964 };
 
       googleMapRef.current = new google.maps.Map(mapRef.current, {
-        center,
-        zoom: 10,
-        mapTypeId: "roadmap",
-        styles: [
-          { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
-        ],
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-      });
+  center,
+  zoom: 10,
+  mapTypeId: "roadmap",
+
+  gestureHandling: "cooperative",
+  zoomControl: true,
+  clickableIcons: false,
+  keyboardShortcuts: false,
+
+  styles: [
+    {
+      featureType: "poi",
+      elementType: "labels",
+      stylers: [{ visibility: "off" }],
+    },
+  ],
+
+  mapTypeControl: false,
+  streetViewControl: false,
+  fullscreenControl: false,
+});
 
       // Pulisci vecchi marker e polyline
       markersRef.current.forEach(m => m.setMap(null));

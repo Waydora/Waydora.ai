@@ -6,7 +6,7 @@ const SYSTEM_PROMPT = `Sei Waydora, assistente viaggi. Rispondi SOLO con JSON va
 
 {"reply":"1-2 frasi italiane","itinerary":{"title":"titolo breve","destination":"citta","durationDays":3,"vibe":"atmosfera","totalBudget":"budget","bestSeason":"stagione","heroEmoji":"emoji","days":[{"day":1,"title":"titolo","summary":"frase","weather":"meteo","activities":[{"time":"09:00","title":"Nome Posto Reale","description":"descrizione breve con indirizzo","category":"sightseeing","estimatedCost":"€15","coordinates":{"lat":41.90,"lng":12.49},"photoQuery":"rome italy","affiliate":{"provider":"GetYourGuide","label":"Prenota","url":"https://www.getyourguide.it/s/?q=roma"}}]}],"packingList":[{"category":"Essenziali","items":["Passaporto"]}]}}
 photoQuery deve includere sempre il nome della citta es. "isernia molise fontana" non solo "fontana"
-IMPORTANTE: Massimo 2 giorni per risposta, 3 attivita per giorno. JSON DEVE essere completo e valido. Coordinate reali. Luoghi reali. Se richiesti piu giorni avvisa nella reply.`;
+IMPORTANTE: Massimo 1 giorno per risposta, 3 attivita per giorno. JSON DEVE essere completo e valido. Coordinate reali. Luoghi reali. Se richiesti piu giorni avvisa nella reply.`;
 
 function callClaude(messages, existingItinerary) {
   return new Promise((resolve, reject) => {
@@ -16,7 +16,7 @@ function callClaude(messages, existingItinerary) {
 
     const body = JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 3000,
+      max_tokens: 2000,
       system: systemPrompt,
       messages: messages,
     });
@@ -68,16 +68,19 @@ function enrichWithGooglePlaces(itinerary) {
     for (const day of itinerary.days) {
       for (const activity of day.activities) {
         try {
-          const query = encodeURIComponent(`${activity.title} ${itinerary.destination} ${activity.description?.substring(0, 50) || ""}`);
-          const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&fields=geometry,photos,name,place_id&key=${apiKey}`;
-          
-          const data = await new Promise((res, rej) => {
-            https.get(url, (response) => {
-              let d = "";
-              response.on("data", chunk => d += chunk);
-              response.on("end", () => res(JSON.parse(d)));
-            }).on("error", rej);
-          });
+          const cityQuery = encodeURIComponent(itinerary.destination);
+          const cityGeoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${cityQuery}&key=${apiKey}`;
+
+          const cityData = await new Promise((res, rej) => {
+          https.get(cityGeoUrl, (response) => {
+          let d = "";
+    response.on("data", chunk => d += chunk);
+    response.on("end", () => { try { res(JSON.parse(d)); } catch(e) { rej(e); } });
+  }).on("error", rej);
+});
+
+const cityLat = cityData.results?.[0]?.geometry?.location?.lat || 41.90;
+const cityLng = cityData.results?.[0]?.geometry?.location?.lng || 12.49;
 
           if (data.results?.[0]) {
             const place = data.results[0];
