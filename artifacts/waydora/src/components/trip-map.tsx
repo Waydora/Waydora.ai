@@ -143,21 +143,47 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
         bounds.extend({ lat: m.lat, lng: m.lng });
       });
 
-      // Aggiungi polyline per giorno
-      Object.entries(polylinesByDay).forEach(([dayIdx, points]) => {
-        const polyline = new google.maps.Polyline({
-          path: points,
-          map: googleMapRef.current!,
-          strokeColor: getDayColor(Number(dayIdx)),
-          strokeOpacity: 0.6,
-          strokeWeight: 3,
-          icons: [{
-            icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 3 },
-            offset: "50%",
-          }],
-        });
-        polylinesRef.current.push(polyline);
-      });
+      // Route reali Google Directions
+Object.entries(polylinesByDay).forEach(([dayIdx, points]) => {
+  if (points.length < 2) return;
+
+  const directionsService = new google.maps.DirectionsService();
+
+  const directionsRenderer = new google.maps.DirectionsRenderer({
+    suppressMarkers: true,
+    preserveViewport: true,
+    polylineOptions: {
+      strokeColor: getDayColor(Number(dayIdx)),
+      strokeOpacity: 0.75,
+      strokeWeight: 5,
+    },
+  });
+
+  directionsRenderer.setMap(googleMapRef.current!);
+
+  const origin = points[0];
+  const destination = points[points.length - 1];
+
+  const waypoints = points.slice(1, -1).map((p) => ({
+    location: p,
+    stopover: true,
+  }));
+
+  directionsService.route(
+    {
+      origin,
+      destination,
+      waypoints,
+      optimizeWaypoints: true,
+      travelMode: google.maps.TravelMode.WALKING,
+    },
+    (result, status) => {
+      if (status === "OK" && result) {
+        directionsRenderer.setDirections(result);
+      }
+    }
+  );
+});
 
       // Fit bounds
       if (markers.length > 1) {
