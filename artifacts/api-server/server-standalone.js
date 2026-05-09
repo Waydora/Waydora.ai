@@ -63,44 +63,81 @@ function callClaude(messages, existingItinerary) {
 function enrichWithGooglePlaces(itinerary) {
   return new Promise(async (resolve) => {
     const apiKey = process.env.GOOGLE_MAPS_KEY;
-    if (!apiKey) { resolve(itinerary); return; }
+
+    if (!apiKey) {
+      resolve(itinerary);
+      return;
+    }
 
     for (const day of itinerary.days) {
       for (const activity of day.activities) {
         try {
-          const cityQuery = encodeURIComponent(itinerary.destination);
-          const cityGeoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${cityQuery}&key=${apiKey}`;
+          const searchQuery = encodeURIComponent(
+            `${activity.title} ${itinerary.destination}`
+          );
 
-          const cityData = await new Promise((res, rej) => {
-          https.get(cityGeoUrl, (response) => {
-          let d = "";
-    response.on("data", chunk => d += chunk);
-    response.on("end", () => { try { res(JSON.parse(d)); } catch(e) { rej(e); } });
-  }).on("error", rej);
-});
+          const placesUrl =
+            `https://maps.googleapis.com/maps/api/place/textsearch/json` +
+            `?query=${searchQuery}` +
+            `&key=${apiKey}`;
 
-const cityLat = cityData.results?.[0]?.geometry?.location?.lat || 41.90;
-const cityLng = cityData.results?.[0]?.geometry?.location?.lng || 12.49;
+          const data = await new Promise((res, rej) => {
+            https
+              .get(placesUrl, (response) => {
+                let d = "";
+
+                response.on("data", (chunk) => {
+                  d += chunk;
+                });
+
+                response.on("end", () => {
+                  try {
+                    res(JSON.parse(d));
+                  } catch (e) {
+                    rej(e);
+                  }
+                });
+              })
+              .on("error", rej);
+          });
 
           if (data.results?.[0]) {
             const place = data.results[0];
-            // Aggiorna coordinate reali
+
+            // Coordinate REALI
             if (place.geometry?.location) {
               activity.coordinates = {
                 lat: place.geometry.location.lat,
-                lng: place.geometry.location.lng
+                lng: place.geometry.location.lng,
               };
             }
-            // Aggiorna foto con Google Places
+
+            // Nome reale Google
+            if (place.name) {
+              activity.title = place.name;
+            }
+
+            // Indirizzo reale
+            if (place.formatted_address) {
+              activity.description =
+                `${activity.description}\n📍 ${place.formatted_address}`;
+            }
+
+            // Foto reale Google Places
             if (place.photos?.[0]?.photo_reference) {
-              activity.photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${place.photos[0].photo_reference}&key=${apiKey}`;
+              activity.photoUrl =
+                `https://maps.googleapis.com/maps/api/place/photo` +
+                `?maxwidth=1200` +
+                `&photo_reference=${place.photos[0].photo_reference}` +
+                `&key=${apiKey}`;
             }
           }
         } catch (e) {
-          // Mantieni dati originali se Places fallisce
+          console.error("Errore Places:", e.message);
         }
       }
     }
+
     resolve(itinerary);
   });
 }
