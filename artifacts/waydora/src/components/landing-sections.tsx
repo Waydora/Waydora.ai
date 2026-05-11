@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   MessageSquare,
@@ -105,6 +105,114 @@ const FAQ = [
   },
 ];
 
+export function HeroLanding() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % HERO_DESTINATIONS.length);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const currentDestination = HERO_DESTINATIONS[index];
+
+  return (
+    <section className="relative min-h-screen overflow-hidden bg-black text-white">
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{
+          backgroundImage:
+            "url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2070&auto=format&fit=crop')",
+        }}
+      />
+
+      <div className="absolute inset-0 bg-black/45" />
+
+      <header className="absolute top-0 left-0 right-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img
+              src={waydoraLogo}
+              alt="Waydora"
+              className="h-10 w-auto object-contain"
+            />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button className="px-5 py-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-sm font-medium hover:bg-white/20 transition-all">
+              Login
+            </button>
+
+            <button className="px-5 py-2 rounded-full bg-white text-black text-sm font-semibold hover:scale-105 transition-all">
+              Registrati
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-6 text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="max-w-5xl"
+        >
+          <h1 className="text-5xl md:text-7xl font-bold leading-[0.95] tracking-tight mb-8">
+            Ciao, sono Waydora.
+            <br />
+            <span className="text-white/80">
+              Ti porto a {currentDestination}
+            </span>
+          </h1>
+
+          <p className="text-lg md:text-2xl text-white/70 max-w-3xl mx-auto leading-relaxed mb-10">
+            Il tuo assistente di viaggio AI personalizzato.
+            Pianifica itinerari completi in pochi secondi.
+          </p>
+
+          <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-2xl border border-white/20 rounded-[32px] p-3 shadow-2xl">
+            <div className="flex flex-col md:flex-row gap-3 items-center">
+              <textarea
+                placeholder="Descrivimi il tuo viaggio ideale! Inserisci luogo, numero di persone, durata e budget."
+                className="flex-1 bg-transparent text-white placeholder:text-white/50 outline-none resize-none px-5 py-4 text-lg min-h-[70px]"
+              />
+
+              <button className="px-8 py-4 rounded-2xl bg-gradient-to-r from-orange-400 to-orange-500 text-white font-semibold hover:scale-105 transition-all shadow-xl whitespace-nowrap">
+                Pianifica ✨
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
+const HERO_DESTINATIONS = [
+  "Tokyo",
+  "Bali",
+  "New York",
+  "Lisbona",
+  "Cefalù",
+  "Parigi",
+  "Marrakech",
+  "Istanbul",
+  "Santorini",
+  "Madeira",
+  "Seoul",
+  "Dolomiti",
+  "Londra",
+  "Dubai",
+  "Roma",
+  "Napoli",
+  "Tulum",
+  "Budapest",
+  "Vienna",
+  "Thailandia",
+];
+
 export function HowItWorks() {
   return (
     <section className="py-20 md:py-28 px-4 max-w-6xl mx-auto">
@@ -112,7 +220,7 @@ export function HowItWorks() {
         <span className="text-xs font-bold uppercase tracking-[0.25em] text-accent">
           Come funziona
         </span>
-        <h2 className="font-serif text-3xl md:text-5xl font-bold text-foreground">
+        <h2 className="font-bold tracking-tight text-3xl md:text-5xl font-bold text-foreground">
           Tre passi al tuo prossimo viaggio
         </h2>
       </div>
@@ -128,7 +236,7 @@ export function HowItWorks() {
               transition={{ delay: i * 0.1 }}
               className="relative"
             >
-              <Card className="h-full border-border/60 bg-card hover:border-accent/40 transition-colors">
+              <Card className="h-full border-border/60 bg-black/30 backdrop-blur-xl border border-white/10 hover:border-accent/40 transition-colors">
                 <CardContent className="p-7 space-y-4">
                   <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-accent/15 text-accent">
                     <Icon className="w-6 h-6" />
@@ -136,7 +244,7 @@ export function HowItWorks() {
                   <div className="text-xs font-bold tracking-widest text-accent">
                     STEP {String(i + 1).padStart(2, "0")}
                   </div>
-                  <h3 className="font-serif text-2xl font-bold text-foreground">
+                  <h3 className="font-bold tracking-tight text-2xl font-bold text-foreground">
                     {step.title}
                   </h3>
                   <p className="text-base text-muted-foreground leading-relaxed">
@@ -205,7 +313,7 @@ export function TripCounter() {
             in tempo reale
           </span>
         </div>
-        <div className="text-6xl md:text-8xl font-serif font-bold text-accent tracking-tight tabular-nums">
+        <div className="text-6xl md:text-8xl font-bold tracking-tight font-bold text-accent tracking-tight tabular-nums">
           {formatted}
         </div>
         <p className="text-base md:text-lg uppercase tracking-[0.25em] font-bold text-muted-foreground">
@@ -218,7 +326,7 @@ export function TripCounter() {
 
 export function Partners() {
   return (
-    <section className="py-14 px-4 border-y border-border/40 bg-card/40 backdrop-blur">
+    <section className="py-14 px-4 border-y border-border/40 bg-black/30 backdrop-blur-xl border border-white/10/40 backdrop-blur">
       <div className="max-w-6xl mx-auto">
         <p className="text-center text-xs font-bold uppercase tracking-[0.3em] text-muted-foreground mb-8">
           Prenoti con i migliori partner
@@ -246,7 +354,7 @@ export function Reviews() {
         <span className="text-xs font-bold uppercase tracking-[0.25em] text-accent">
           Cosa dicono i viaggiatori
         </span>
-        <h2 className="font-serif text-3xl md:text-5xl font-bold text-foreground">
+        <h2 className="font-bold tracking-tight text-3xl md:text-5xl font-bold text-foreground">
           Pianificato. Vissuto. Condiviso.
         </h2>
       </div>
@@ -259,7 +367,7 @@ export function Reviews() {
             viewport={{ once: true }}
             transition={{ delay: i * 0.08 }}
           >
-            <Card className="h-full border-border/60 bg-card">
+            <Card className="h-full border-border/60 bg-black/30 backdrop-blur-xl border border-white/10">
               <CardContent className="p-6 space-y-4 flex flex-col h-full">
                 <div className="flex gap-0.5">
                   {Array.from({ length: r.rating }).map((_, idx) => (
@@ -294,7 +402,7 @@ export function Faq() {
         <span className="text-xs font-bold uppercase tracking-[0.25em] text-accent">
           FAQ
         </span>
-        <h2 className="font-serif text-3xl md:text-5xl font-bold text-foreground">
+        <h2 className="font-bold tracking-tight text-3xl md:text-5xl font-bold text-foreground">
           Domande frequenti
         </h2>
       </div>
@@ -303,7 +411,7 @@ export function Faq() {
           <AccordionItem
             key={i}
             value={`item-${i}`}
-            className="border border-border/60 rounded-2xl bg-card px-5 data-[state=open]:border-accent/40 transition-colors"
+            className="border border-border/60 rounded-2xl bg-black/30 backdrop-blur-xl border border-white/10 px-5 data-[state=open]:border-accent/40 transition-colors"
           >
             <AccordionTrigger className="text-left font-semibold text-base text-foreground hover:no-underline py-5 [&>svg]:text-accent">
               {item.q}
@@ -320,7 +428,7 @@ export function Faq() {
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border/40 bg-card/40 backdrop-blur mt-12">
+    <footer className="border-t border-border/40 bg-black/30 backdrop-blur-xl border border-white/10/40 backdrop-blur mt-12">
       <div className="max-w-6xl mx-auto px-4 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-sm">
         <div className="col-span-2 md:col-span-2 space-y-4">
           <a href="/" className="inline-flex items-center">

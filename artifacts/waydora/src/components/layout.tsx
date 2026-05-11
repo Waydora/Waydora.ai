@@ -1,3 +1,45 @@
+<header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-5 backdrop-blur-xl bg-black/25 border-b border-white/10">
+  <div className="flex items-center gap-3">
+    <img
+      src={waydoraLogo}
+      alt="Waydora"
+      className="w-9 h-9 rounded-xl object-cover"
+    />
+
+    <span className="text-xl font-semibold tracking-tight text-white">
+      Waydora
+    </span>
+  </div>
+
+  <div className="flex items-center gap-10 text-sm text-white/80 font-medium">
+    <button className="hover:text-white transition">
+      Discover
+    </button>
+
+    <button className="hover:text-white transition">
+      Planner
+    </button>
+
+    <button className="hover:text-white transition">
+      Community
+    </button>
+
+    <button className="hover:text-white transition">
+      Pricing
+    </button>
+  </div>
+
+  <div className="flex items-center gap-3">
+    <button className="text-sm text-white/70 hover:text-white transition">
+      Log in
+    </button>
+
+    <button className="px-5 py-2 rounded-full bg-white text-black text-sm font-semibold hover:scale-105 transition">
+      Get Started
+    </button>
+  </div>
+</header>
+
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
