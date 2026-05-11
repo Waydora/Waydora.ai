@@ -119,74 +119,57 @@ export function HeroLanding() {
   const currentDestination = HERO_DESTINATIONS[index];
 
   return (
-    <section className="relative min-h-screen overflow-hidden bg-black text-white">
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{
-          backgroundImage:
-            "url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=2070&auto=format&fit=crop')",
-        }}
-      />
+    <section className="relative min-h-screen overflow-hidden flex items-center justify-center px-6">
 
-      <div className="absolute inset-0 bg-black/45" />
+  {/* Background */}
+  <div className="absolute inset-0">
+    <img
+      src="https://images.unsplash.com/photo-1516483638261-f4dbaf036963?q=80&w=2000&auto=format&fit=crop"
+      alt="Travel"
+      className="w-full h-full object-cover"
+    />
 
-      <header className="absolute top-0 left-0 right-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src={waydoraLogo}
-              alt="Waydora"
-              className="h-10 w-auto object-contain"
-            />
-          </div>
+    <div className="absolute inset-0 bg-black/35" />
+  </div>
 
-          <div className="flex items-center gap-3">
-            <button className="px-5 py-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-sm font-medium hover:bg-white/20 transition-all">
-              Login
-            </button>
+  {/* Content */}
+  <div className="relative z-10 max-w-5xl mx-auto text-center pt-28">
 
-            <button className="px-5 py-2 rounded-full bg-white text-black text-sm font-semibold hover:scale-105 transition-all">
-              Registrati
-            </button>
-          </div>
-        </div>
-      </header>
+    <p className="uppercase tracking-[0.3em] text-white/70 text-xs mb-6 font-medium">
+      AI Travel Planner
+    </p>
 
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-6 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="max-w-5xl"
-        >
-          <h1 className="text-5xl md:text-7xl font-bold leading-[0.95] tracking-tight mb-8">
-            Ciao, sono Waydora.
-            <br />
-            <span className="text-white/80">
-              Ti porto a {currentDestination}
-            </span>
-          </h1>
+    <h1 className="text-6xl md:text-7xl font-black leading-[0.95] tracking-tight text-white max-w-4xl mx-auto">
+      Ciao, sono Waydora.
+      <br />
+      Il tuo assistente
+      <br />
+      di viaggio personalizzato.
+    </h1>
 
-          <p className="text-lg md:text-2xl text-white/70 max-w-3xl mx-auto leading-relaxed mb-10">
-            Il tuo assistente di viaggio AI personalizzato.
-            Pianifica itinerari completi in pochi secondi.
-          </p>
+    <p className="mt-8 text-xl text-white/80 max-w-3xl mx-auto leading-relaxed font-light">
+      Ti porto a
+      <span className="font-semibold text-white"> {dynamicDestination}</span>
+      , creando itinerari reali, mappe intelligenti e viaggi su misura in pochi secondi.
+    </p>
 
-          <div className="max-w-4xl mx-auto bg-white/10 backdrop-blur-2xl border border-white/20 rounded-[32px] p-3 shadow-2xl">
-            <div className="flex flex-col md:flex-row gap-3 items-center">
-              <textarea
-                placeholder="Descrivimi il tuo viaggio ideale! Inserisci luogo, numero di persone, durata e budget."
-                className="flex-1 bg-transparent text-white placeholder:text-white/50 outline-none resize-none px-5 py-4 text-lg min-h-[70px]"
-              />
+    {/* Search Box */}
+    <div className="mt-14 max-w-3xl mx-auto">
+      <div className="flex items-center gap-3 rounded-full border border-white/15 bg-white/10 backdrop-blur-2xl p-2 shadow-2xl">
 
-              <button className="px-8 py-4 rounded-2xl bg-gradient-to-r from-orange-400 to-orange-500 text-white font-semibold hover:scale-105 transition-all shadow-xl whitespace-nowrap">
-                Pianifica ✨
-              </button>
-            </div>
-          </div>
-        </motion.div>
+        <textarea
+          placeholder="Descrivimi il tuo viaggio ideale! Inserisci luogo, numero di persone, durata e budget."
+          className="flex-1 bg-transparent px-6 py-4 resize-none outline-none text-white placeholder:text-white/50 text-base"
+          rows={1}
+        />
+
+        <button className="px-8 py-4 rounded-full bg-gradient-to-r from-orange-400 to-pink-500 text-white font-semibold hover:scale-105 transition-all duration-300 shadow-lg">
+          Plan ✨
+        </button>
       </div>
-    </section>
+    </div>
+  </div>
+</section>
   );
 }
 
