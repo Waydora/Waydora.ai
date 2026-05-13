@@ -105,71 +105,300 @@ const FAQ = [
   },
 ];
 
-export function HeroLanding() {
-  const [index, setIndex] = useState(0);
-
+// ── Lista destinazioni con query Unsplash ottimizzate ────────────────────
+const DESTINATIONS = [
+  { name: "Tokyo",      query: "tokyo japan city night" },
+  { name: "Bali",       query: "bali rice terraces tropical" },
+  { name: "New York",   query: "new york city manhattan skyline" },
+  { name: "Lisbona",    query: "lisbon portugal colorful buildings" },
+  { name: "Cefalù",     query: "cefalu sicily sea" },
+  { name: "Parigi",     query: "paris eiffel tower" },
+  { name: "Marrakech",  query: "marrakech morocco medina" },
+  { name: "Istanbul",   query: "istanbul turkey bosphorus" },
+  { name: "Santorini",  query: "santorini greece white buildings" },
+  { name: "Madeira",    query: "madeira portugal cliffs ocean" },
+  { name: "Seoul",      query: "seoul south korea city" },
+  { name: "Dolomiti",   query: "dolomites italy mountains" },
+  { name: "Londra",     query: "london uk tower bridge" },
+  { name: "Dubai",      query: "dubai skyline desert" },
+  { name: "Tulum",      query: "tulum mexico beach ruins" },
+  { name: "Budapest",   query: "budapest hungary parliament night" },
+];
+ 
+// Unsplash Source API (gratuita, no API key richiesta)
+function getPhotoUrl(query: string) {
+  return `https://source.unsplash.com/1600x900/?${encodeURIComponent(query)}`;
+}
+ 
+// ── Animated typewriter per la destinazione ──────────────────────────────
+function TypewriterDestination({ text }: { text: string }) {
+  const [displayed, setDisplayed] = useState("");
+  const [phase, setPhase] = useState<"typing" | "waiting">("typing");
+ 
   useEffect(() => {
+    setDisplayed("");
+    setPhase("typing");
+    let i = 0;
     const interval = setInterval(() => {
-      setIndex((prev) => (prev + 1) % HERO_DESTINATIONS.length);
-    }, 3000);
-
+      i++;
+      setDisplayed(text.slice(0, i));
+      if (i >= text.length) {
+        clearInterval(interval);
+        setPhase("waiting");
+      }
+    }, 60);
     return () => clearInterval(interval);
-  }, []);
-
-  const currentDestination = HERO_DESTINATIONS[index];
-
+  }, [text]);
+ 
   return (
-    <section className="relative min-h-screen overflow-hidden flex items-center justify-center px-6">
-
-  {/* Background */}
-  <div className="absolute inset-0">
-    <img
-      src="https://images.unsplash.com/photo-1516483638261-f4dbaf036963?q=80&w=2000&auto=format&fit=crop"
-      alt="Travel"
-      className="w-full h-full object-cover"
-    />
-
-    <div className="absolute inset-0 bg-black/35" />
-  </div>
-
-  {/* Content */}
-  <div className="relative z-10 max-w-5xl mx-auto text-center pt-28">
-
-    <p className="uppercase tracking-[0.3em] text-white/70 text-xs mb-6 font-medium">
-      AI Travel Planner
-    </p>
-
-    <h1 className="text-6xl md:text-7xl font-black leading-[0.95] tracking-tight text-white max-w-4xl mx-auto">
-      Ciao, sono Waydora.
-      <br />
-      Il tuo assistente
-      <br />
-      di viaggio personalizzato.
-    </h1>
-
-    <p className="mt-8 text-xl text-white/80 max-w-3xl mx-auto leading-relaxed font-light">
-      Ti porto a
-      <span className="font-semibold text-white"> {dynamicDestination}</span>
-      , creando itinerari reali, mappe intelligenti e viaggi su misura in pochi secondi.
-    </p>
-
-    {/* Search Box */}
-    <div className="mt-14 max-w-3xl mx-auto">
-      <div className="flex items-center gap-3 rounded-full border border-white/15 bg-white/10 backdrop-blur-2xl p-2 shadow-2xl">
-
-        <textarea
-          placeholder="Descrivimi il tuo viaggio ideale! Inserisci luogo, numero di persone, durata e budget."
-          className="flex-1 bg-transparent px-6 py-4 resize-none outline-none text-white placeholder:text-white/50 text-base"
-          rows={1}
+    <span className="relative inline-block">
+      <span className="text-white font-bold">{displayed}</span>
+      {phase === "typing" && (
+        <span
+          className="inline-block w-[2px] h-[0.85em] bg-white align-middle ml-0.5"
+          style={{ animation: "blink 0.7s step-end infinite" }}
         />
-
-        <button className="px-8 py-4 rounded-full bg-gradient-to-r from-orange-400 to-pink-500 text-white font-semibold hover:scale-105 transition-all duration-300 shadow-lg">
-          Plan ✨
-        </button>
+      )}
+    </span>
+  );
+}
+ 
+// ── Componente principale ────────────────────────────────────────────────
+interface HeroLandingProps {
+  onSubmit: (prompt: string) => void;
+  isPending?: boolean;
+}
+ 
+export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
+  const [destIndex, setDestIndex] = useState(0);
+  const [bgLoaded, setBgLoaded] = useState(false);
+  const [bgSrc, setBgSrc] = useState("");
+  const [nextBgSrc, setNextBgSrc] = useState("");
+  const [input, setInput] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [, navigate] = useLocation();
+ 
+  const currentDest = DESTINATIONS[destIndex];
+ 
+  // Pre-carica la prossima foto mentre quella attuale è visibile
+  useEffect(() => {
+    const nextIndex = (destIndex + 1) % DESTINATIONS.length;
+    const next = DESTINATIONS[nextIndex];
+    const img = new Image();
+    img.src = getPhotoUrl(next.query);
+    setNextBgSrc(img.src);
+  }, [destIndex]);
+ 
+  // Carica la foto della destinazione corrente
+  useEffect(() => {
+    setBgLoaded(false);
+    const img = new Image();
+    img.src = getPhotoUrl(currentDest.query);
+    img.onload = () => {
+      setBgSrc(img.src);
+      setBgLoaded(true);
+    };
+    // fallback immediato se già in cache
+    if (img.complete) {
+      setBgSrc(img.src);
+      setBgLoaded(true);
+    }
+  }, [currentDest.query]);
+ 
+  // Cambia destinazione ogni 4 secondi (3s visibile + 1s transizione)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setDestIndex((prev) => (prev + 1) % DESTINATIONS.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, []);
+ 
+  const handleSubmit = useCallback(() => {
+    if (!input.trim() || isPending) return;
+    onSubmit(input.trim());
+  }, [input, isPending, onSubmit]);
+ 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+ 
+  // Auto-resize textarea
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    const ta = e.target;
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
+  };
+ 
+  return (
+    <section className="relative min-h-screen flex flex-col overflow-hidden">
+ 
+      {/* ── Sfondo animato ── */}
+      <div className="absolute inset-0 bg-black">
+        <AnimatePresence mode="sync">
+          {bgLoaded && (
+            <motion.div
+              key={bgSrc}
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ backgroundImage: `url(${bgSrc})` }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 1.2, ease: "easeInOut" }}
+            />
+          )}
+        </AnimatePresence>
+        {/* Overlay scuro sfumato */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/70" />
       </div>
-    </div>
-  </div>
-</section>
+ 
+      {/* ── Logo in alto a sinistra ── */}
+      <div className="relative z-20 px-6 pt-6">
+        <a
+          href="/"
+          onClick={(e) => { e.preventDefault(); navigate("/"); }}
+          className="inline-block group"
+          aria-label="Torna alla home"
+        >
+          <span
+            className="text-white font-black tracking-tight select-none"
+            style={{ fontSize: "1.75rem", letterSpacing: "-0.03em", fontFamily: "system-ui, sans-serif" }}
+          >
+            Waydora
+          </span>
+        </a>
+      </div>
+ 
+      {/* ── Contenuto centrale ── */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 pb-20 pt-10">
+ 
+        {/* Titolo dinamico */}
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="text-center mb-10 max-w-3xl"
+        >
+          <p className="text-white/60 text-sm font-medium tracking-widest uppercase mb-5">
+            Il tuo assistente di viaggio AI
+          </p>
+ 
+          <h1
+            className="text-white font-black leading-tight"
+            style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)", letterSpacing: "-0.02em" }}
+          >
+            Ciao, sono Waydora,
+            <br />
+            il tuo assistente di viaggio.
+            <br />
+            <span className="text-white/70 font-light text-[0.8em]">
+              Oggi ti porto a{" "}
+              <TypewriterDestination text={currentDest.name} />
+            </span>
+          </h1>
+        </motion.div>
+ 
+        {/* ── Search box stile iOS ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 32 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, delay: 0.15, ease: "easeOut" }}
+          className="w-full max-w-2xl"
+        >
+          <div
+            className="flex items-end gap-3 rounded-2xl p-3"
+            style={{
+              background: "rgba(255,255,255,0.15)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              border: "1px solid rgba(255,255,255,0.25)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
+            }}
+          >
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              placeholder="Dove vuoi andare? Descrivi il tuo viaggio..."
+              rows={1}
+              className="flex-1 bg-transparent resize-none outline-none border-none text-white placeholder:text-white/50 text-base leading-relaxed px-2 py-1"
+              style={{
+                minHeight: "36px",
+                maxHeight: "160px",
+                fontFamily: "inherit",
+              }}
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!input.trim() || isPending}
+              className="shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm text-white transition-all duration-200"
+              style={{
+                background: input.trim() && !isPending ? "#000" : "rgba(0,0,0,0.4)",
+                cursor: input.trim() && !isPending ? "pointer" : "not-allowed",
+                transform: input.trim() && !isPending ? "scale(1)" : "scale(0.97)",
+              }}
+            >
+              {isPending ? (
+                <>
+                  <span
+                    className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                    style={{ animation: "spin 0.8s linear infinite" }}
+                  />
+                  <span>Pianificando...</span>
+                </>
+              ) : (
+                <>
+                  <span>Pianifica</span>
+                  <span>✨</span>
+                </>
+              )}
+            </button>
+          </div>
+ 
+          {/* Suggerimento tasto invio */}
+          <p className="text-center text-white/35 text-xs mt-3">
+            Premi Invio per pianificare — Shift+Invio per andare a capo
+          </p>
+        </motion.div>
+ 
+        {/* ── Indicatori destinazione (pallini) ── */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="flex gap-1.5 mt-8"
+        >
+          {DESTINATIONS.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setDestIndex(i)}
+              className="rounded-full transition-all duration-300"
+              style={{
+                width: i === destIndex ? "20px" : "6px",
+                height: "6px",
+                background: i === destIndex ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.35)",
+              }}
+              aria-label={`Vai a ${DESTINATIONS[i].name}`}
+            />
+          ))}
+        </motion.div>
+      </div>
+ 
+      {/* CSS inline per animazioni */}
+      <style>{`
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </section>
   );
 }
 

@@ -22,7 +22,7 @@ import { TravelBackdrop } from "@/components/travel-backdrop";
 import { ItineraryResults, PackingList } from "@/components/itinerary-results";
 import { TripMap } from "@/components/trip-map";
 import { FilterBar, EMPTY_FILTERS, filtersToPromptPrefix, type TripFilters } from "@/components/filter-bar";
-import { HowItWorks, TripCounter, Partners, Reviews, Faq, SiteFooter } from "@/components/landing-sections";
+import { HeroLanding, HowItWorks, TripCounter, Partners, Reviews, Faq, SiteFooter } from "@/components/landing-sections";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -354,46 +354,9 @@ export default function Home() {
     return (
       <Layout>
         <div className="flex-1 overflow-y-auto">
-          <section className="relative min-h-[88vh] flex items-center justify-center overflow-hidden">
-            <TravelBackdrop />
-            <div className="relative z-10 w-full max-w-5xl mx-auto px-4 py-16 md:py-20 flex flex-col items-center space-y-12">
-              <Logo />
-              <div className="w-full max-w-3xl space-y-3">
-                <FilterBar value={filters} onChange={setFilters} />
-                <div className="relative group">
-                  <div className="absolute -inset-1 bg-gradient-to-r from-accent/40 to-white/10 rounded-2xl blur-xl opacity-60" />
-                  <div className="relative flex flex-col sm:flex-row gap-3 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-white/40 p-3">
-                    <Textarea
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
-                      placeholder="Descrivi il tuo viaggio dei sogni — destinazione, vibe, durata..."
-                      className="min-h-[64px] max-h-[200px] border-0 focus-visible:ring-0 resize-none text-base md:text-lg px-4 py-3 placeholder:text-slate-400 shadow-none bg-transparent text-slate-900"
-                    />
-                    <Button onClick={() => handleSubmit()} disabled={!input.trim()} className="h-auto py-3 px-7 rounded-xl bg-accent hover:bg-accent/90 text-accent-foreground text-base font-bold shadow-lg shrink-0">
-                      <Sparkles className="w-5 h-5 mr-2" />
-                      Pianifica
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              {suggestions && suggestions.length > 0 && (
-                <div className="w-full space-y-4 overflow-hidden">
-                  <div className="flex items-center gap-2 text-xs font-bold tracking-[0.25em] text-white/85 px-2 uppercase">
-                    <Heart className="w-4 h-4 text-accent" />
-                    <span>Ispirazione del momento</span>
-                  </div>
-                  <div className="flex overflow-x-auto pb-6 -mx-4 px-4 gap-5 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden">
-                    {suggestions.map((s) => (
-                      <div key={s.slug} className="snap-start">
-                        <SuggestionCard suggestion={s} onClick={() => handleSubmit(s.prompt)} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
+          
+          <HeroLanding onSubmit={handleSubmit} isPending={chatMutation.isPending} />
+
           <HowItWorks />
           <TripCounter />
           <Partners />
