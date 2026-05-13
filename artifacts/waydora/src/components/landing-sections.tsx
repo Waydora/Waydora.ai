@@ -182,7 +182,7 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
             Il tuo assistente di viaggio AI
           </p>
           <h1 className="text-white font-black leading-[1.05] mb-5"
-            style={{ fontSize: "clamp(2.2rem, 5.5vw, 3.8rem)", letterSpacing: "-0.025em" }}>
+            style={{ fontSize: "clamp(1.7rem, 4vw, 2.8rem)", letterSpacing: "-0.03em" }}>
             Ciao, sono Waydora.<br />
             Sono il tuo assistente di viaggio.
           </h1>
