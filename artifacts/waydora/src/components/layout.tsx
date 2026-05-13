@@ -52,7 +52,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import waydoraLogo from "@assets/Travel_simple,_everywhere!_(2)_1777134832372.png";
+import waydoraLogo from "@assets/LOGO1.png";
 
 type SavedTrip = {
   id: string | number;

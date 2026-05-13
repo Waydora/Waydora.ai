@@ -5,7 +5,7 @@ import {
   MessageSquare, Sparkles, PlaneTakeoff, Star,
   ChevronDown, Mail, FileText,
 } from "lucide-react";
-import waydoraLogo from "@assets/Travel_simple,_everywhere!_(2)_1777134832372.png";
+import waydoraLogo from "@assets/LOGO1.png";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
@@ -48,7 +48,7 @@ const DESTINATIONS = [
   { name: "Bali",      photo: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1600&q=80&auto=format&fit=crop" },
   { name: "New York",  photo: "https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?w=1600&q=80&auto=format&fit=crop" },
   { name: "Lisbona",   photo: "https://images.unsplash.com/photo-1558642452-9d2a7deb7f62?w=1600&q=80&auto=format&fit=crop" },
-  { name: "Cefalù",    photo: "https://images.unsplash.com/photo-1523365280197-f1783db9fe62?w=1600&q=80&auto=format&fit=crop" },
+  { name: "Cefalù",    photo: "https://images.unsplash.com/photo-1742216564155-952ff4743a7f?q=80&w=1332&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
   { name: "Parigi",    photo: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1600&q=80&auto=format&fit=crop" },
   { name: "Marrakech", photo: "https://images.unsplash.com/photo-1579283135011-0974a412341a?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
   { name: "Istanbul",  photo: "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=1600&q=80&auto=format&fit=crop" },
@@ -183,8 +183,8 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
           </p>
           <h1 className="text-white font-black leading-[1.05] mb-5"
             style={{ fontSize: "clamp(2.2rem, 5.5vw, 3.8rem)", letterSpacing: "-0.025em" }}>
-            Ciao, sono Waydora,<br />
-            il tuo assistente di viaggio.
+            Ciao, sono Waydora.<br />
+            Sono il tuo assistente di viaggio.
           </h1>
           <p className="text-white/65 font-light"
             style={{ fontSize: "clamp(1.3rem, 3vw, 2rem)", letterSpacing: "-0.01em" }}>
