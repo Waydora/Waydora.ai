@@ -50,7 +50,7 @@ const DESTINATIONS = [
   { name: "Lisbona",   photo: "https://images.unsplash.com/photo-1558642452-9d2a7deb7f62?w=1600&q=80&auto=format&fit=crop" },
   { name: "Cefalù",    photo: "https://images.unsplash.com/photo-1523365280197-f1783db9fe62?w=1600&q=80&auto=format&fit=crop" },
   { name: "Parigi",    photo: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=1600&q=80&auto=format&fit=crop" },
-  { name: "Marrakech", photo: "https://images.unsplash.com/photo-1553899017-d6a20a9e7de4?w=1600&q=80&auto=format&fit=crop" },
+  { name: "Marrakech", photo: "https://images.unsplash.com/photo-1579283135011-0974a412341a?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" },
   { name: "Istanbul",  photo: "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=1600&q=80&auto=format&fit=crop" },
   { name: "Santorini", photo: "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1600&q=80&auto=format&fit=crop" },
   { name: "Seoul",     photo: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=1600&q=80&auto=format&fit=crop" },
