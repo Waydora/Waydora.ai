@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageSquare,
   Sparkles,
@@ -17,12 +18,13 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Card, CardContent } from "@/components/ui/card";
+
 const useGetStats = () => ({
   data: {
     trips: 1280,
     users: 540,
-    countries: 42
-  }
+    countries: 42,
+  },
 });
 
 const STEPS = [
@@ -105,36 +107,35 @@ const FAQ = [
   },
 ];
 
-// ── Lista destinazioni con query Unsplash ottimizzate ────────────────────
+// ── Lista destinazioni ───────────────────────────────────────────────────
 const DESTINATIONS = [
-  { name: "Tokyo",      query: "tokyo japan city night" },
-  { name: "Bali",       query: "bali rice terraces tropical" },
-  { name: "New York",   query: "new york city manhattan skyline" },
-  { name: "Lisbona",    query: "lisbon portugal colorful buildings" },
-  { name: "Cefalù",     query: "cefalu sicily sea" },
-  { name: "Parigi",     query: "paris eiffel tower" },
-  { name: "Marrakech",  query: "marrakech morocco medina" },
-  { name: "Istanbul",   query: "istanbul turkey bosphorus" },
-  { name: "Santorini",  query: "santorini greece white buildings" },
-  { name: "Madeira",    query: "madeira portugal cliffs ocean" },
-  { name: "Seoul",      query: "seoul south korea city" },
-  { name: "Dolomiti",   query: "dolomites italy mountains" },
-  { name: "Londra",     query: "london uk tower bridge" },
-  { name: "Dubai",      query: "dubai skyline desert" },
-  { name: "Tulum",      query: "tulum mexico beach ruins" },
-  { name: "Budapest",   query: "budapest hungary parliament night" },
+  { name: "Tokyo",     query: "tokyo japan city night" },
+  { name: "Bali",      query: "bali rice terraces tropical" },
+  { name: "New York",  query: "new york city manhattan skyline" },
+  { name: "Lisbona",   query: "lisbon portugal colorful buildings" },
+  { name: "Cefalù",    query: "cefalu sicily sea" },
+  { name: "Parigi",    query: "paris eiffel tower" },
+  { name: "Marrakech", query: "marrakech morocco medina" },
+  { name: "Istanbul",  query: "istanbul turkey bosphorus" },
+  { name: "Santorini", query: "santorini greece white buildings" },
+  { name: "Madeira",   query: "madeira portugal cliffs ocean" },
+  { name: "Seoul",     query: "seoul south korea city" },
+  { name: "Dolomiti",  query: "dolomites italy mountains" },
+  { name: "Londra",    query: "london uk tower bridge" },
+  { name: "Dubai",     query: "dubai skyline desert" },
+  { name: "Tulum",     query: "tulum mexico beach ruins" },
+  { name: "Budapest",  query: "budapest hungary parliament night" },
 ];
- 
-// Unsplash Source API (gratuita, no API key richiesta)
+
 function getPhotoUrl(query: string) {
   return `https://source.unsplash.com/1600x900/?${encodeURIComponent(query)}`;
 }
- 
-// ── Animated typewriter per la destinazione ──────────────────────────────
+
+// ── Typewriter ───────────────────────────────────────────────────────────
 function TypewriterDestination({ text }: { text: string }) {
   const [displayed, setDisplayed] = useState("");
   const [phase, setPhase] = useState<"typing" | "waiting">("typing");
- 
+
   useEffect(() => {
     setDisplayed("");
     setPhase("typing");
@@ -149,7 +150,7 @@ function TypewriterDestination({ text }: { text: string }) {
     }, 60);
     return () => clearInterval(interval);
   }, [text]);
- 
+
   return (
     <span className="relative inline-block">
       <span className="text-white font-bold">{displayed}</span>
@@ -162,33 +163,23 @@ function TypewriterDestination({ text }: { text: string }) {
     </span>
   );
 }
- 
-// ── Componente principale ────────────────────────────────────────────────
+
+// ── HeroLanding ──────────────────────────────────────────────────────────
 interface HeroLandingProps {
   onSubmit: (prompt: string) => void;
   isPending?: boolean;
 }
- 
+
 export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
   const [destIndex, setDestIndex] = useState(0);
   const [bgLoaded, setBgLoaded] = useState(false);
   const [bgSrc, setBgSrc] = useState("");
-  const [nextBgSrc, setNextBgSrc] = useState("");
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [, navigate] = useLocation();
- 
+
   const currentDest = DESTINATIONS[destIndex];
- 
-  // Pre-carica la prossima foto mentre quella attuale è visibile
-  useEffect(() => {
-    const nextIndex = (destIndex + 1) % DESTINATIONS.length;
-    const next = DESTINATIONS[nextIndex];
-    const img = new Image();
-    img.src = getPhotoUrl(next.query);
-    setNextBgSrc(img.src);
-  }, [destIndex]);
- 
+
   // Carica la foto della destinazione corrente
   useEffect(() => {
     setBgLoaded(false);
@@ -198,45 +189,43 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
       setBgSrc(img.src);
       setBgLoaded(true);
     };
-    // fallback immediato se già in cache
     if (img.complete) {
       setBgSrc(img.src);
       setBgLoaded(true);
     }
   }, [currentDest.query]);
- 
-  // Cambia destinazione ogni 4 secondi (3s visibile + 1s transizione)
+
+  // Cambia destinazione ogni 4 secondi
   useEffect(() => {
     const timer = setInterval(() => {
       setDestIndex((prev) => (prev + 1) % DESTINATIONS.length);
     }, 4000);
     return () => clearInterval(timer);
   }, []);
- 
+
   const handleSubmit = useCallback(() => {
     if (!input.trim() || isPending) return;
     onSubmit(input.trim());
   }, [input, isPending, onSubmit]);
- 
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
     }
   };
- 
-  // Auto-resize textarea
+
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
     const ta = e.target;
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
   };
- 
+
   return (
     <section className="relative min-h-screen flex flex-col overflow-hidden">
- 
-      {/* ── Sfondo animato ── */}
+
+      {/* Sfondo animato */}
       <div className="absolute inset-0 bg-black">
         <AnimatePresence mode="sync">
           {bgLoaded && (
@@ -251,31 +240,29 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
             />
           )}
         </AnimatePresence>
-        {/* Overlay scuro sfumato */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/70" />
       </div>
- 
-      {/* ── Logo in alto a sinistra ── */}
+
+      {/* Logo in alto a sinistra */}
       <div className="relative z-20 px-6 pt-6">
         <a
           href="/"
           onClick={(e) => { e.preventDefault(); navigate("/"); }}
-          className="inline-block group"
+          className="inline-block"
           aria-label="Torna alla home"
         >
           <span
             className="text-white font-black tracking-tight select-none"
-            style={{ fontSize: "1.75rem", letterSpacing: "-0.03em", fontFamily: "system-ui, sans-serif" }}
+            style={{ fontSize: "1.75rem", letterSpacing: "-0.03em" }}
           >
             Waydora
           </span>
         </a>
       </div>
- 
-      {/* ── Contenuto centrale ── */}
+
+      {/* Contenuto centrale */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 pb-20 pt-10">
- 
-        {/* Titolo dinamico */}
+
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
@@ -285,7 +272,6 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
           <p className="text-white/60 text-sm font-medium tracking-widest uppercase mb-5">
             Il tuo assistente di viaggio AI
           </p>
- 
           <h1
             className="text-white font-black leading-tight"
             style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)", letterSpacing: "-0.02em" }}
@@ -300,8 +286,8 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
             </span>
           </h1>
         </motion.div>
- 
-        {/* ── Search box stile iOS ── */}
+
+        {/* Search box stile iOS */}
         <motion.div
           initial={{ opacity: 0, y: 32 }}
           animate={{ opacity: 1, y: 0 }}
@@ -326,11 +312,7 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
               placeholder="Dove vuoi andare? Descrivi il tuo viaggio..."
               rows={1}
               className="flex-1 bg-transparent resize-none outline-none border-none text-white placeholder:text-white/50 text-base leading-relaxed px-2 py-1"
-              style={{
-                minHeight: "36px",
-                maxHeight: "160px",
-                fontFamily: "inherit",
-              }}
+              style={{ minHeight: "36px", maxHeight: "160px" }}
             />
             <button
               onClick={handleSubmit}
@@ -339,7 +321,6 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
               style={{
                 background: input.trim() && !isPending ? "#000" : "rgba(0,0,0,0.4)",
                 cursor: input.trim() && !isPending ? "pointer" : "not-allowed",
-                transform: input.trim() && !isPending ? "scale(1)" : "scale(0.97)",
               }}
             >
               {isPending ? (
@@ -351,21 +332,16 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
                   <span>Pianificando...</span>
                 </>
               ) : (
-                <>
-                  <span>Pianifica</span>
-                  <span>✨</span>
-                </>
+                <><span>Pianifica</span><span>✨</span></>
               )}
             </button>
           </div>
- 
-          {/* Suggerimento tasto invio */}
           <p className="text-center text-white/35 text-xs mt-3">
             Premi Invio per pianificare — Shift+Invio per andare a capo
           </p>
         </motion.div>
- 
-        {/* ── Indicatori destinazione (pallini) ── */}
+
+        {/* Pallini destinazione */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -387,44 +363,16 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
           ))}
         </motion.div>
       </div>
- 
-      {/* CSS inline per animazioni */}
+
       <style>{`
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </section>
   );
 }
 
-const HERO_DESTINATIONS = [
-  "Tokyo",
-  "Bali",
-  "New York",
-  "Lisbona",
-  "Cefalù",
-  "Parigi",
-  "Marrakech",
-  "Istanbul",
-  "Santorini",
-  "Madeira",
-  "Seoul",
-  "Dolomiti",
-  "Londra",
-  "Dubai",
-  "Roma",
-  "Napoli",
-  "Tulum",
-  "Budapest",
-  "Vienna",
-  "Thailandia",
-];
-
+// ── HowItWorks ───────────────────────────────────────────────────────────
 export function HowItWorks() {
   return (
     <section className="py-20 md:py-28 px-4 max-w-6xl mx-auto">
@@ -432,7 +380,7 @@ export function HowItWorks() {
         <span className="text-xs font-bold uppercase tracking-[0.25em] text-accent">
           Come funziona
         </span>
-        <h2 className="font-bold tracking-tight text-3xl md:text-5xl font-bold text-foreground">
+        <h2 className="font-bold tracking-tight text-3xl md:text-5xl text-foreground">
           Tre passi al tuo prossimo viaggio
         </h2>
       </div>
@@ -446,7 +394,6 @@ export function HowItWorks() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.1 }}
-              className="relative"
             >
               <Card className="h-full border-border/60 bg-black/30 backdrop-blur-xl border border-white/10 hover:border-accent/40 transition-colors">
                 <CardContent className="p-7 space-y-4">
@@ -456,12 +403,8 @@ export function HowItWorks() {
                   <div className="text-xs font-bold tracking-widest text-accent">
                     STEP {String(i + 1).padStart(2, "0")}
                   </div>
-                  <h3 className="font-bold tracking-tight text-2xl font-bold text-foreground">
-                    {step.title}
-                  </h3>
-                  <p className="text-base text-muted-foreground leading-relaxed">
-                    {step.text}
-                  </p>
+                  <h3 className="font-bold text-2xl text-foreground">{step.title}</h3>
+                  <p className="text-base text-muted-foreground leading-relaxed">{step.text}</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -472,6 +415,7 @@ export function HowItWorks() {
   );
 }
 
+// ── TripCounter ──────────────────────────────────────────────────────────
 function useAnimatedNumber(target: number, durationMs: number = 1400) {
   const [value, setValue] = useState(target);
   const fromRef = useRef(target);
@@ -483,33 +427,23 @@ function useAnimatedNumber(target: number, durationMs: number = 1400) {
     fromRef.current = value;
     startRef.current = null;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
-
     const tick = (now: number) => {
       if (startRef.current === null) startRef.current = now;
       const t = Math.min(1, (now - startRef.current) / durationMs);
       const eased = 1 - Math.pow(1 - t, 3);
-      const next = Math.round(fromRef.current + (target - fromRef.current) * eased);
-      setValue(next);
+      setValue(Math.round(fromRef.current + (target - fromRef.current) * eased));
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [target]);
 
   return value;
 }
 
 export function TripCounter() {
-  const { data } = useGetStats({
-    query: {
-      refetchInterval: 12_000,
-      refetchIntervalInBackground: false,
-    } as never,
-  });
-  const target = data?.tripsPlanned ?? 12_847;
+  const { data } = useGetStats();
+  const target = (data as any)?.tripsPlanned ?? 12_847;
   const animated = useAnimatedNumber(target);
   const formatted = new Intl.NumberFormat("it-IT").format(animated);
 
@@ -521,13 +455,9 @@ export function TripCounter() {
             <span className="absolute inset-0 rounded-full bg-accent animate-ping opacity-75" />
             <span className="relative rounded-full bg-accent w-2 h-2" />
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">
-            in tempo reale
-          </span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">in tempo reale</span>
         </div>
-        <div className="text-6xl md:text-8xl font-bold tracking-tight font-bold text-accent tracking-tight tabular-nums">
-          {formatted}
-        </div>
+        <div className="text-6xl md:text-8xl font-bold text-accent tabular-nums">{formatted}</div>
         <p className="text-base md:text-lg uppercase tracking-[0.25em] font-bold text-muted-foreground">
           Viaggi pianificati con Waydora
         </p>
@@ -536,20 +466,17 @@ export function TripCounter() {
   );
 }
 
+// ── Partners ─────────────────────────────────────────────────────────────
 export function Partners() {
   return (
-    <section className="py-14 px-4 border-y border-border/40 bg-black/30 backdrop-blur-xl border border-white/10/40 backdrop-blur">
+    <section className="py-14 px-4 border-y border-border/40 bg-black/30 backdrop-blur">
       <div className="max-w-6xl mx-auto">
         <p className="text-center text-xs font-bold uppercase tracking-[0.3em] text-muted-foreground mb-8">
           Prenoti con i migliori partner
         </p>
         <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
           {PARTNERS.map((p) => (
-            <div
-              key={p.name}
-              className="text-xl md:text-2xl font-bold opacity-70 hover:opacity-100 transition-opacity"
-              style={{ color: p.color }}
-            >
+            <div key={p.name} className="text-xl md:text-2xl font-bold opacity-70 hover:opacity-100 transition-opacity" style={{ color: p.color }}>
               {p.name}
             </div>
           ))}
@@ -559,26 +486,17 @@ export function Partners() {
   );
 }
 
+// ── Reviews ──────────────────────────────────────────────────────────────
 export function Reviews() {
   return (
     <section className="py-20 md:py-28 px-4 max-w-6xl mx-auto">
       <div className="text-center mb-14 space-y-3">
-        <span className="text-xs font-bold uppercase tracking-[0.25em] text-accent">
-          Cosa dicono i viaggiatori
-        </span>
-        <h2 className="font-bold tracking-tight text-3xl md:text-5xl font-bold text-foreground">
-          Pianificato. Vissuto. Condiviso.
-        </h2>
+        <span className="text-xs font-bold uppercase tracking-[0.25em] text-accent">Cosa dicono i viaggiatori</span>
+        <h2 className="font-bold text-3xl md:text-5xl text-foreground">Pianificato. Vissuto. Condiviso.</h2>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         {REVIEWS.map((r, i) => (
-          <motion.div
-            key={r.name}
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: i * 0.08 }}
-          >
+          <motion.div key={r.name} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08 }}>
             <Card className="h-full border-border/60 bg-black/30 backdrop-blur-xl border border-white/10">
               <CardContent className="p-6 space-y-4 flex flex-col h-full">
                 <div className="flex gap-0.5">
@@ -586,13 +504,9 @@ export function Reviews() {
                     <Star key={idx} className="w-4 h-4 fill-accent text-accent" />
                   ))}
                 </div>
-                <p className="text-sm text-foreground leading-relaxed flex-1">
-                  "{r.text}"
-                </p>
+                <p className="text-sm text-foreground leading-relaxed flex-1">"{r.text}"</p>
                 <div className="flex items-center gap-3 pt-2 border-t border-border/40">
-                  <div className="w-10 h-10 rounded-full bg-accent/15 text-accent flex items-center justify-center font-bold text-sm">
-                    {r.initials}
-                  </div>
+                  <div className="w-10 h-10 rounded-full bg-accent/15 text-accent flex items-center justify-center font-bold text-sm">{r.initials}</div>
                   <div>
                     <div className="font-semibold text-sm text-foreground">{r.name}</div>
                     <div className="text-xs text-muted-foreground">{r.city}</div>
@@ -607,24 +521,17 @@ export function Reviews() {
   );
 }
 
+// ── FAQ ──────────────────────────────────────────────────────────────────
 export function Faq() {
   return (
     <section className="py-20 md:py-28 px-4 max-w-3xl mx-auto">
       <div className="text-center mb-12 space-y-3">
-        <span className="text-xs font-bold uppercase tracking-[0.25em] text-accent">
-          FAQ
-        </span>
-        <h2 className="font-bold tracking-tight text-3xl md:text-5xl font-bold text-foreground">
-          Domande frequenti
-        </h2>
+        <span className="text-xs font-bold uppercase tracking-[0.25em] text-accent">FAQ</span>
+        <h2 className="font-bold text-3xl md:text-5xl text-foreground">Domande frequenti</h2>
       </div>
       <Accordion type="single" collapsible className="space-y-3">
         {FAQ.map((item, i) => (
-          <AccordionItem
-            key={i}
-            value={`item-${i}`}
-            className="border border-border/60 rounded-2xl bg-black/30 backdrop-blur-xl border border-white/10 px-5 data-[state=open]:border-accent/40 transition-colors"
-          >
+          <AccordionItem key={i} value={`item-${i}`} className="border border-border/60 rounded-2xl bg-black/30 backdrop-blur-xl border border-white/10 px-5 data-[state=open]:border-accent/40 transition-colors">
             <AccordionTrigger className="text-left font-semibold text-base text-foreground hover:no-underline py-5 [&>svg]:text-accent">
               {item.q}
             </AccordionTrigger>
@@ -638,18 +545,13 @@ export function Faq() {
   );
 }
 
+// ── SiteFooter ───────────────────────────────────────────────────────────
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border/40 bg-black/30 backdrop-blur-xl border border-white/10/40 backdrop-blur mt-12">
+    <footer className="border-t border-border/40 bg-black/30 backdrop-blur mt-12">
       <div className="max-w-6xl mx-auto px-4 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-sm">
-        <div className="col-span-2 md:col-span-2 space-y-4">
-          <a href="/" className="inline-flex items-center">
-            <img
-              src={waydoraLogo}
-              alt="Waydora"
-              className="h-10 w-auto object-contain"
-            />
-          </a>
+        <div className="col-span-2 space-y-4">
+          <a href="/"><img src={waydoraLogo} alt="Waydora" className="h-10 w-auto object-contain" /></a>
           <p className="text-muted-foreground max-w-sm leading-relaxed">
             Il tuo concierge di viaggio AI. Pianifica, prenota, parti — tutto in italiano.
           </p>
@@ -657,35 +559,15 @@ export function SiteFooter() {
         <div className="space-y-3">
           <div className="text-xs font-bold uppercase tracking-wider text-foreground">Legale</div>
           <ul className="space-y-2 text-muted-foreground">
-            <li>
-              <a href="/legale/privacy" className="inline-flex items-center gap-2 hover:text-accent transition-colors">
-                <FileText className="w-3.5 h-3.5" />
-                Privacy Policy
-              </a>
-            </li>
-            <li>
-              <a href="/legale/termini" className="inline-flex items-center gap-2 hover:text-accent transition-colors">
-                <FileText className="w-3.5 h-3.5" />
-                Termini e Condizioni
-              </a>
-            </li>
-            <li>
-              <a href="/legale/cookie" className="inline-flex items-center gap-2 hover:text-accent transition-colors">
-                <FileText className="w-3.5 h-3.5" />
-                Cookie Policy
-              </a>
-            </li>
+            <li><a href="/legale/privacy" className="inline-flex items-center gap-2 hover:text-accent transition-colors"><FileText className="w-3.5 h-3.5" />Privacy Policy</a></li>
+            <li><a href="/legale/termini" className="inline-flex items-center gap-2 hover:text-accent transition-colors"><FileText className="w-3.5 h-3.5" />Termini e Condizioni</a></li>
+            <li><a href="/legale/cookie" className="inline-flex items-center gap-2 hover:text-accent transition-colors"><FileText className="w-3.5 h-3.5" />Cookie Policy</a></li>
           </ul>
         </div>
         <div className="space-y-3">
           <div className="text-xs font-bold uppercase tracking-wider text-foreground">Contatti</div>
           <ul className="space-y-2 text-muted-foreground">
-            <li>
-              <a href="mailto:waydora.ai@gmail.com" className="inline-flex items-center gap-2 hover:text-accent transition-colors">
-                <Mail className="w-3.5 h-3.5" />
-                waydora.ai@gmail.com
-              </a>
-            </li>
+            <li><a href="mailto:waydora.ai@gmail.com" className="inline-flex items-center gap-2 hover:text-accent transition-colors"><Mail className="w-3.5 h-3.5" />waydora.ai@gmail.com</a></li>
           </ul>
         </div>
       </div>
