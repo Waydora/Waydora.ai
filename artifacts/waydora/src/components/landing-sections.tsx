@@ -5,7 +5,7 @@ import {
   MessageSquare, Sparkles, PlaneTakeoff, Star,
   ChevronDown, Mail, FileText,
 } from "lucide-react";
-import waydoraLogo from "@assets/Travel_simple,_everywhere!_(2)_1777134832372.png";
+import waydoraLogo from "@assets/LOGO1.png";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
@@ -214,8 +214,8 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
           className="text-center mb-10 max-w-3xl">
           <p className="text-white/55 text-xs font-semibold tracking-[0.3em] uppercase mb-6">Il tuo assistente di viaggio AI</p>
           <h1 className="text-white font-black leading-[1.05] mb-5"
-            style={{ fontSize: "clamp(2.2rem, 5.5vw, 3.8rem)", letterSpacing: "-0.025em" }}>
-            Ciao, sono Waydora,<br />il tuo assistente di viaggio.
+            style={{ fontSize: "clamp(1.7rem, 4vw, 2.8rem)", letterSpacing: "-0.03em" }}>
+            Ciao, sono Waydora:<br />il tuo assistente di viaggio.
           </h1>
           <p className="text-white/65 font-light"
             style={{ fontSize: "clamp(1.3rem, 3vw, 2rem)", letterSpacing: "-0.01em" }}>
