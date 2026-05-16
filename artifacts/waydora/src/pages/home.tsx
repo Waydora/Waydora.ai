@@ -30,11 +30,11 @@ import { useToast } from "@/hooks/use-toast";
 type ChatTurn = {
   id: number;
   userMessage: string;
-  assistantReply: string;   // stringa vuota = ancora in attesa
+  assistantReply: string;
   itinerary?: ItineraryData;
 };
  
-// ── Stili ─────────────────────────────────────────────────────────────────
+// ── Stili base ────────────────────────────────────────────────────────────
 const glassDark = {
   background: "rgba(10,10,18,0.88)",
   backdropFilter: "blur(24px) saturate(160%)",
@@ -42,13 +42,25 @@ const glassDark = {
   border: "1px solid rgba(255,255,255,0.08)",
 } as React.CSSProperties;
  
-// Card itinerario: sfondo solido, niente blur
 const itineraryCard = {
-  background: "rgba(28,18,48,0.97)",
-  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(22,14,38,0.98)",
+  border: "1px solid rgba(255,255,255,0.09)",
   borderRadius: "16px",
   padding: "16px",
   marginTop: "8px",
+} as React.CSSProperties;
+ 
+// ── Stile selezione neutro (bianco/grigio, no arancio) ────────────────────
+const activeTab = {
+  background: "rgba(255,255,255,0.10)",
+  color: "#ffffff",
+  border: "1px solid rgba(255,255,255,0.18)",
+} as React.CSSProperties;
+ 
+const inactiveTab = {
+  background: "transparent",
+  color: "rgba(255,255,255,0.38)",
+  border: "1px solid transparent",
 } as React.CSSProperties;
  
 // ── Tool tabs ─────────────────────────────────────────────────────────────
@@ -76,11 +88,7 @@ function MapToolbar({ active, onChange }: { active: string; onChange: (id: strin
             key={t.id}
             onClick={() => onChange(t.id)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-200"
-            style={{
-              background: isActive ? "rgba(249,115,22,0.15)" : "transparent",
-              color: isActive ? "#fb923c" : "rgba(255,255,255,0.4)",
-              border: isActive ? "1px solid rgba(249,115,22,0.3)" : "1px solid transparent",
-            }}
+            style={isActive ? activeTab : inactiveTab}
           >
             <Icon className="w-3.5 h-3.5" />
             {t.label}
@@ -99,7 +107,7 @@ function ToolPlaceholder({ emoji, title, desc }: { emoji: string; title: string;
       <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", maxWidth: "240px" }}>{desc}</div>
       <div
         className="text-xs font-semibold px-3 py-1 rounded-full"
-        style={{ background: "rgba(249,115,22,0.12)", color: "#fb923c", border: "1px solid rgba(249,115,22,0.25)" }}
+        style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.15)" }}
       >
         Disponibile prossimamente
       </div>
@@ -165,11 +173,7 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick }: {
                   key={item.id}
                   onClick={() => { setActive(item.id); if (item.id === "new") onNewTrip(); }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
-                  style={{
-                    background: isActive ? "rgba(249,115,22,0.12)" : "transparent",
-                    color: isActive ? "#fb923c" : "rgba(255,255,255,0.55)",
-                    border: isActive ? "1px solid rgba(249,115,22,0.25)" : "1px solid transparent",
-                  }}
+                  style={isActive ? activeTab : inactiveTab}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
                   {item.label}
@@ -205,7 +209,7 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick }: {
  
           {active === "saved" && (
             <div className="flex-1 flex flex-col items-center justify-center p-4 text-center gap-2">
-              <BookMarked style={{ width: "28px", height: "28px", color: "rgba(251,146,60,0.4)" }} />
+              <BookMarked style={{ width: "28px", height: "28px", color: "rgba(255,255,255,0.3)" }} />
               <p className="text-sm font-medium text-white">Viaggi salvati</p>
               <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>I tuoi itinerari salvati appariranno qui</p>
             </div>
@@ -213,12 +217,12 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick }: {
  
           {active === "group" && (
             <div className="flex-1 flex flex-col items-center justify-center p-4 text-center gap-2">
-              <Users style={{ width: "28px", height: "28px", color: "rgba(251,146,60,0.4)" }} />
+              <Users style={{ width: "28px", height: "28px", color: "rgba(255,255,255,0.3)" }} />
               <p className="text-sm font-medium text-white">Gruppi vacanza</p>
               <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>Crea e gestisci gruppi di viaggio</p>
               <span
                 className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                style={{ background: "rgba(249,115,22,0.12)", color: "#fb923c" }}
+                style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.15)" }}
               >
                 Prossimamente
               </span>
@@ -230,7 +234,7 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick }: {
   );
 }
  
-// ── Bubble utente ─────────────────────────────────────────────────────────
+// ── Bubble utente (gradiente arancio→viola — colore brand) ────────────────
 function UserBubble({ text }: { text: string }) {
   return (
     <div className="flex justify-end">
@@ -239,7 +243,7 @@ function UserBubble({ text }: { text: string }) {
         borderRadius: "18px 18px 4px 18px",
         background: "linear-gradient(135deg,#f97316,#a855f7)",
         color: "#fff", fontSize: "14px", lineHeight: 1.55,
-        boxShadow: "0 4px 16px rgba(249,115,22,0.25)",
+        boxShadow: "0 4px 16px rgba(249,115,22,0.2)",
       }}>
         {text}
       </div>
@@ -254,9 +258,9 @@ function AssistantBubble({ text }: { text: string }) {
       <div style={{
         maxWidth: "85%", padding: "10px 14px",
         borderRadius: "18px 18px 18px 4px",
-        background: "rgba(40,30,60,0.95)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        color: "rgba(255,255,255,0.88)", fontSize: "14px", lineHeight: 1.6,
+        background: "rgba(32,22,52,0.98)",
+        border: "1px solid rgba(255,255,255,0.11)",
+        color: "rgba(255,255,255,0.88)", fontSize: "14px", lineHeight: 1.65,
       }}>
         {text}
       </div>
@@ -270,16 +274,16 @@ function TypingIndicator() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
       <div
         className="flex items-center gap-2 px-4 py-3 rounded-2xl"
-        style={{ background: "rgba(40,30,60,0.95)", border: "1px solid rgba(255,255,255,0.1)" }}
+        style={{ background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}
       >
         {[0, 150, 300].map((d) => (
           <div
             key={d}
             className="w-2 h-2 rounded-full"
-            style={{ background: "#fb923c", animation: `wd-bounce 1.2s ease-in-out ${d}ms infinite` }}
+            style={{ background: "rgba(255,255,255,0.5)", animation: `wd-bounce 1.2s ease-in-out ${d}ms infinite` }}
           />
         ))}
-        <span className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.4)" }}>Waydora sta pianificando...</span>
+        <span className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.35)" }}>Waydora sta pianificando...</span>
       </div>
       <style>{`@keyframes wd-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}`}</style>
     </motion.div>
@@ -305,9 +309,8 @@ function ChatInput({ value, onChange, onSubmit, isPending, placeholder = "Contin
     <div
       className="flex items-center gap-2 px-3 py-2"
       style={{
-        background: "rgba(255,255,255,0.09)",
-        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-        border: "1px solid rgba(255,255,255,0.14)",
+        background: "rgba(255,255,255,0.07)",
+        border: "1px solid rgba(255,255,255,0.12)",
         borderRadius: "9999px",
         boxShadow: "0 2px 16px rgba(0,0,0,0.2)",
       }}
@@ -323,7 +326,7 @@ function ChatInput({ value, onChange, onSubmit, isPending, placeholder = "Contin
         style={{
           minHeight: "32px", maxHeight: "120px",
           paddingLeft: "10px", paddingTop: "7px", paddingBottom: "7px",
-          color: "rgba(255,255,255,0.9)", caretColor: "#fb923c",
+          color: "rgba(255,255,255,0.9)", caretColor: "#fff",
         }}
       />
       <button
@@ -334,7 +337,6 @@ function ChatInput({ value, onChange, onSubmit, isPending, placeholder = "Contin
           background: active ? "linear-gradient(135deg,#f97316,#a855f7)" : "rgba(255,255,255,0.08)",
           border: "none", cursor: active ? "pointer" : "not-allowed",
           transform: active ? "scale(1)" : "scale(0.92)",
-          boxShadow: active ? "0 2px 12px rgba(249,115,22,0.4)" : "none",
         }}
       >
         {isPending
@@ -349,18 +351,15 @@ function ChatInput({ value, onChange, onSubmit, isPending, placeholder = "Contin
 function ChatTurnView({ turn }: { turn: ChatTurn }) {
   return (
     <div className="space-y-3">
-      {/* 1. Messaggio utente — sempre visibile subito */}
+      {/* 1. Messaggio utente — sempre subito */}
       <UserBubble text={turn.userMessage} />
  
-      {/* 2. Se la risposta non è ancora arrivata → typing indicator */}
+      {/* 2. Risposta in attesa → typing; arrivata → testo + eventuale itinerario */}
       {turn.assistantReply === "" ? (
         <TypingIndicator />
       ) : (
         <>
-          {/* 3. Risposta testuale AI */}
           <AssistantBubble text={turn.assistantReply} />
- 
-          {/* 4. Itinerario inline sotto la risposta (solo se presente) */}
           {turn.itinerary && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -395,7 +394,6 @@ export default function Home() {
  
   useEffect(() => { document.title = "Waydora — Travel simple, everywhere!"; }, []);
  
-  // Scroll in fondo ad ogni aggiornamento
   useEffect(() => {
     setTimeout(() => {
       chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
@@ -407,18 +405,11 @@ export default function Home() {
     if (!promptText || chatMutation.isPending) return;
     if (!overridePrompt) setInput("");
  
-    // ID univoco per questo turno
     const turnId = Date.now();
  
-    // ① Aggiunge SUBITO il messaggio utente con reply vuota → mostra typing
-    setTurns(prev => [...prev, {
-      id: turnId,
-      userMessage: promptText,
-      assistantReply: "",
-      itinerary: undefined,
-    }]);
+    // ① Mostra subito il messaggio utente + typing
+    setTurns(prev => [...prev, { id: turnId, userMessage: promptText, assistantReply: "", itinerary: undefined }]);
  
-    // ② Aggiorna la history API
     const newApiMessages: ChatMessage[] = [...apiMessages, { role: "user", content: promptText }];
     setApiMessages(newApiMessages);
  
@@ -426,13 +417,10 @@ export default function Home() {
       { data: { messages: newApiMessages, existingItinerary: currentItinerary } },
       {
         onSuccess: (data) => {
-          // Aggiunge la risposta AI alla history
           setApiMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
- 
-          // Aggiorna l'itinerario corrente se presente
           if (data.itinerary) setCurrentItinerary(data.itinerary);
  
-          // ③ Aggiorna il turno esistente con reply + eventuale itinerario
+          // ② Aggiorna il turno con risposta + itinerario
           setTurns(prev => prev.map(t =>
             t.id === turnId
               ? { ...t, assistantReply: data.reply, itinerary: data.itinerary ?? undefined }
@@ -440,7 +428,6 @@ export default function Home() {
           ));
         },
         onError: () => {
-          // Rimuove il turno fallito e il messaggio dalla history
           setTurns(prev => prev.filter(t => t.id !== turnId));
           setApiMessages(prev => prev.slice(0, -1));
           toast({ title: "Qualcosa è andato storto", description: "Riprova.", variant: "destructive" });
@@ -461,10 +448,7 @@ export default function Home() {
   };
  
   const handleNewTrip = () => {
-    setTurns([]);
-    setApiMessages([]);
-    setCurrentItinerary(undefined);
-    setInput("");
+    setTurns([]); setApiMessages([]); setCurrentItinerary(undefined); setInput("");
   };
  
   const isInitialState = turns.length === 0 && !chatMutation.isPending;
@@ -489,15 +473,13 @@ export default function Home() {
   // ── APP ───────────────────────────────────────────────────────────────────
   return (
     <Layout>
-      {/* Sfondo arancio→viola */}
       <div className="fixed inset-0 -z-10" style={{ background: "#0a0a12" }}>
-        <div style={{ position: "absolute", top: "-10%", right: "-5%", width: "50vw", height: "50vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(249,115,22,0.18) 0%,transparent 65%)", filter: "blur(70px)" }} />
-        <div style={{ position: "absolute", bottom: "5%", left: "-5%", width: "45vw", height: "45vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(168,85,247,0.18) 0%,transparent 65%)", filter: "blur(70px)" }} />
+        <div style={{ position: "absolute", top: "-10%", right: "-5%", width: "50vw", height: "50vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(249,115,22,0.15) 0%,transparent 65%)", filter: "blur(70px)" }} />
+        <div style={{ position: "absolute", bottom: "5%", left: "-5%", width: "45vw", height: "45vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(168,85,247,0.15) 0%,transparent 65%)", filter: "blur(70px)" }} />
       </div>
  
       {/* ── DESKTOP ── */}
       <div className="flex-1 min-h-0 hidden lg:flex">
- 
         {!sidebarOpen && (
           <button
             onClick={() => setSidebarOpen(true)}
@@ -508,31 +490,21 @@ export default function Home() {
           </button>
         )}
  
-        <Sidebar
-          open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          onNewTrip={handleNewTrip}
-          suggestions={suggestions}
-          onSuggestionClick={(p) => handleSubmit(p)}
-        />
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewTrip={handleNewTrip}
+          suggestions={suggestions} onSuggestionClick={(p) => handleSubmit(p)} />
  
         {/* CHAT */}
-        <section
-          className="flex flex-col min-h-0 shrink-0"
-          style={{ width: "38vw", borderRight: "1px solid rgba(255,255,255,0.07)" }}
-        >
+        <section className="flex flex-col min-h-0 shrink-0" style={{ width: "38vw", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
           {/* Header */}
-          <div
-            className="px-4 py-3 flex items-center justify-between shrink-0"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}
-          >
+          <div className="px-4 py-3 flex items-center justify-between shrink-0"
+            style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
             <div className="flex items-center gap-2">
               {!sidebarOpen && (
                 <button onClick={() => setSidebarOpen(true)} style={{ color: "rgba(255,255,255,0.4)", marginRight: "4px" }}>
                   <Menu className="w-4 h-4" />
                 </button>
               )}
-              <div className="w-2 h-2 rounded-full" style={{ background: "linear-gradient(135deg,#f97316,#a855f7)", boxShadow: "0 0 8px rgba(249,115,22,0.5)" }} />
+              <div className="w-2 h-2 rounded-full" style={{ background: "linear-gradient(135deg,#f97316,#a855f7)" }} />
               <span className="text-sm font-bold text-white">Waydora</span>
             </div>
             <div className="flex items-center gap-2">
@@ -541,7 +513,7 @@ export default function Home() {
                   onClick={handleSave}
                   disabled={saveMutation.isPending}
                   className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
-                  style={{ background: "rgba(249,115,22,0.12)", color: "#fb923c", border: "1px solid rgba(249,115,22,0.3)" }}
+                  style={{ background: "rgba(255,255,255,0.09)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.18)" }}
                 >
                   {saveMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                   Salva
@@ -549,8 +521,10 @@ export default function Home() {
               )}
               <button
                 onClick={handleNewTrip}
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
                 style={{ color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.1)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
               >
                 <PlusCircle className="w-3.5 h-3.5" />
                 Nuovo
@@ -558,11 +532,11 @@ export default function Home() {
             </div>
           </div>
  
-          {/* Lista turni — sequenziale */}
+          {/* Turni chat */}
           <div
             ref={chatScrollRef}
             className="flex-1 overflow-y-auto p-4 space-y-6 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full"
-            style={{ scrollbarColor: "rgba(249,115,22,0.3) transparent" }}
+            style={{ scrollbarColor: "rgba(255,255,255,0.15) transparent" }}
           >
             {turns.map((turn) => (
               <ChatTurnView key={turn.id} turn={turn} />
@@ -570,18 +544,10 @@ export default function Home() {
           </div>
  
           {/* Input */}
-          <div
-            className="px-4 py-3 shrink-0"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.07)", ...glassDark }}
-          >
-            <ChatInput
-              value={input}
-              onChange={setInput}
-              onSubmit={() => handleSubmit()}
-              isPending={chatMutation.isPending}
-              placeholder="Aggiungi giorni, chiedi consigli, modifica l'itinerario..."
-            />
-            <p className="text-center text-xs mt-2" style={{ color: "rgba(255,255,255,0.18)" }}>
+          <div className="px-4 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
+            <ChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()} isPending={chatMutation.isPending}
+              placeholder="Aggiungi giorni, chiedi consigli, modifica l'itinerario..." />
+            <p className="text-center text-xs mt-2" style={{ color: "rgba(255,255,255,0.15)" }}>
               Shift+Invio per andare a capo
             </p>
           </div>
@@ -610,10 +576,8 @@ export default function Home() {
       <div className="flex-1 min-h-0 lg:hidden flex flex-col">
         <Tabs defaultValue="chat" className="flex-1 flex flex-col min-h-0">
           <div className="px-3 pt-3 shrink-0">
-            <TabsList
-              className="w-full grid grid-cols-3 rounded-xl p-1"
-              style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}
-            >
+            <TabsList className="w-full grid grid-cols-3 rounded-xl p-1"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}>
               {[
                 { value: "chat",  label: "Chat" },
                 { value: "trip",  label: "Itinerario" },
@@ -622,7 +586,7 @@ export default function Home() {
                 <TabsTrigger
                   key={t.value}
                   value={t.value}
-                  className="text-xs font-semibold rounded-lg data-[state=active]:bg-[rgba(249,115,22,0.18)] data-[state=active]:text-[#fb923c] text-[rgba(255,255,255,0.45)]"
+                  className="text-xs font-semibold rounded-lg transition-all data-[state=active]:bg-[rgba(255,255,255,0.12)] data-[state=active]:text-white text-[rgba(255,255,255,0.4)]"
                 >
                   {t.label}
                 </TabsTrigger>
@@ -637,17 +601,9 @@ export default function Home() {
                 <ChatTurnView key={turn.id} turn={turn} />
               ))}
             </div>
-            <div
-              className="px-3 py-3 shrink-0"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.07)", ...glassDark }}
-            >
-              <ChatInput
-                value={input}
-                onChange={setInput}
-                onSubmit={() => handleSubmit()}
-                isPending={chatMutation.isPending}
-                placeholder="Scrivi il tuo viaggio..."
-              />
+            <div className="px-3 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
+              <ChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()} isPending={chatMutation.isPending}
+                placeholder="Scrivi il tuo viaggio..." />
             </div>
           </TabsContent>
  
@@ -656,9 +612,9 @@ export default function Home() {
             <div className="h-full overflow-y-auto px-3 pb-8">
               {currentItinerary
                 ? (
-                  <div style={{ background: "rgba(28,18,48,0.97)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: "16px", padding: "14px" }}>
+                  <div style={{ background: "rgba(22,14,38,0.98)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "16px", padding: "14px" }}>
                     <ItineraryResults itinerary={currentItinerary} />
-                    <div className="mt-5 pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div className="mt-5 pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
                       <PackingList list={currentItinerary.packingList ?? []} />
                     </div>
                     <div className="flex justify-center mt-5">
@@ -666,7 +622,7 @@ export default function Home() {
                         onClick={handleSave}
                         disabled={saveMutation.isPending}
                         className="flex items-center gap-2 px-6 py-3 rounded-full font-semibold text-sm text-white"
-                        style={{ background: "linear-gradient(135deg,#f97316,#a855f7)", boxShadow: "0 4px 20px rgba(249,115,22,0.35)" }}
+                        style={{ background: "linear-gradient(135deg,#f97316,#a855f7)", boxShadow: "0 4px 20px rgba(249,115,22,0.3)" }}
                       >
                         {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Salva e condividi
