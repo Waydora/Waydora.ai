@@ -29,13 +29,13 @@ type ChatTurn = {
   userMessage: string;
   assistantReply: string;
   itinerary?: ItineraryData;
-  mediaPreview?: string; // URL preview del media allegato
+  mediaPreview?: string;
 };
 
 type MediaContent = {
   mediaType: string;
-  data: string; // base64
-  preview: string; // object URL per anteprima
+  data: string;
+  preview: string;
   name: string;
 };
 
@@ -69,12 +69,12 @@ const inactiveTab = {
 
 // ── Suggerimenti rapidi ───────────────────────────────────────────────────
 const QUICK_SUGGESTIONS = [
-  { label: "➕ Aggiungi un giorno", prompt: "Aggiungi un altro giorno all'itinerario" },
-  { label: "🍽️ Più ristoranti", prompt: "Suggeriscimi altri ristoranti locali da non perdere" },
-  { label: "📸 Spot Instagram", prompt: "Dammi i migliori spot per foto Instagram in questa destinazione" },
-  { label: "💰 Versione economica", prompt: "Rendi l'itinerario più economico mantenendo le esperienze migliori" },
-  { label: "🏨 Consigli hotel", prompt: "Dove mi consigli di dormire? Sia lusso che budget" },
-  { label: "🚗 Come spostarsi", prompt: "Come mi sposto tra le varie tappe? Mezzi pubblici o noleggio auto?" },
+  { label: "➕ Aggiungi un giorno",  prompt: "Aggiungi un altro giorno all'itinerario" },
+  { label: "🍽️ Più ristoranti",      prompt: "Suggeriscimi altri ristoranti locali da non perdere" },
+  { label: "📸 Spot Instagram",      prompt: "Dammi i migliori spot per foto Instagram in questa destinazione" },
+  { label: "💰 Versione economica",  prompt: "Rendi l'itinerario più economico mantenendo le esperienze migliori" },
+  { label: "🏨 Consigli hotel",      prompt: "Dove mi consigli di dormire? Sia lusso che budget" },
+  { label: "🚗 Come spostarsi",      prompt: "Come mi sposto tra le varie tappe? Mezzi pubblici o noleggio auto?" },
 ];
 
 // ── Tool tabs ─────────────────────────────────────────────────────────────
@@ -125,11 +125,11 @@ function ToolContent({ tool, itinerary }: { tool: string; itinerary?: ItineraryD
   if (tool === "map") return null;
   if (tool === "bagaglio") return <PackingList list={itinerary?.packingList ?? []} />;
   const placeholders: Record<string, { emoji: string; title: string; desc: string }> = {
-    calendar: { emoji: "📅", title: "Calendario viaggio", desc: "Organizza date e appuntamenti" },
-    expenses: { emoji: "💰", title: "Gestione spese", desc: "Tieni traccia del budget" },
+    calendar: { emoji: "📅", title: "Calendario viaggio",  desc: "Organizza date e appuntamenti" },
+    expenses: { emoji: "💰", title: "Gestione spese",       desc: "Tieni traccia del budget" },
     weather:  { emoji: "🌤", title: "Meteo in tempo reale", desc: "Previsioni per ogni tappa" },
-    ideas:    { emoji: "💡", title: "Le tue idee", desc: "Salva ispirazioni per il viaggio" },
-    media:    { emoji: "📸", title: "Foto e media", desc: "Carica e condividi foto" },
+    ideas:    { emoji: "💡", title: "Le tue idee",          desc: "Salva ispirazioni per il viaggio" },
+    media:    { emoji: "📸", title: "Foto e media",         desc: "Carica e condividi foto" },
   };
   const p = placeholders[tool];
   return p ? <ToolPlaceholder {...p} /> : null;
@@ -223,7 +223,6 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick, onL
 
           <div className="flex-1" />
 
-          {/* Footer utente */}
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: "12px" }}>
             {user ? (
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -237,14 +236,16 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick, onL
                   <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</div>
                   <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
                 </div>
-                <button onClick={logout} title="Esci" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "6px", cursor: "pointer", color: "rgba(255,255,255,0.45)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                <button onClick={logout} title="Esci"
+                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "6px", cursor: "pointer", color: "rgba(255,255,255,0.45)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
                   onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}>
                   <LogOut style={{ width: "14px", height: "14px" }} />
                 </button>
               </div>
             ) : (
-              <button onClick={onLoginClick} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "10px", borderRadius: "12px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
+              <button onClick={onLoginClick}
+                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "10px", borderRadius: "12px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "#fff"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}>
                 <LogIn style={{ width: "15px", height: "15px" }} />
@@ -311,20 +312,49 @@ function TypingIndicator() {
   );
 }
 
-// ── Input avanzato con upload, voice, TikTok ──────────────────────────────
+// ── Welcome message per chat vuota ────────────────────────────────────────
+function WelcomeMessage({ userName }: { userName?: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="flex flex-col items-center justify-center h-full gap-4 text-center px-6"
+    >
+      <div style={{ fontSize: "3rem" }}>✈️</div>
+      <div>
+        <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#fff", marginBottom: "8px" }}>
+          {userName ? `Ciao, ${userName.split(" ")[0]}! 👋` : "Ciao! 👋"}
+        </h3>
+        <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", lineHeight: 1.6, maxWidth: "280px" }}>
+          Sono Waydora, la tua assistente di viaggio AI. Dimmi dove vuoi andare e creo il tuo itinerario perfetto!
+        </p>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center", marginTop: "8px" }}>
+        {["🗺️ 3 giorni a Tokyo", "🏖️ Settimana al mare", "🏛️ Weekend a Roma"].map((s) => (
+          <span key={s} style={{
+            fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px",
+            background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)",
+            color: "rgba(255,255,255,0.6)",
+          }}>{s}</span>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Input avanzato ────────────────────────────────────────────────────────
 function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach, mediaContent, onMediaRemove, placeholder }: {
   value: string; onChange: (v: string) => void; onSubmit: () => void;
   isPending: boolean; onMediaAttach: (media: MediaContent) => void;
   mediaContent: MediaContent | null; onMediaRemove: () => void;
   placeholder?: string;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recognition, setRecognition] = useState<any>(null);
   const active = (value.trim() || mediaContent) && !isPending;
 
-  // ── Resize textarea ──
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value);
     const ta = e.target;
@@ -332,37 +362,23 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
     ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
   };
 
-  // ── Upload file (foto/video) ──
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const isImage = file.type.startsWith("image/");
     const isVideo = file.type.startsWith("video/");
     if (!isImage && !isVideo) return;
-
-    // Max 20MB
-    if (file.size > 20 * 1024 * 1024) {
-      alert("File troppo grande. Max 20MB.");
-      return;
-    }
-
+    if (file.size > 20 * 1024 * 1024) { alert("File troppo grande. Max 20MB."); return; }
     const preview = URL.createObjectURL(file);
-
-    // Converti in base64 per Claude
     const reader = new FileReader();
     reader.onload = (ev) => {
       const base64 = (ev.target?.result as string)?.split(",")[1];
       if (!base64) return;
-      // Claude supporta solo immagini — per video usiamo il primo frame
-      const mediaType = isImage ? file.type : "image/jpeg";
-      onMediaAttach({ mediaType, data: base64, preview, name: file.name });
+      onMediaAttach({ mediaType: isImage ? file.type : "image/jpeg", data: base64, preview, name: file.name });
     };
-
     if (isImage) {
       reader.readAsDataURL(file);
     } else {
-      // Per video: estrai il primo frame come immagine
       const video = document.createElement("video");
       video.src = preview;
       video.currentTime = 1;
@@ -382,53 +398,33 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
         }, "image/jpeg", 0.85);
       };
     }
-
-    // Reset input
     e.target.value = "";
   };
 
-  // ── Registrazione vocale (Web Speech API) ──
   const toggleRecording = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Il tuo browser non supporta la registrazione vocale. Prova Chrome.");
-      return;
-    }
-
-    if (isRecording && recognition) {
-      recognition.stop();
-      setIsRecording(false);
-      return;
-    }
-
-    const rec = new SpeechRecognition();
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { alert("Il tuo browser non supporta la registrazione vocale. Usa Chrome."); return; }
+    if (isRecording && recognition) { recognition.stop(); setIsRecording(false); return; }
+    const rec = new SR();
     rec.lang = "it-IT";
     rec.continuous = true;
     rec.interimResults = true;
-
     rec.onresult = (event: any) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      onChange(transcript);
+      let t = "";
+      for (let i = 0; i < event.results.length; i++) t += event.results[i][0].transcript;
+      onChange(t);
     };
-
-    rec.onend = () => { setIsRecording(false); };
-    rec.onerror = () => { setIsRecording(false); };
-
+    rec.onend = () => setIsRecording(false);
+    rec.onerror = () => setIsRecording(false);
     rec.start();
     setRecognition(rec);
     setIsRecording(true);
   };
 
-  // ── Detect link TikTok nel testo ──
   const hasTikTokLink = /tiktok\.com/i.test(value);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-
-      {/* Preview media allegato */}
       {mediaContent && (
         <div style={{ position: "relative", display: "inline-block", alignSelf: "flex-start" }}>
           <img src={mediaContent.preview} alt="allegato"
@@ -437,13 +433,9 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
             style={{ position: "absolute", top: "-6px", right: "-6px", width: "20px", height: "20px", borderRadius: "50%", background: "rgba(0,0,0,0.8)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
             <X style={{ width: "11px", height: "11px" }} />
           </button>
-          <div style={{ position: "absolute", bottom: "4px", left: "4px", fontSize: "10px", background: "rgba(0,0,0,0.7)", color: "#fff", padding: "2px 6px", borderRadius: "4px" }}>
-            {mediaContent.name.length > 15 ? mediaContent.name.substring(0, 15) + "..." : mediaContent.name}
-          </div>
         </div>
       )}
 
-      {/* Indicatore TikTok rilevato */}
       {hasTikTokLink && (
         <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
           <Link style={{ width: "12px", height: "12px", color: "#a78bfa" }} />
@@ -451,117 +443,50 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
         </div>
       )}
 
-      {/* Input principale */}
-      <div style={{
-        display: "flex", alignItems: "flex-end", gap: "6px",
-        background: "rgba(255,255,255,0.07)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        borderRadius: "20px", padding: "8px 8px 8px 14px",
-      }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "20px", padding: "8px 8px 8px 14px" }}>
         <textarea
-          ref={textareaRef}
           value={value}
           onChange={handleChange}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (active) onSubmit(); } }}
           placeholder={isRecording ? "🎤 In ascolto..." : placeholder}
           rows={1}
           className="flex-1 bg-transparent resize-none outline-none border-none text-sm leading-relaxed"
-          style={{
-            minHeight: "32px", maxHeight: "120px",
-            paddingTop: "6px", paddingBottom: "6px",
-            color: isRecording ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.9)",
-            caretColor: "#fff",
-          }}
+          style={{ minHeight: "32px", maxHeight: "120px", paddingTop: "6px", paddingBottom: "6px", color: isRecording ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.9)", caretColor: "#fff" }}
         />
-
-        {/* Bottoni azione */}
         <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
-          {/* Upload foto/video */}
           <input ref={fileInputRef} type="file" accept="image/*,video/*" style={{ display: "none" }} onChange={handleFileChange} />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            title="Allega foto o video"
-            style={{
-              width: "32px", height: "32px", borderRadius: "50%", border: "none",
-              background: mediaContent ? "rgba(167,139,250,0.2)" : "rgba(255,255,255,0.07)",
-              color: mediaContent ? "#a78bfa" : "rgba(255,255,255,0.4)",
-              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-              transition: "all 0.15s",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = mediaContent ? "rgba(167,139,250,0.2)" : "rgba(255,255,255,0.07)"; }}
-          >
+          <button onClick={() => fileInputRef.current?.click()} title="Allega foto o video"
+            style={{ width: "32px", height: "32px", borderRadius: "50%", border: "none", background: mediaContent ? "rgba(167,139,250,0.2)" : "rgba(255,255,255,0.07)", color: mediaContent ? "#a78bfa" : "rgba(255,255,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
             <ImagePlus style={{ width: "15px", height: "15px" }} />
           </button>
-
-          {/* Registrazione vocale */}
-          <button
-            onClick={toggleRecording}
-            title={isRecording ? "Stop registrazione" : "Registra messaggio vocale"}
-            style={{
-              width: "32px", height: "32px", borderRadius: "50%", border: "none",
-              background: isRecording ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.07)",
-              color: isRecording ? "#f87171" : "rgba(255,255,255,0.4)",
-              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-              transition: "all 0.15s",
-              animation: isRecording ? "wd-pulse 1.5s ease-in-out infinite" : "none",
-            }}
-          >
+          <button onClick={toggleRecording} title={isRecording ? "Stop" : "Registra voce"}
+            style={{ width: "32px", height: "32px", borderRadius: "50%", border: "none", background: isRecording ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.07)", color: isRecording ? "#f87171" : "rgba(255,255,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
             {isRecording ? <MicOff style={{ width: "14px", height: "14px" }} /> : <Mic style={{ width: "14px", height: "14px" }} />}
           </button>
-
-          {/* Invio */}
-          <button
-            onClick={onSubmit}
-            disabled={!active}
-            style={{
-              width: "34px", height: "34px", borderRadius: "50%", border: "none",
-              background: active ? "linear-gradient(135deg,#f97316,#a855f7)" : "rgba(255,255,255,0.06)",
-              color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: active ? "pointer" : "not-allowed",
-              transform: active ? "scale(1)" : "scale(0.9)",
-              transition: "all 0.15s",
-              boxShadow: active ? "0 2px 12px rgba(249,115,22,0.35)" : "none",
-            }}
-          >
+          <button onClick={onSubmit} disabled={!active}
+            style={{ width: "34px", height: "34px", borderRadius: "50%", border: "none", background: active ? "linear-gradient(135deg,#f97316,#a855f7)" : "rgba(255,255,255,0.06)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: active ? "pointer" : "not-allowed", transform: active ? "scale(1)" : "scale(0.9)", transition: "all 0.15s" }}>
             {isPending
               ? <Loader2 style={{ width: "14px", height: "14px", animation: "spin 0.8s linear infinite" }} />
-              : <Send style={{ width: "13px", height: "13px" }} />
-            }
+              : <Send style={{ width: "13px", height: "13px" }} />}
           </button>
         </div>
       </div>
-
-      <style>{`
-        @keyframes wd-pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
-        @keyframes spin { to{transform:rotate(360deg)} }
-      `}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
 
-// ── Suggerimenti rapidi pill ──────────────────────────────────────────────
+// ── Suggerimenti rapidi ───────────────────────────────────────────────────
 function QuickSuggestions({ onSelect, visible }: { onSelect: (prompt: string) => void; visible: boolean }) {
   if (!visible) return null;
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      style={{ display: "flex", flexWrap: "wrap", gap: "6px", padding: "8px 0 0" }}
-    >
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      style={{ display: "flex", flexWrap: "wrap", gap: "6px", padding: "8px 0 0" }}>
       {QUICK_SUGGESTIONS.map((s) => (
-        <button
-          key={s.label}
-          onClick={() => onSelect(s.prompt)}
-          style={{
-            fontSize: "12px", fontWeight: 600, padding: "5px 12px", borderRadius: "9999px",
-            background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)",
-            color: "rgba(255,255,255,0.7)", cursor: "pointer", transition: "all 0.15s",
-            whiteSpace: "nowrap",
-          }}
+        <button key={s.label} onClick={() => onSelect(s.prompt)}
+          style={{ fontSize: "12px", fontWeight: 600, padding: "5px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)", cursor: "pointer", transition: "all 0.15s", whiteSpace: "nowrap" }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.13)"; e.currentTarget.style.color = "#fff"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
-        >
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}>
           {s.label}
         </button>
       ))}
@@ -592,21 +517,44 @@ function ChatTurnView({ turn }: { turn: ChatTurn }) {
 }
 
 // ── Navbar landing ────────────────────────────────────────────────────────
-function LandingNav({ onLoginClick }: { onLoginClick: () => void }) {
+function LandingNav({ onLoginClick, onEnterChat }: { onLoginClick: () => void; onEnterChat: () => void }) {
   const { user, logout } = useAuth();
   return (
     <div style={{ position: "absolute", top: 0, right: 0, zIndex: 30, padding: "20px 24px", display: "flex", alignItems: "center", gap: "12px" }}>
       {user ? (
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)", fontWeight: 500 }}>Ciao, {user.name?.split(" ")[0]}</span>
-          {user.avatar
-            ? <img src={user.avatar} alt={user.name} style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover" }} />
-            : <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "13px" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>
-          }
-          <button onClick={logout} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "9999px", padding: "6px 14px", color: "rgba(255,255,255,0.7)", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Esci</button>
+          {/* Nome cliccabile → va alla chat */}
+          <button
+            onClick={onEnterChat}
+            style={{
+              display: "flex", alignItems: "center", gap: "8px",
+              background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)",
+              backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+              borderRadius: "9999px", padding: "7px 14px 7px 8px",
+              color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+              transition: "all 0.15s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.2)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
+          >
+            {user.avatar
+              ? <img src={user.avatar} alt={user.name} style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} />
+              : <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "11px" }}>
+                  {user.name?.[0]?.toUpperCase() ?? "W"}
+                </div>
+            }
+            {user.name?.split(" ")[0]}
+          </button>
+          <button onClick={logout}
+            style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "9999px", padding: "7px 14px", color: "rgba(255,255,255,0.6)", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+            Esci
+          </button>
         </div>
       ) : (
-        <button onClick={onLoginClick} style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: "9999px", padding: "8px 18px", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+        <button onClick={onLoginClick}
+          style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: "9999px", padding: "8px 18px", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.2)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}>
           <User style={{ width: "14px", height: "14px" }} />Accedi
         </button>
       )}
@@ -624,8 +572,11 @@ export default function Home() {
   const [sidebarOpen,      setSidebarOpen]      = useState(true);
   const [activeTool,       setActiveTool]       = useState("map");
   const [authOpen,         setAuthOpen]         = useState(false);
+  // forceChat = true quando l'utente clicca il suo nome dalla landing
+  const [forceChat,        setForceChat]        = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const { data: suggestions } = useListSuggestions();
@@ -645,6 +596,9 @@ export default function Home() {
     if ((!promptText && !mediaContent) || chatMutation.isPending) return;
     if (!overridePrompt) setInput("");
 
+    // Se era in forceChat (chat vuota) e ora manda un messaggio, rimane in chat
+    setForceChat(true);
+
     const turnId = Date.now();
     const mediaPreview = mediaContent?.preview;
 
@@ -652,20 +606,14 @@ export default function Home() {
       id: turnId,
       userMessage: promptText || "📎 Media allegato",
       assistantReply: "",
-      itinerary: undefined,
       mediaPreview,
     }]);
 
     const newApiMessages: ChatMessage[] = [...apiMessages, { role: "user", content: promptText || "Analizza questo contenuto e suggerisci un itinerario" }];
     setApiMessages(newApiMessages);
 
-    // Prepara il mediaContent per il backend (solo base64, non l'object URL)
-    const mediaForBackend = mediaContent ? {
-      mediaType: mediaContent.mediaType,
-      data: mediaContent.data,
-    } : undefined;
-
-    setMediaContent(null); // Pulisce il media dopo l'invio
+    const mediaForBackend = mediaContent ? { mediaType: mediaContent.mediaType, data: mediaContent.data } : undefined;
+    setMediaContent(null);
 
     chatMutation.mutate(
       { data: { messages: newApiMessages, existingItinerary: currentItinerary, mediaContent: mediaForBackend } as any },
@@ -674,9 +622,7 @@ export default function Home() {
           setApiMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
           if (data.itinerary) setCurrentItinerary(data.itinerary);
           setTurns(prev => prev.map(t =>
-            t.id === turnId
-              ? { ...t, assistantReply: data.reply, itinerary: data.itinerary ?? undefined }
-              : t
+            t.id === turnId ? { ...t, assistantReply: data.reply, itinerary: data.itinerary ?? undefined } : t
           ));
         },
         onError: () => {
@@ -701,18 +647,24 @@ export default function Home() {
 
   const handleNewTrip = () => {
     setTurns([]); setApiMessages([]); setCurrentItinerary(undefined);
-    setInput(""); setMediaContent(null);
+    setInput(""); setMediaContent(null); setForceChat(false);
+  };
+
+  const handleEnterChat = () => {
+    // Clicca nome utente dalla landing → apre chat vuota
+    setForceChat(true);
   };
 
   const hasItinerary = turns.some(t => t.itinerary);
-  const isInitialState = turns.length === 0 && !chatMutation.isPending;
+  // Mostra landing solo se non ci sono turni E non è stato forzato l'accesso alla chat
+  const isLanding = turns.length === 0 && !chatMutation.isPending && !forceChat;
 
   // ── LANDING ──────────────────────────────────────────────────────────────
-  if (isInitialState) {
+  if (isLanding) {
     return (
       <Layout>
         <div className="flex-1 overflow-y-auto" style={{ background: "#0a0a12", position: "relative" }}>
-          <LandingNav onLoginClick={() => setAuthOpen(true)} />
+          <LandingNav onLoginClick={() => setAuthOpen(true)} onEnterChat={handleEnterChat} />
           <HeroLanding onSubmit={handleSubmit} isPending={chatMutation.isPending} />
           <HowItWorks />
           <TripCounter />
@@ -749,7 +701,6 @@ export default function Home() {
 
         {/* CHAT */}
         <section className="flex flex-col min-h-0 shrink-0" style={{ width: "38vw", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
-          {/* Header */}
           <div className="px-4 py-3 flex items-center justify-between shrink-0"
             style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
             <div className="flex items-center gap-2">
@@ -764,8 +715,8 @@ export default function Home() {
             <div className="flex items-center gap-2">
               {currentItinerary && (
                 <button onClick={handleSave} disabled={saveMutation.isPending}
-                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
-                  style={{ background: "rgba(255,255,255,0.09)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.18)" }}>
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"
+                  style={{ background: "rgba(255,255,255,0.09)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)" }}>
                   {saveMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                   Salva
                 </button>
@@ -780,24 +731,23 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Turni */}
+          {/* Area messaggi */}
           <div ref={chatScrollRef}
             className="flex-1 overflow-y-auto p-4 space-y-6 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full"
             style={{ scrollbarColor: "rgba(255,255,255,0.15) transparent" }}>
-            {turns.map((turn) => (<ChatTurnView key={turn.id} turn={turn} />))}
+            {turns.length === 0
+              ? <WelcomeMessage userName={user?.name} />
+              : turns.map((turn) => (<ChatTurnView key={turn.id} turn={turn} />))
+            }
           </div>
 
-          {/* Input */}
           <div className="px-4 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
             <QuickSuggestions onSelect={(p) => handleSubmit(p)} visible={hasItinerary && !chatMutation.isPending} />
             <div style={{ marginTop: hasItinerary ? "8px" : "0" }}>
-              <AdvancedChatInput
-                value={input} onChange={setInput}
-                onSubmit={() => handleSubmit()} isPending={chatMutation.isPending}
-                onMediaAttach={setMediaContent} mediaContent={mediaContent}
-                onMediaRemove={() => setMediaContent(null)}
-                placeholder="Aggiungi giorni, incolla link TikTok, chiedi consigli..."
-              />
+              <AdvancedChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()}
+                isPending={chatMutation.isPending} onMediaAttach={setMediaContent}
+                mediaContent={mediaContent} onMediaRemove={() => setMediaContent(null)}
+                placeholder="Dimmi dove vuoi andare..." />
             </div>
             <p className="text-center text-xs mt-2" style={{ color: "rgba(255,255,255,0.15)" }}>
               Shift+Invio per andare a capo
@@ -839,7 +789,10 @@ export default function Home() {
 
           <TabsContent value="chat" className="flex-1 min-h-0 flex flex-col mt-2">
             <div className="flex-1 overflow-y-auto px-3 py-2 space-y-5">
-              {turns.map((turn) => (<ChatTurnView key={turn.id} turn={turn} />))}
+              {turns.length === 0
+                ? <WelcomeMessage userName={user?.name} />
+                : turns.map((turn) => (<ChatTurnView key={turn.id} turn={turn} />))
+              }
             </div>
             <div className="px-3 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
               <QuickSuggestions onSelect={(p) => handleSubmit(p)} visible={hasItinerary && !chatMutation.isPending} />
@@ -847,7 +800,7 @@ export default function Home() {
                 <AdvancedChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()}
                   isPending={chatMutation.isPending} onMediaAttach={setMediaContent}
                   mediaContent={mediaContent} onMediaRemove={() => setMediaContent(null)}
-                  placeholder="Scrivi, registra o allega..." />
+                  placeholder="Dimmi dove vuoi andare..." />
               </div>
             </div>
           </TabsContent>
