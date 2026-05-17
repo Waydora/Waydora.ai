@@ -9,11 +9,14 @@ import {
   type ItineraryData,
   type Suggestion,
 } from "@/hooks/api";
+import { useAuth } from "@/hooks/auth";
+import { AuthModal } from "@/components/auth-modal";
 import {
   Send, Loader2, Save, PlusCircle,
   Map, ChevronLeft, ChevronRight,
-  Compass, BookMarked, Users, Calendar, DollarSign,
+  Compass, BookMarked, Calendar, DollarSign,
   Cloud, Camera, Lightbulb, Menu, CheckSquare,
+  LogOut, LogIn, User,
 } from "lucide-react";
 import { Layout, Logo } from "@/components/layout";
 import { ItineraryResults, PackingList } from "@/components/itinerary-results";
@@ -34,7 +37,7 @@ type ChatTurn = {
   itinerary?: ItineraryData;
 };
  
-// ── Stili base ────────────────────────────────────────────────────────────
+// ── Stili ─────────────────────────────────────────────────────────────────
 const glassDark = {
   background: "rgba(10,10,18,0.88)",
   backdropFilter: "blur(24px) saturate(160%)",
@@ -50,7 +53,6 @@ const itineraryCard = {
   marginTop: "8px",
 } as React.CSSProperties;
  
-// ── Stile selezione neutro (bianco/grigio, no arancio) ────────────────────
 const activeTab = {
   background: "rgba(255,255,255,0.10)",
   color: "#ffffff",
@@ -134,14 +136,15 @@ const NAV_ITEMS = [
   { id: "new",     label: "Nuova chat",        icon: PlusCircle },
   { id: "saved",   label: "Viaggi salvati",    icon: BookMarked },
   { id: "inspire", label: "Lasciati ispirare", icon: Compass },
-  { id: "group",   label: "Gruppi vacanza",    icon: Users },
 ];
  
-function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick }: {
+function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick, onLoginClick }: {
   open: boolean; onClose: () => void; onNewTrip: () => void;
   suggestions?: Suggestion[]; onSuggestionClick: (prompt: string) => void;
+  onLoginClick: () => void;
 }) {
   const [active, setActive] = useState("new");
+  const { user, logout } = useAuth();
  
   return (
     <AnimatePresence>
@@ -154,6 +157,7 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick }: {
           className="flex flex-col min-h-0 overflow-hidden shrink-0"
           style={{ borderRight: "1px solid rgba(255,255,255,0.07)", ...glassDark }}
         >
+          {/* Header */}
           <div
             className="px-4 py-4 flex items-center justify-between shrink-0"
             style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
@@ -164,6 +168,7 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick }: {
             </button>
           </div>
  
+          {/* Nav items */}
           <div className="px-2 py-3 space-y-1 shrink-0">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
@@ -182,6 +187,7 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick }: {
             })}
           </div>
  
+          {/* Ispirazioni */}
           {active === "inspire" && suggestions && suggestions.length > 0 && (
             <ScrollArea className="flex-1 px-2 py-2">
               <div className="space-y-2">
@@ -207,34 +213,102 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick }: {
             </ScrollArea>
           )}
  
+          {/* Salvati */}
           {active === "saved" && (
             <div className="flex-1 flex flex-col items-center justify-center p-4 text-center gap-2">
-              <BookMarked style={{ width: "28px", height: "28px", color: "rgba(255,255,255,0.3)" }} />
+              <BookMarked style={{ width: "28px", height: "28px", color: "rgba(255,255,255,0.25)" }} />
               <p className="text-sm font-medium text-white">Viaggi salvati</p>
-              <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>I tuoi itinerari salvati appariranno qui</p>
+              <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+                {user ? "I tuoi itinerari salvati appariranno qui" : "Accedi per vedere i tuoi viaggi"}
+              </p>
+              {!user && (
+                <button
+                  onClick={onLoginClick}
+                  style={{
+                    marginTop: "8px", padding: "8px 16px", borderRadius: "9999px",
+                    background: "linear-gradient(135deg,#f97316,#a855f7)",
+                    color: "#fff", fontSize: "12px", fontWeight: 700, border: "none", cursor: "pointer",
+                  }}
+                >
+                  Accedi
+                </button>
+              )}
             </div>
           )}
  
-          {active === "group" && (
-            <div className="flex-1 flex flex-col items-center justify-center p-4 text-center gap-2">
-              <Users style={{ width: "28px", height: "28px", color: "rgba(255,255,255,0.3)" }} />
-              <p className="text-sm font-medium text-white">Gruppi vacanza</p>
-              <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>Crea e gestisci gruppi di viaggio</p>
-              <span
-                className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.15)" }}
+          {/* Spacer */}
+          <div className="flex-1" />
+ 
+          {/* Footer utente */}
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: "12px" }}>
+            {user ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {/* Avatar */}
+                {user.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    style={{ width: "34px", height: "34px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+                  />
+                ) : (
+                  <div style={{
+                    width: "34px", height: "34px", borderRadius: "50%", flexShrink: 0,
+                    background: "linear-gradient(135deg,#f97316,#a855f7)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "#fff", fontWeight: 700, fontSize: "13px",
+                  }}>
+                    {user.name?.[0]?.toUpperCase() ?? "W"}
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.name}
+                  </div>
+                  <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {user.email}
+                  </div>
+                </div>
+                {/* Logout */}
+                <button
+                  onClick={logout}
+                  title="Esci"
+                  style={{
+                    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "8px", padding: "6px", cursor: "pointer",
+                    color: "rgba(255,255,255,0.45)", flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                >
+                  <LogOut style={{ width: "14px", height: "14px" }} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onLoginClick}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                  gap: "8px", padding: "10px", borderRadius: "12px",
+                  background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)",
+                  color: "rgba(255,255,255,0.7)", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "#fff"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
               >
-                Prossimamente
-              </span>
-            </div>
-          )}
+                <LogIn style={{ width: "15px", height: "15px" }} />
+                Accedi o Registrati
+              </button>
+            )}
+          </div>
         </motion.aside>
       )}
     </AnimatePresence>
   );
 }
  
-// ── Bubble utente (gradiente arancio→viola — colore brand) ────────────────
+// ── Bubble utente ─────────────────────────────────────────────────────────
 function UserBubble({ text }: { text: string }) {
   return (
     <div className="flex justify-end">
@@ -290,7 +364,7 @@ function TypingIndicator() {
   );
 }
  
-// ── Input chat pill iOS ───────────────────────────────────────────────────
+// ── Input chat ────────────────────────────────────────────────────────────
 function ChatInput({ value, onChange, onSubmit, isPending, placeholder = "Continua la conversazione..." }: {
   value: string; onChange: (v: string) => void; onSubmit: () => void;
   isPending: boolean; placeholder?: string;
@@ -312,7 +386,6 @@ function ChatInput({ value, onChange, onSubmit, isPending, placeholder = "Contin
         background: "rgba(255,255,255,0.07)",
         border: "1px solid rgba(255,255,255,0.12)",
         borderRadius: "9999px",
-        boxShadow: "0 2px 16px rgba(0,0,0,0.2)",
       }}
     >
       <textarea
@@ -347,14 +420,11 @@ function ChatInput({ value, onChange, onSubmit, isPending, placeholder = "Contin
   );
 }
  
-// ── Singolo turno della chat ──────────────────────────────────────────────
+// ── Turno chat ────────────────────────────────────────────────────────────
 function ChatTurnView({ turn }: { turn: ChatTurn }) {
   return (
     <div className="space-y-3">
-      {/* 1. Messaggio utente — sempre subito */}
       <UserBubble text={turn.userMessage} />
- 
-      {/* 2. Risposta in attesa → typing; arrivata → testo + eventuale itinerario */}
       {turn.assistantReply === "" ? (
         <TypingIndicator />
       ) : (
@@ -376,6 +446,65 @@ function ChatTurnView({ turn }: { turn: ChatTurn }) {
   );
 }
  
+// ── Navbar landing con login ──────────────────────────────────────────────
+function LandingNav({ onLoginClick }: { onLoginClick: () => void }) {
+  const { user, logout } = useAuth();
+ 
+  return (
+    <div style={{
+      position: "absolute", top: 0, right: 0, zIndex: 30,
+      padding: "20px 24px", display: "flex", alignItems: "center", gap: "12px",
+    }}>
+      {user ? (
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.7)", fontWeight: 500 }}>
+            Ciao, {user.name?.split(" ")[0]}
+          </span>
+          {user.avatar ? (
+            <img src={user.avatar} alt={user.name} style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover" }} />
+          ) : (
+            <div style={{
+              width: "32px", height: "32px", borderRadius: "50%",
+              background: "linear-gradient(135deg,#f97316,#a855f7)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontWeight: 700, fontSize: "13px",
+            }}>
+              {user.name?.[0]?.toUpperCase() ?? "W"}
+            </div>
+          )}
+          <button
+            onClick={logout}
+            style={{
+              background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: "9999px", padding: "6px 14px",
+              color: "rgba(255,255,255,0.7)", fontSize: "12px", fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            Esci
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={onLoginClick}
+          style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)",
+            backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
+            borderRadius: "9999px", padding: "8px 18px",
+            color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer",
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.2)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
+        >
+          <User style={{ width: "14px", height: "14px" }} />
+          Accedi
+        </button>
+      )}
+    </div>
+  );
+}
+ 
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function Home() {
   const [turns,            setTurns]            = useState<ChatTurn[]>([]);
@@ -384,6 +513,7 @@ export default function Home() {
   const [apiMessages,      setApiMessages]      = useState<ChatMessage[]>([]);
   const [sidebarOpen,      setSidebarOpen]      = useState(true);
   const [activeTool,       setActiveTool]       = useState("map");
+  const [authOpen,         setAuthOpen]         = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -406,8 +536,6 @@ export default function Home() {
     if (!overridePrompt) setInput("");
  
     const turnId = Date.now();
- 
-    // ① Mostra subito il messaggio utente + typing
     setTurns(prev => [...prev, { id: turnId, userMessage: promptText, assistantReply: "", itinerary: undefined }]);
  
     const newApiMessages: ChatMessage[] = [...apiMessages, { role: "user", content: promptText }];
@@ -419,8 +547,6 @@ export default function Home() {
         onSuccess: (data) => {
           setApiMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
           if (data.itinerary) setCurrentItinerary(data.itinerary);
- 
-          // ② Aggiorna il turno con risposta + itinerario
           setTurns(prev => prev.map(t =>
             t.id === turnId
               ? { ...t, assistantReply: data.reply, itinerary: data.itinerary ?? undefined }
@@ -457,7 +583,9 @@ export default function Home() {
   if (isInitialState) {
     return (
       <Layout>
-        <div className="flex-1 overflow-y-auto" style={{ background: "#0a0a12" }}>
+        <div className="flex-1 overflow-y-auto" style={{ background: "#0a0a12", position: "relative" }}>
+          {/* Pulsante login nella landing */}
+          <LandingNav onLoginClick={() => setAuthOpen(true)} />
           <HeroLanding onSubmit={handleSubmit} isPending={chatMutation.isPending} />
           <HowItWorks />
           <TripCounter />
@@ -466,6 +594,7 @@ export default function Home() {
           <Faq />
           <SiteFooter />
         </div>
+        <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
       </Layout>
     );
   }
@@ -490,12 +619,17 @@ export default function Home() {
           </button>
         )}
  
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewTrip={handleNewTrip}
-          suggestions={suggestions} onSuggestionClick={(p) => handleSubmit(p)} />
+        <Sidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          onNewTrip={handleNewTrip}
+          suggestions={suggestions}
+          onSuggestionClick={(p) => handleSubmit(p)}
+          onLoginClick={() => setAuthOpen(true)}
+        />
  
         {/* CHAT */}
         <section className="flex flex-col min-h-0 shrink-0" style={{ width: "38vw", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
-          {/* Header */}
           <div className="px-4 py-3 flex items-center justify-between shrink-0"
             style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
             <div className="flex items-center gap-2">
@@ -521,7 +655,7 @@ export default function Home() {
               )}
               <button
                 onClick={handleNewTrip}
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
+                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"
                 style={{ color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.1)" }}
                 onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
@@ -532,7 +666,6 @@ export default function Home() {
             </div>
           </div>
  
-          {/* Turni chat */}
           <div
             ref={chatScrollRef}
             className="flex-1 overflow-y-auto p-4 space-y-6 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full"
@@ -543,7 +676,6 @@ export default function Home() {
             ))}
           </div>
  
-          {/* Input */}
           <div className="px-4 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
             <ChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()} isPending={chatMutation.isPending}
               placeholder="Aggiungi giorni, chiedi consigli, modifica l'itinerario..." />
@@ -583,31 +715,23 @@ export default function Home() {
                 { value: "trip",  label: "Itinerario" },
                 { value: "map",   label: "Mappa" },
               ].map((t) => (
-                <TabsTrigger
-                  key={t.value}
-                  value={t.value}
-                  className="text-xs font-semibold rounded-lg transition-all data-[state=active]:bg-[rgba(255,255,255,0.12)] data-[state=active]:text-white text-[rgba(255,255,255,0.4)]"
-                >
+                <TabsTrigger key={t.value} value={t.value}
+                  className="text-xs font-semibold rounded-lg data-[state=active]:bg-[rgba(255,255,255,0.12)] data-[state=active]:text-white text-[rgba(255,255,255,0.4)]">
                   {t.label}
                 </TabsTrigger>
               ))}
             </TabsList>
           </div>
  
-          {/* Chat mobile */}
           <TabsContent value="chat" className="flex-1 min-h-0 flex flex-col mt-2">
             <div className="flex-1 overflow-y-auto px-3 py-2 space-y-5">
-              {turns.map((turn) => (
-                <ChatTurnView key={turn.id} turn={turn} />
-              ))}
+              {turns.map((turn) => (<ChatTurnView key={turn.id} turn={turn} />))}
             </div>
             <div className="px-3 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
-              <ChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()} isPending={chatMutation.isPending}
-                placeholder="Scrivi il tuo viaggio..." />
+              <ChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()} isPending={chatMutation.isPending} placeholder="Scrivi il tuo viaggio..." />
             </div>
           </TabsContent>
  
-          {/* Itinerario mobile */}
           <TabsContent value="trip" className="flex-1 min-h-0 mt-2">
             <div className="h-full overflow-y-auto px-3 pb-8">
               {currentItinerary
@@ -618,42 +742,32 @@ export default function Home() {
                       <PackingList list={currentItinerary.packingList ?? []} />
                     </div>
                     <div className="flex justify-center mt-5">
-                      <button
-                        onClick={handleSave}
-                        disabled={saveMutation.isPending}
+                      <button onClick={handleSave} disabled={saveMutation.isPending}
                         className="flex items-center gap-2 px-6 py-3 rounded-full font-semibold text-sm text-white"
-                        style={{ background: "linear-gradient(135deg,#f97316,#a855f7)", boxShadow: "0 4px 20px rgba(249,115,22,0.3)" }}
-                      >
+                        style={{ background: "linear-gradient(135deg,#f97316,#a855f7)", boxShadow: "0 4px 20px rgba(249,115,22,0.3)" }}>
                         {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Salva e condividi
                       </button>
                     </div>
                   </div>
                 )
-                : (
-                  <div className="h-full flex items-center justify-center text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>
-                    Pianifica un viaggio per vedere l'itinerario
-                  </div>
-                )
+                : <div className="h-full flex items-center justify-center text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>Pianifica un viaggio per vedere l'itinerario</div>
               }
             </div>
           </TabsContent>
  
-          {/* Mappa mobile */}
           <TabsContent value="map" className="flex-1 min-h-0 mt-2">
             <div className="h-full">
               {currentItinerary
                 ? <TripMap itinerary={currentItinerary} />
-                : (
-                  <div className="h-full flex items-center justify-center text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>
-                    In attesa dell'itinerario...
-                  </div>
-                )
+                : <div className="h-full flex items-center justify-center text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>In attesa dell'itinerario...</div>
               }
             </div>
           </TabsContent>
         </Tabs>
       </div>
+ 
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </Layout>
   );
 }
