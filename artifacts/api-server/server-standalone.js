@@ -1,6 +1,7 @@
 const http = require("http");
 const https = require("https");
 
+// ── System prompt ─────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `Sei Waydora, un'assistente di viaggio AI amichevole e conversazionale. Parli in italiano, come un'amica esperta di viaggi.
 
 Rispondi SEMPRE e SOLO con JSON valido, zero testo fuori dal JSON.
@@ -35,7 +36,7 @@ Rispondi in modo conciso e conversazionale. Max 150 parole. Usa emoji con modera
           {
             "time": "09:00-11:00",
             "title": "Nome Posto Reale",
-            "description": "descrizione vivace senza indirizzo (va nella mappa)",
+            "description": "descrizione vivace senza indirizzo",
             "category": "sightseeing",
             "estimatedCost": "€15",
             "coordinates": { "lat": 41.90, "lng": 12.49 },
@@ -56,28 +57,141 @@ Rispondi in modo conciso e conversazionale. Max 150 parole. Usa emoji con modera
 
 REGOLE:
 - Genera TUTTI i giorni richiesti in una sola risposta.
-- 3-4 attività per giorno. Orari come fasce: "09:00-11:00", "Pranzo 12:30-14:00", "Sera 20:00-22:00".
-- NON includere indirizzi nelle descrizioni attività (vanno solo nelle coordinate per la mappa).
+- 3-4 attività per giorno. Orari come fasce: "09:00-11:00", "Pranzo 12:30-14:00".
+- NON includere indirizzi nelle descrizioni attività.
 - tripPhotos: 3-4 query Unsplash per il viaggio intero.
-- Se l'utente manda un link TikTok o descrive un video di viaggio, analizza il contenuto e replica l'itinerario visto.
+- Se ricevi info estratte da un video TikTok di viaggio, analizzale e crea un itinerario ispirato a ciò che viene mostrato nel video.
 - Se l'utente fa domande conversazionali rispondi SOLO con reply e itinerary: null. MAX 150 parole.
 - Sii amichevole e naturale.`;
 
-// ── Estrae info da link TikTok ────────────────────────────────────────────
-function extractTikTokInfo(text) {
-  const tiktokRegex = /https?:\/\/(www\.|vm\.)?tiktok\.com\/[^\s]*/gi;
-  const matches = text.match(tiktokRegex);
-  if (matches && matches.length > 0) {
-    return {
-      hasTikTok: true,
-      urls: matches,
-      enrichedPrompt: `${text}\n\n[L'utente ha condiviso un video TikTok di viaggio: ${matches.join(", ")}. Analizza il contesto del messaggio e genera un itinerario ispirato al video. Se non riesci ad accedere al video, chiedi all'utente di descrivere cosa ha visto.]`,
+// ── Estrae info da video TikTok via RapidAPI ──────────────────────────────
+function fetchTikTokData(videoUrl) {
+  return new Promise((resolve, reject) => {
+    const apiKey = process.env.RAPIDAPI_KEY;
+    if (!apiKey) {
+      resolve(null);
+      return;
+    }
+
+    const encodedUrl = encodeURIComponent(videoUrl);
+    const options = {
+      hostname: "tiktok-scraper7.p.rapidapi.com",
+      path: `/?url=${encodedUrl}&hd=1`,
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "x-rapidapi-host": "tiktok-scraper7.p.rapidapi.com",
+        "x-rapidapi-key": apiKey,
+      },
     };
-  }
-  return { hasTikTok: false, urls: [], enrichedPrompt: text };
+
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(data);
+          resolve(parsed);
+        } catch (e) {
+          console.error("Errore parsing risposta TikTok:", e.message);
+          resolve(null);
+        }
+      });
+    });
+
+    req.on("error", (err) => {
+      console.error("Errore chiamata TikTok API:", err.message);
+      resolve(null); // Non blocca — continua senza dati TikTok
+    });
+
+    req.setTimeout(8000, () => {
+      req.destroy();
+      console.error("Timeout chiamata TikTok API");
+      resolve(null);
+    });
+
+    req.end();
+  });
 }
 
-// ── Chiama Claude con supporto immagini/video ─────────────────────────────
+// ── Rileva e arricchisce messaggi con link TikTok ─────────────────────────
+async function enrichWithTikTok(messages) {
+  const lastMsg = messages[messages.length - 1];
+  const text = typeof lastMsg?.content === "string" ? lastMsg.content : "";
+
+  const tiktokRegex = /https?:\/\/(www\.|vm\.)?tiktok\.com\/[^\s]*/gi;
+  const matches = text.match(tiktokRegex);
+
+  if (!matches || matches.length === 0) {
+    return messages; // Nessun link TikTok — ritorna invariato
+  }
+
+  console.log("Link TikTok rilevato:", matches[0]);
+
+  // Prende il primo link TikTok trovato
+  const tiktokUrl = matches[0];
+  const tiktokData = await fetchTikTokData(tiktokUrl);
+
+  if (!tiktokData) {
+    // API fallita — chiedi all'utente di descrivere il video
+    const enrichedText = `${text}
+
+[Nota: Ho rilevato un link TikTok ma non sono riuscita ad accedere ai dati del video in questo momento. 
+Puoi descrivermi cosa hai visto nel video? Destinazione, attività, luoghi mostrati?]`;
+
+    const enrichedMessages = [...messages];
+    enrichedMessages[enrichedMessages.length - 1] = {
+      ...lastMsg,
+      content: enrichedText,
+    };
+    return enrichedMessages;
+  }
+
+  // Estrae le informazioni utili dalla risposta di TikTok Scraper7
+  // La risposta ha struttura: data.data.title, data.data.author.nickname, ecc.
+  const videoData = tiktokData?.data || tiktokData;
+  const title = videoData?.title || videoData?.desc || "";
+  const authorName = videoData?.author?.nickname || videoData?.author?.unique_id || "";
+  const hashtags = (videoData?.text_extra || [])
+    .filter((t) => t.hashtag_name)
+    .map((t) => `#${t.hashtag_name}`)
+    .join(" ");
+  const musicTitle = videoData?.music?.title || "";
+  const stats = videoData?.statistics || videoData?.stats || {};
+  const plays = stats?.play_count || stats?.playCount || 0;
+
+  // Costruisce un contesto dettagliato per Claude
+  const tiktokContext = `
+[VIDEO TIKTOK RILEVATO]
+URL: ${tiktokUrl}
+Autore: @${authorName}
+Descrizione/Caption: ${title}
+Hashtag: ${hashtags}
+Musica: ${musicTitle}
+Visualizzazioni: ${plays.toLocaleString()}
+
+Analizza queste informazioni e crea un itinerario di viaggio ispirato al contenuto del video. 
+Identifica la destinazione dagli hashtag e dalla descrizione, poi crea un itinerario dettagliato.
+Se non riesci a identificare la destinazione con certezza, chiedi conferma all'utente.
+`;
+
+  const userText = text.replace(tiktokRegex, "").trim();
+  const fullContent = userText
+    ? `${userText}\n\n${tiktokContext}`
+    : tiktokContext;
+
+  const enrichedMessages = [...messages];
+  enrichedMessages[enrichedMessages.length - 1] = {
+    ...lastMsg,
+    content: fullContent,
+  };
+
+  console.log("Dati TikTok estratti:", { title, authorName, hashtags });
+  return enrichedMessages;
+}
+
+// ── Chiama Claude ─────────────────────────────────────────────────────────
 function callClaude(messages, existingItinerary, mediaContent) {
   return new Promise((resolve, reject) => {
     const systemPrompt = existingItinerary
@@ -85,22 +199,16 @@ function callClaude(messages, existingItinerary, mediaContent) {
       : SYSTEM_PROMPT;
 
     const lastUserMsg = messages[messages.length - 1]?.content || "";
-    const daysMatch = typeof lastUserMsg === "string"
-      ? lastUserMsg.match(/(\d+)\s*(giorni|day|notti|notte)/i)
-      : null;
+    const textContent = typeof lastUserMsg === "string" ? lastUserMsg : "";
+    const daysMatch = textContent.match(/(\d+)\s*(giorni|day|notti|notte)/i);
     const requestedDays = daysMatch ? parseInt(daysMatch[1]) : 3;
     const maxTokens = Math.min(10000, Math.max(2000, requestedDays * 600 + 2000));
 
-    // Costruisce i messaggi con eventuale media allegato
+    // Costruisce messaggi con eventuale media
     let claudeMessages = [...messages];
-
-    // Se c'è un media (immagine/video), lo aggiunge all'ultimo messaggio
     if (mediaContent && claudeMessages.length > 0) {
       const lastMsg = claudeMessages[claudeMessages.length - 1];
-      const textContent = typeof lastMsg.content === "string"
-        ? lastMsg.content
-        : lastMsg.content?.find(c => c.type === "text")?.text || "";
-
+      const msgText = typeof lastMsg.content === "string" ? lastMsg.content : "";
       claudeMessages[claudeMessages.length - 1] = {
         role: "user",
         content: [
@@ -114,7 +222,7 @@ function callClaude(messages, existingItinerary, mediaContent) {
           },
           {
             type: "text",
-            text: textContent || "Analizza questo contenuto e suggerisci un itinerario di viaggio ispirato a ciò che vedi.",
+            text: msgText || "Analizza questa immagine e suggerisci un itinerario di viaggio ispirato a ciò che vedi.",
           },
         ],
       };
@@ -148,7 +256,11 @@ function callClaude(messages, existingItinerary, mediaContent) {
           const parsed = JSON.parse(data);
           if (parsed.error) { reject(new Error(parsed.error.message)); return; }
           let text = parsed.content?.[0]?.text || "";
-          text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+          text = text
+            .replace(/^```json\s*/i, "")
+            .replace(/^```\s*/i, "")
+            .replace(/```\s*$/i, "")
+            .trim();
           resolve(text);
         } catch (e) { reject(e); }
       });
@@ -181,7 +293,10 @@ function enrichWithGooglePlaces(itinerary) {
           if (data.results?.[0]) {
             const place = data.results[0];
             if (place.geometry?.location) {
-              activity.coordinates = { lat: place.geometry.location.lat, lng: place.geometry.location.lng };
+              activity.coordinates = {
+                lat: place.geometry.location.lat,
+                lng: place.geometry.location.lng,
+              };
             }
             if (place.name) activity.title = place.name;
           }
@@ -228,19 +343,8 @@ const server = http.createServer(async (req, res) => {
       try {
         const { messages, existingItinerary, mediaContent } = JSON.parse(body);
 
-        // Controlla se c'è un link TikTok nell'ultimo messaggio
-        const lastMsg = messages[messages.length - 1];
-        const lastText = typeof lastMsg?.content === "string" ? lastMsg.content : "";
-        const { enrichedPrompt } = extractTikTokInfo(lastText);
-
-        // Sostituisce l'ultimo messaggio con quello arricchito se c'è TikTok
-        let enrichedMessages = [...messages];
-        if (enrichedPrompt !== lastText) {
-          enrichedMessages[enrichedMessages.length - 1] = {
-            ...lastMsg,
-            content: enrichedPrompt,
-          };
-        }
+        // Arricchisce con dati TikTok se presente un link
+        const enrichedMessages = await enrichWithTikTok(messages);
 
         const raw = await callClaude(enrichedMessages, existingItinerary, mediaContent);
 
@@ -248,6 +352,7 @@ const server = http.createServer(async (req, res) => {
         try {
           payload = JSON.parse(raw);
         } catch {
+          // Prova a riparare JSON troncato
           try {
             let fixed = raw;
             const opens = (fixed.match(/{/g) || []).length;
@@ -268,12 +373,16 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (payload.itinerary) {
-          try { payload.itinerary = await enrichWithGooglePlaces(payload.itinerary); }
-          catch (e) { console.error("Places err:", e.message); }
+          try {
+            payload.itinerary = await enrichWithGooglePlaces(payload.itinerary);
+          } catch (e) {
+            console.error("Places err:", e.message);
+          }
         }
 
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(payload));
+
       } catch (err) {
         console.error("Chat err:", err.message);
         res.writeHead(500, { "Content-Type": "application/json" });
