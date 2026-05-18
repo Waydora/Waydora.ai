@@ -55,17 +55,8 @@ const itineraryCard = {
   borderRadius: "16px", padding: "16px", marginTop: "8px",
 } as React.CSSProperties;
 
-const activeTab = {
-  background: "rgba(255,255,255,0.10)",
-  color: "#ffffff",
-  border: "1px solid rgba(255,255,255,0.18)",
-} as React.CSSProperties;
-
-const inactiveTab = {
-  background: "transparent",
-  color: "rgba(255,255,255,0.38)",
-  border: "1px solid transparent",
-} as React.CSSProperties;
+const activeTab  = { background: "rgba(255,255,255,0.10)", color: "#ffffff",              border: "1px solid rgba(255,255,255,0.18)" } as React.CSSProperties;
+const inactiveTab = { background: "transparent",           color: "rgba(255,255,255,0.38)", border: "1px solid transparent"          } as React.CSSProperties;
 
 // ── Suggerimenti rapidi ───────────────────────────────────────────────────
 const QUICK_SUGGESTIONS = [
@@ -107,29 +98,33 @@ function MapToolbar({ active, onChange }: { active: string; onChange: (id: strin
   );
 }
 
-// ── Strumento Mappa con pulsante Google Maps ──────────────────────────────
+// ── Mappa con pulsante Google Maps (URL corretto) ─────────────────────────
 function MapTool({ itinerary }: { itinerary?: ItineraryData }) {
   const openInGoogleMaps = () => {
     if (!itinerary) return;
-    // Crea un URL Google Maps con tutti i waypoint dell'itinerario
-    const allActivities = itinerary.days?.flatMap((d: any) => d.activities) ?? [];
-    const waypoints = allActivities
-      .filter((a: any) => a.coordinates)
-      .map((a: any) => `${a.coordinates.lat},${a.coordinates.lng}`)
-      .slice(0, 10); // Google Maps accetta max 10 waypoint gratis
 
-    if (waypoints.length === 0) {
-      // Fallback: cerca la destinazione
-      const url = `https://www.google.com/maps/search/${encodeURIComponent(itinerary.destination)}`;
-      window.open(url, "_blank");
+    const allActivities = itinerary.days?.flatMap((d: any) => d.activities) ?? [];
+    const points = allActivities
+      .filter((a: any) => a.coordinates?.lat && a.coordinates?.lng)
+      .map((a: any) => `${a.coordinates.lat},${a.coordinates.lng}`);
+
+    if (points.length === 0) {
+      // Nessuna coordinata — apri ricerca destinazione
+      window.open(`https://www.google.com/maps/search/${encodeURIComponent(itinerary.destination)}`, "_blank");
       return;
     }
 
-    const origin = waypoints[0];
-    const destination = waypoints[waypoints.length - 1];
-    const middle = waypoints.slice(1, -1).join("|");
-    const waypointParam = middle ? `&waypoints=${middle}` : "";
-    const url = `https://www.google.com/maps/dir/${origin}/${destination}${waypointParam}`;
+    if (points.length === 1) {
+      window.open(`https://www.google.com/maps/search/${points[0]}`, "_blank");
+      return;
+    }
+
+    // Google Maps Directions URL con waypoint
+    // Formato: /maps/dir/origine/waypoint1/waypoint2/.../destinazione
+    // Max 10 punti totali (inclusi origine e destinazione)
+    const limited = points.slice(0, 10);
+    const pathParts = limited.map(p => encodeURIComponent(p)).join("/");
+    const url = `https://www.google.com/maps/dir/${pathParts}`;
     window.open(url, "_blank");
   };
 
@@ -142,7 +137,6 @@ function MapTool({ itinerary }: { itinerary?: ItineraryData }) {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Pulsante Google Maps */}
       <div className="px-3 py-2 shrink-0 flex items-center justify-end"
         style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <button onClick={openInGoogleMaps}
@@ -162,12 +156,10 @@ function MapTool({ itinerary }: { itinerary?: ItineraryData }) {
   );
 }
 
-// ── Strumento Calendario con Google Calendar ──────────────────────────────
+// ── Calendario ────────────────────────────────────────────────────────────
 function CalendarTool({ itinerary }: { itinerary?: ItineraryData }) {
   const exportToGoogleCalendar = () => {
     if (!itinerary) return;
-
-    // Esporta ogni giorno come evento Google Calendar
     const today = new Date();
     itinerary.days?.forEach((day: any, index: number) => {
       const eventDate = new Date(today);
@@ -176,18 +168,14 @@ function CalendarTool({ itinerary }: { itinerary?: ItineraryData }) {
       const nextDay = new Date(eventDate);
       nextDay.setDate(eventDate.getDate() + 1);
       const nextDateStr = nextDay.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-
       const activities = day.activities?.map((a: any) => `• ${a.time} - ${a.title}`).join("\n") ?? "";
       const details = `${day.summary}\n\n${activities}\n\nItinerario creato con Waydora 🗺️`;
-
       const url = new URL("https://calendar.google.com/calendar/render");
       url.searchParams.set("action", "TEMPLATE");
       url.searchParams.set("text", `${itinerary.destination} - Giorno ${day.day}: ${day.title}`);
       url.searchParams.set("dates", `${dateStr}/${nextDateStr}`);
       url.searchParams.set("details", details);
       url.searchParams.set("location", itinerary.destination);
-
-      // Apre ogni evento in una nuova tab (con piccolo delay tra uno e l'altro)
       setTimeout(() => window.open(url.toString(), "_blank"), index * 500);
     });
   };
@@ -196,9 +184,7 @@ function CalendarTool({ itinerary }: { itinerary?: ItineraryData }) {
     <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
       <div style={{ fontSize: "2.8rem" }}>📅</div>
       <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Calendario viaggio</div>
-      <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", maxWidth: "240px" }}>
-        Genera un itinerario per sincronizzarlo con il tuo calendario
-      </div>
+      <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", maxWidth: "240px" }}>Genera un itinerario per sincronizzarlo con il calendario</div>
     </div>
   );
 
@@ -211,21 +197,14 @@ function CalendarTool({ itinerary }: { itinerary?: ItineraryData }) {
           style={{ background: "rgba(66,133,244,0.15)", color: "#4285f4", border: "1px solid rgba(66,133,244,0.3)" }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(66,133,244,0.25)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(66,133,244,0.15)"; }}>
-          <Download style={{ width: "12px", height: "12px" }} />
-          Importa in Google Calendar
+          <Download style={{ width: "12px", height: "12px" }} />Importa in Google Calendar
         </button>
       </div>
-
       <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
         {itinerary.days?.map((day: any, i: number) => (
-          <div key={day.day} style={{
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: "12px", padding: "12px",
-          }}>
+          <div key={day.day} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-              <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 900, color: "#fff", flexShrink: 0 }}>
-                {i + 1}
-              </div>
+              <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 900, color: "#fff", flexShrink: 0 }}>{i + 1}</div>
               <div style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>{day.title}</div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
@@ -239,24 +218,20 @@ function CalendarTool({ itinerary }: { itinerary?: ItineraryData }) {
           </div>
         ))}
       </div>
-
       <div style={{ marginTop: "16px", textAlign: "center" }}>
         <button onClick={exportToGoogleCalendar}
-          style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 700, padding: "10px 20px", borderRadius: "9999px", background: "rgba(66,133,244,0.15)", color: "#4285f4", border: "1px solid rgba(66,133,244,0.3)", cursor: "pointer", transition: "all 0.15s" }}
+          style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 700, padding: "10px 20px", borderRadius: "9999px", background: "rgba(66,133,244,0.15)", color: "#4285f4", border: "1px solid rgba(66,133,244,0.3)", cursor: "pointer" }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(66,133,244,0.25)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(66,133,244,0.15)"; }}>
-          <Download style={{ width: "14px", height: "14px" }} />
-          Importa tutti i giorni in Google Calendar
+          <Download style={{ width: "14px", height: "14px" }} />Importa tutti i giorni
         </button>
-        <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.25)", marginTop: "8px" }}>
-          Ogni giorno verrà aggiunto come evento separato
-        </p>
+        <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.25)", marginTop: "8px" }}>Ogni giorno viene aggiunto come evento separato</p>
       </div>
     </div>
   );
 }
 
-// ── Strumento Meteo reale ─────────────────────────────────────────────────
+// ── Meteo ─────────────────────────────────────────────────────────────────
 function WeatherTool({ itinerary }: { itinerary?: ItineraryData }) {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -264,13 +239,9 @@ function WeatherTool({ itinerary }: { itinerary?: ItineraryData }) {
 
   useEffect(() => {
     if (!itinerary?.destination) return;
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     fetchWeather(itinerary.destination, Math.min(itinerary.durationDays + 1, 14))
-      .then((data) => {
-        setWeather(data);
-        if (!data) setError("Impossibile caricare il meteo per questa destinazione");
-      })
+      .then((data) => { setWeather(data); if (!data) setError("Impossibile caricare il meteo per questa destinazione"); })
       .catch(() => setError("Errore nel caricamento del meteo"))
       .finally(() => setLoading(false));
   }, [itinerary?.destination, itinerary?.durationDays]);
@@ -279,17 +250,15 @@ function WeatherTool({ itinerary }: { itinerary?: ItineraryData }) {
     <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
       <div style={{ fontSize: "2.8rem" }}>🌤</div>
       <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Meteo in tempo reale</div>
-      <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", maxWidth: "240px" }}>
-        Genera un itinerario per vedere le previsioni meteo della destinazione
-      </div>
+      <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", maxWidth: "240px" }}>Genera un itinerario per vedere le previsioni meteo</div>
     </div>
   );
 
   if (loading) return (
     <div className="flex items-center justify-center h-full gap-3">
-      <Loader2 style={{ width: "24px", height: "24px", color: "rgba(255,255,255,0.4)", animation: "spin 0.8s linear infinite" }} />
+      <Loader2 style={{ width: "24px", height: "24px", color: "rgba(255,255,255,0.4)", animation: "wd-spin 0.8s linear infinite" }} />
       <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)" }}>Caricamento meteo...</span>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes wd-spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 
@@ -303,80 +272,56 @@ function WeatherTool({ itinerary }: { itinerary?: ItineraryData }) {
   return (
     <div className="p-4 h-full overflow-y-auto">
       <div style={{ marginBottom: "16px" }}>
-        <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff", marginBottom: "2px" }}>
-          🌤 Meteo a {weather.location}
-        </div>
-        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>
-          {weather.country} — previsioni per i prossimi {weather.days.length} giorni
-        </div>
+        <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff", marginBottom: "2px" }}>🌤 Meteo a {weather.location}</div>
+        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>{weather.country} — previsioni per {weather.days.length} giorni</div>
       </div>
-
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         {weather.days.map((day, i) => {
           const date = new Date(day.date);
           const dateLabel = date.toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" });
           return (
-            <div key={i} style={{
-              display: "flex", alignItems: "center", gap: "12px",
-              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: "12px", padding: "10px 14px",
-            }}>
-              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.45)", minWidth: "70px" }}>
-                {dateLabel}
-              </div>
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "10px 14px" }}>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.45)", minWidth: "70px" }}>{dateLabel}</div>
               <img src={day.icon} alt={day.condition} style={{ width: "32px", height: "32px" }} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff" }}>{day.condition}</div>
-                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>
-                  💨 {day.maxWindKph} km/h · 🌧 {day.chanceOfRain}%
-                </div>
+                <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>💨 {day.maxWindKph} km/h · 🌧 {day.chanceOfRain}%</div>
               </div>
-              <div style={{ fontSize: "16px", fontWeight: 800, color: "#fff", minWidth: "40px", textAlign: "right" }}>
-                {day.avgTempC}°C
-              </div>
+              <div style={{ fontSize: "16px", fontWeight: 800, color: "#fff", minWidth: "40px", textAlign: "right" }}>{day.avgTempC}°C</div>
             </div>
           );
         })}
       </div>
-
-      <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.2)", textAlign: "center", marginTop: "16px" }}>
-        Dati forniti da WeatherAPI.com
-      </p>
+      <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.2)", textAlign: "center", marginTop: "16px" }}>Dati forniti da WeatherAPI.com</p>
     </div>
   );
 }
 
-// ── Idee ──────────────────────────────────────────────────────────────────
-function IdeasTool({ itinerary }: { itinerary?: ItineraryData }) {
-  const [ideas, setIdeas] = useState<string[]>([]);
+// ── Idee (riceve stato da home per persistenza) ───────────────────────────
+function IdeasTool({ ideas, onAdd, onRemove, itinerary }: {
+  ideas: string[]; onAdd: (idea: string) => void; onRemove: (index: number) => void; itinerary?: ItineraryData;
+}) {
   const [newIdea, setNewIdea] = useState("");
 
-  const addIdea = () => {
+  const handleAdd = () => {
     if (!newIdea.trim()) return;
-    setIdeas(prev => [...prev, newIdea.trim()]);
+    onAdd(newIdea.trim());
     setNewIdea("");
   };
 
   return (
     <div className="p-4 h-full flex flex-col">
       <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff", marginBottom: "16px" }}>💡 Le tue idee</div>
-
-      {/* Input nuova idea */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-        <input
-          value={newIdea}
-          onChange={(e) => setNewIdea(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") addIdea(); }}
+        <input value={newIdea} onChange={(e) => setNewIdea(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
           placeholder="Aggiungi un'idea per il viaggio..."
-          style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "8px 12px", color: "#fff", fontSize: "13px", outline: "none" }}
-        />
-        <button onClick={addIdea}
+          style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "8px 12px", color: "#fff", fontSize: "13px", outline: "none" }} />
+        <button onClick={handleAdd}
           style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
           <Plus style={{ width: "16px", height: "16px" }} />
         </button>
       </div>
-
-      {/* Lista idee */}
       <div style={{ flex: 1, overflowY: "auto" }}>
         {ideas.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 20px", color: "rgba(255,255,255,0.3)" }}>
@@ -388,7 +333,7 @@ function IdeasTool({ itinerary }: { itinerary?: ItineraryData }) {
             {ideas.map((idea, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", padding: "10px 12px" }}>
                 <span style={{ fontSize: "13px", color: "rgba(255,255,255,0.8)", flex: 1 }}>{idea}</span>
-                <button onClick={() => setIdeas(prev => prev.filter((_, idx) => idx !== i))}
+                <button onClick={() => onRemove(i)}
                   style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 0, display: "flex" }}>
                   <X style={{ width: "14px", height: "14px" }} />
                 </button>
@@ -397,27 +342,24 @@ function IdeasTool({ itinerary }: { itinerary?: ItineraryData }) {
           </div>
         )}
       </div>
-
-      {!itinerary && (
-        <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.25)", textAlign: "center", marginTop: "12px" }}>
-          Le idee verranno salvate con l'itinerario
-        </p>
-      )}
     </div>
   );
 }
 
 // ── Media ─────────────────────────────────────────────────────────────────
-function MediaTool({ itinerary }: { itinerary?: ItineraryData }) {
-  const [files, setFiles] = useState<Array<{ name: string; preview: string }>>([]);
+function MediaTool({ files, onUpload, onRemove }: {
+  files: Array<{ name: string; preview: string }>;
+  onUpload: (newFiles: Array<{ name: string; preview: string }>) => void;
+  onRemove: (index: number) => void;
+}) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newFiles = Array.from(e.target.files ?? []);
-    newFiles.forEach((file) => {
-      const preview = URL.createObjectURL(file);
-      setFiles(prev => [...prev, { name: file.name, preview }]);
-    });
+    const newFiles = Array.from(e.target.files ?? []).map((file) => ({
+      name: file.name,
+      preview: URL.createObjectURL(file),
+    }));
+    onUpload(newFiles);
     e.target.value = "";
   };
 
@@ -428,11 +370,9 @@ function MediaTool({ itinerary }: { itinerary?: ItineraryData }) {
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={handleUpload} />
         <button onClick={() => fileRef.current?.click()}
           style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer" }}>
-          <Plus style={{ width: "13px", height: "13px" }} />
-          Carica
+          <Plus style={{ width: "13px", height: "13px" }} />Carica
         </button>
       </div>
-
       {files.length === 0 ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", color: "rgba(255,255,255,0.3)", textAlign: "center" }}>
           <Camera style={{ width: "36px", height: "36px", opacity: 0.3 }} />
@@ -447,7 +387,7 @@ function MediaTool({ itinerary }: { itinerary?: ItineraryData }) {
           {files.map((f, i) => (
             <div key={i} style={{ position: "relative", borderRadius: "10px", overflow: "hidden", aspectRatio: "1" }}>
               <img src={f.preview} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              <button onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))}
+              <button onClick={() => onRemove(i)}
                 style={{ position: "absolute", top: "4px", right: "4px", width: "20px", height: "20px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
                 <X style={{ width: "11px", height: "11px" }} />
               </button>
@@ -460,22 +400,25 @@ function MediaTool({ itinerary }: { itinerary?: ItineraryData }) {
 }
 
 // ── ToolContent dispatcher ────────────────────────────────────────────────
-function ToolContent({ tool, itinerary }: { tool: string; itinerary?: ItineraryData }) {
-  if (tool === "map")      return null; // gestita separatamente
+function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFiles, onUploadMedia, onRemoveMedia }: {
+  tool: string; itinerary?: ItineraryData;
+  ideas: string[]; onAddIdea: (i: string) => void; onRemoveIdea: (idx: number) => void;
+  mediaFiles: Array<{ name: string; preview: string }>;
+  onUploadMedia: (f: Array<{ name: string; preview: string }>) => void;
+  onRemoveMedia: (idx: number) => void;
+}) {
+  if (tool === "map")      return null;
   if (tool === "calendar") return <CalendarTool itinerary={itinerary} />;
   if (tool === "weather")  return <WeatherTool itinerary={itinerary} />;
   if (tool === "bagaglio") return <PackingList list={itinerary?.packingList ?? []} destination={itinerary?.destination} />;
-  if (tool === "ideas")    return <IdeasTool itinerary={itinerary} />;
-  if (tool === "media")    return <MediaTool itinerary={itinerary} />;
+  if (tool === "ideas")    return <IdeasTool ideas={ideas} onAdd={onAddIdea} onRemove={onRemoveIdea} itinerary={itinerary} />;
+  if (tool === "media")    return <MediaTool files={mediaFiles} onUpload={onUploadMedia} onRemove={onRemoveMedia} />;
   if (tool === "expenses") return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
       <div style={{ fontSize: "2.8rem" }}>💰</div>
       <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Gestione spese</div>
       <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", maxWidth: "240px" }}>Tieni traccia del budget e dividi le spese con il gruppo</div>
-      <div className="text-xs font-semibold px-3 py-1 rounded-full"
-        style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.15)" }}>
-        Disponibile prossimamente
-      </div>
+      <div className="text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.15)" }}>Disponibile prossimamente</div>
     </div>
   );
   return null;
@@ -490,8 +433,7 @@ const NAV_ITEMS = [
 
 function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick, onLoginClick }: {
   open: boolean; onClose: () => void; onNewTrip: () => void;
-  suggestions?: Suggestion[]; onSuggestionClick: (prompt: string) => void;
-  onLoginClick: () => void;
+  suggestions?: Suggestion[]; onSuggestionClick: (prompt: string) => void; onLoginClick: () => void;
 }) {
   const [active, setActive] = useState("new");
   const { user, logout } = useAuth();
@@ -499,27 +441,19 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick, onL
   return (
     <AnimatePresence>
       {open && (
-        <motion.aside
-          initial={{ width: 0, opacity: 0 }} animate={{ width: 248, opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.22 }}
+        <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 248, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.22 }}
           className="flex flex-col min-h-0 overflow-hidden shrink-0"
           style={{ borderRight: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
-
-          <div className="px-4 py-4 flex items-center justify-between shrink-0"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+          <div className="px-4 py-4 flex items-center justify-between shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
             <Logo variant="header" />
-            <button onClick={onClose} style={{ color: "rgba(255,255,255,0.35)" }}>
-              <ChevronLeft className="w-5 h-5" />
-            </button>
+            <button onClick={onClose} style={{ color: "rgba(255,255,255,0.35)" }}><ChevronLeft className="w-5 h-5" /></button>
           </div>
-
           <div className="px-2 py-3 space-y-1 shrink-0">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const isActive = active === item.id;
               return (
-                <button key={item.id}
-                  onClick={() => { setActive(item.id); if (item.id === "new") onNewTrip(); }}
+                <button key={item.id} onClick={() => { setActive(item.id); if (item.id === "new") onNewTrip(); }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
                   style={isActive ? activeTab : inactiveTab}>
                   <Icon className="w-4 h-4 shrink-0" />{item.label}
@@ -527,7 +461,6 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick, onL
               );
             })}
           </div>
-
           {active === "inspire" && suggestions && suggestions.length > 0 && (
             <ScrollArea className="flex-1 px-2 py-2">
               <div className="space-y-2">
@@ -549,51 +482,34 @@ function Sidebar({ open, onClose, onNewTrip, suggestions, onSuggestionClick, onL
               </div>
             </ScrollArea>
           )}
-
           {active === "saved" && (
             <div className="flex-1 flex flex-col items-center justify-center p-4 text-center gap-2">
               <BookMarked style={{ width: "28px", height: "28px", color: "rgba(255,255,255,0.25)" }} />
               <p className="text-sm font-medium text-white">Viaggi salvati</p>
-              <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
-                {user ? "I tuoi itinerari salvati appariranno qui" : "Accedi per vedere i tuoi viaggi"}
-              </p>
-              {!user && (
-                <button onClick={onLoginClick} style={{ marginTop: "8px", padding: "8px 16px", borderRadius: "9999px", background: "linear-gradient(135deg,#f97316,#a855f7)", color: "#fff", fontSize: "12px", fontWeight: 700, border: "none", cursor: "pointer" }}>
-                  Accedi
-                </button>
-              )}
+              <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>{user ? "I tuoi itinerari salvati appariranno qui" : "Accedi per vedere i tuoi viaggi"}</p>
+              {!user && <button onClick={onLoginClick} style={{ marginTop: "8px", padding: "8px 16px", borderRadius: "9999px", background: "linear-gradient(135deg,#f97316,#a855f7)", color: "#fff", fontSize: "12px", fontWeight: 700, border: "none", cursor: "pointer" }}>Accedi</button>}
             </div>
           )}
-
           <div className="flex-1" />
-
           <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: "12px" }}>
             {user ? (
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                {user.avatar
-                  ? <img src={user.avatar} alt={user.name} style={{ width: "34px", height: "34px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                  : <div style={{ width: "34px", height: "34px", borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "13px" }}>
-                      {user.name?.[0]?.toUpperCase() ?? "W"}
-                    </div>
-                }
+                {user.avatar ? <img src={user.avatar} alt={user.name} style={{ width: "34px", height: "34px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                  : <div style={{ width: "34px", height: "34px", borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "13px" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</div>
                   <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
                 </div>
-                <button onClick={logout} title="Esci"
-                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "6px", cursor: "pointer", color: "rgba(255,255,255,0.45)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}>
+                <button onClick={logout} title="Esci" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "6px", cursor: "pointer", color: "rgba(255,255,255,0.45)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; }} onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}>
                   <LogOut style={{ width: "14px", height: "14px" }} />
                 </button>
               </div>
             ) : (
-              <button onClick={onLoginClick}
-                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "10px", borderRadius: "12px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
+              <button onClick={onLoginClick} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "10px", borderRadius: "12px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "#fff"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}>
-                <LogIn style={{ width: "15px", height: "15px" }} />
-                Accedi o Registrati
+                <LogIn style={{ width: "15px", height: "15px" }} />Accedi o Registrati
               </button>
             )}
           </div>
@@ -608,16 +524,8 @@ function UserBubble({ text, mediaPreview }: { text: string; mediaPreview?: strin
   return (
     <div className="flex justify-end">
       <div style={{ maxWidth: "80%", display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
-        {mediaPreview && (
-          <div style={{ borderRadius: "12px", overflow: "hidden", maxWidth: "200px" }}>
-            <img src={mediaPreview} alt="allegato" style={{ width: "100%", objectFit: "cover", display: "block" }} />
-          </div>
-        )}
-        {text && (
-          <div style={{ padding: "10px 14px", borderRadius: "18px 18px 4px 18px", background: "linear-gradient(135deg,#f97316,#a855f7)", color: "#fff", fontSize: "14px", lineHeight: 1.55, boxShadow: "0 4px 16px rgba(249,115,22,0.2)" }}>
-            {text}
-          </div>
-        )}
+        {mediaPreview && <div style={{ borderRadius: "12px", overflow: "hidden", maxWidth: "200px" }}><img src={mediaPreview} alt="allegato" style={{ width: "100%", objectFit: "cover", display: "block" }} /></div>}
+        {text && <div style={{ padding: "10px 14px", borderRadius: "18px 18px 4px 18px", background: "linear-gradient(135deg,#f97316,#a855f7)", color: "#fff", fontSize: "14px", lineHeight: 1.55, boxShadow: "0 4px 16px rgba(249,115,22,0.2)" }}>{text}</div>}
       </div>
     </div>
   );
@@ -626,9 +534,7 @@ function UserBubble({ text, mediaPreview }: { text: string; mediaPreview?: strin
 function AssistantBubble({ text }: { text: string }) {
   return (
     <div className="flex justify-start">
-      <div style={{ maxWidth: "85%", padding: "10px 14px", borderRadius: "18px 18px 18px 4px", background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.11)", color: "rgba(255,255,255,0.88)", fontSize: "14px", lineHeight: 1.65 }}>
-        {text}
-      </div>
+      <div style={{ maxWidth: "85%", padding: "10px 14px", borderRadius: "18px 18px 18px 4px", background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.11)", color: "rgba(255,255,255,0.88)", fontSize: "14px", lineHeight: 1.65 }}>{text}</div>
     </div>
   );
 }
@@ -636,12 +542,8 @@ function AssistantBubble({ text }: { text: string }) {
 function TypingIndicator() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
-      <div className="flex items-center gap-2 px-4 py-3 rounded-2xl"
-        style={{ background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}>
-        {[0, 150, 300].map((d) => (
-          <div key={d} className="w-2 h-2 rounded-full"
-            style={{ background: "rgba(255,255,255,0.5)", animation: `wd-bounce 1.2s ease-in-out ${d}ms infinite` }} />
-        ))}
+      <div className="flex items-center gap-2 px-4 py-3 rounded-2xl" style={{ background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        {[0, 150, 300].map((d) => <div key={d} className="w-2 h-2 rounded-full" style={{ background: "rgba(255,255,255,0.5)", animation: `wd-bounce 1.2s ease-in-out ${d}ms infinite` }} />)}
         <span className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.35)" }}>Waydora sta pianificando...</span>
       </div>
       <style>{`@keyframes wd-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}`}</style>
@@ -655,12 +557,8 @@ function WelcomeMessage({ userName }: { userName?: string }) {
       className="flex flex-col items-center justify-center h-full gap-4 text-center px-6">
       <div style={{ fontSize: "3rem" }}>✈️</div>
       <div>
-        <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#fff", marginBottom: "8px" }}>
-          {userName ? `Ciao, ${userName.split(" ")[0]}! 👋` : "Ciao! 👋"}
-        </h3>
-        <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", lineHeight: 1.6, maxWidth: "280px" }}>
-          Sono Waydora, la tua assistente di viaggio AI. Dimmi dove vuoi andare e creo il tuo itinerario perfetto!
-        </p>
+        <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#fff", marginBottom: "8px" }}>{userName ? `Ciao, ${userName.split(" ")[0]}! 👋` : "Ciao! 👋"}</h3>
+        <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", lineHeight: 1.6, maxWidth: "280px" }}>Sono Waydora, la tua assistente di viaggio AI. Dimmi dove vuoi andare e creo il tuo itinerario perfetto!</p>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center", marginTop: "8px" }}>
         {["🗺️ 3 giorni a Tokyo", "🏖️ Settimana al mare", "🏛️ Weekend a Roma"].map((s) => (
@@ -682,43 +580,23 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     onChange(e.target.value);
-    const ta = e.target;
-    ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
+    const ta = e.target; ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 120) + "px";
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
+    const file = e.target.files?.[0]; if (!file) return;
+    const isImage = file.type.startsWith("image/"); const isVideo = file.type.startsWith("video/");
     if (!isImage && !isVideo) return;
     if (file.size > 20 * 1024 * 1024) { alert("File troppo grande. Max 20MB."); return; }
     const preview = URL.createObjectURL(file);
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const base64 = (ev.target?.result as string)?.split(",")[1];
-      if (base64) onMediaAttach({ mediaType: isImage ? file.type : "image/jpeg", data: base64, preview, name: file.name });
-    };
-    if (isImage) {
-      reader.readAsDataURL(file);
-    } else {
-      const video = document.createElement("video");
-      video.src = preview;
-      video.currentTime = 1;
+    reader.onload = (ev) => { const b64 = (ev.target?.result as string)?.split(",")[1]; if (b64) onMediaAttach({ mediaType: isImage ? file.type : "image/jpeg", data: b64, preview, name: file.name }); };
+    if (isImage) { reader.readAsDataURL(file); } else {
+      const video = document.createElement("video"); video.src = preview; video.currentTime = 1;
       video.onloadeddata = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        const canvas = document.createElement("canvas"); canvas.width = video.videoWidth; canvas.height = video.videoHeight;
         canvas.getContext("2d")?.drawImage(video, 0, 0);
-        canvas.toBlob((blob) => {
-          if (!blob) return;
-          const fr = new FileReader();
-          fr.onload = (ev) => {
-            const base64 = (ev.target?.result as string)?.split(",")[1];
-            if (base64) onMediaAttach({ mediaType: "image/jpeg", data: base64, preview, name: file.name });
-          };
-          fr.readAsDataURL(blob);
-        }, "image/jpeg", 0.85);
+        canvas.toBlob((blob) => { if (!blob) return; const fr = new FileReader(); fr.onload = (ev) => { const b64 = (ev.target?.result as string)?.split(",")[1]; if (b64) onMediaAttach({ mediaType: "image/jpeg", data: b64, preview, name: file.name }); }; fr.readAsDataURL(blob); }, "image/jpeg", 0.85);
       };
     }
     e.target.value = "";
@@ -728,11 +606,9 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { alert("Usa Chrome per la registrazione vocale."); return; }
     if (isRecording && recognition) { recognition.stop(); setIsRecording(false); return; }
-    const rec = new SR();
-    rec.lang = "it-IT"; rec.continuous = true; rec.interimResults = true;
+    const rec = new SR(); rec.lang = "it-IT"; rec.continuous = true; rec.interimResults = true;
     rec.onresult = (event: any) => { let t = ""; for (let i = 0; i < event.results.length; i++) t += event.results[i][0].transcript; onChange(t); };
-    rec.onend = () => setIsRecording(false);
-    rec.onerror = () => setIsRecording(false);
+    rec.onend = () => setIsRecording(false); rec.onerror = () => setIsRecording(false);
     rec.start(); setRecognition(rec); setIsRecording(true);
   };
 
@@ -772,11 +648,11 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
           </button>
           <button onClick={onSubmit} disabled={!active}
             style={{ width: "34px", height: "34px", borderRadius: "50%", border: "none", background: active ? "linear-gradient(135deg,#f97316,#a855f7)" : "rgba(255,255,255,0.06)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: active ? "pointer" : "not-allowed", transform: active ? "scale(1)" : "scale(0.9)", transition: "all 0.15s" }}>
-            {isPending ? <Loader2 style={{ width: "14px", height: "14px", animation: "spin2 0.8s linear infinite" }} /> : <Send style={{ width: "13px", height: "13px" }} />}
+            {isPending ? <Loader2 style={{ width: "14px", height: "14px", animation: "wd-spin2 0.8s linear infinite" }} /> : <Send style={{ width: "13px", height: "13px" }} />}
           </button>
         </div>
       </div>
-      <style>{`@keyframes spin2{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes wd-spin2{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
@@ -784,8 +660,7 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
 function QuickSuggestions({ onSelect, visible }: { onSelect: (p: string) => void; visible: boolean }) {
   if (!visible) return null;
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      style={{ display: "flex", flexWrap: "wrap", gap: "6px", padding: "8px 0 0" }}>
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ display: "flex", flexWrap: "wrap", gap: "6px", padding: "8px 0 0" }}>
       {QUICK_SUGGESTIONS.map((s) => (
         <button key={s.label} onClick={() => onSelect(s.prompt)}
           style={{ fontSize: "12px", fontWeight: 600, padding: "5px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)", cursor: "pointer", transition: "all 0.15s", whiteSpace: "nowrap" }}
@@ -826,10 +701,8 @@ function LandingNav({ onLoginClick, onEnterChat }: { onLoginClick: () => void; o
             style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: "9999px", padding: "7px 14px 7px 8px", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}
             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.2)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}>
-            {user.avatar
-              ? <img src={user.avatar} alt={user.name} style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} />
-              : <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "11px" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>
-            }
+            {user.avatar ? <img src={user.avatar} alt={user.name} style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} />
+              : <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "11px" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>}
             {user.name?.split(" ")[0]}
           </button>
           <button onClick={logout} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "9999px", padding: "7px 14px", color: "rgba(255,255,255,0.6)", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Esci</button>
@@ -857,6 +730,11 @@ export default function Home() {
   const [activeTool,       setActiveTool]       = useState("map");
   const [authOpen,         setAuthOpen]         = useState(false);
   const [forceChat,        setForceChat]        = useState(false);
+
+  // ── Stato persistente per Idee e Media (non si azzera cambiando tab) ────
+  const [ideas,      setIdeas]      = useState<string[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<Array<{ name: string; preview: string }>>([]);
+
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
@@ -867,11 +745,8 @@ export default function Home() {
   const saveMutation = useSaveItinerary();
 
   useEffect(() => { document.title = "Waydora — Travel simple, everywhere!"; }, []);
-
   useEffect(() => {
-    setTimeout(() => {
-      chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" });
-    }, 80);
+    setTimeout(() => { chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" }); }, 80);
   }, [turns]);
 
   const handleSubmit = useCallback((overridePrompt?: string) => {
@@ -879,17 +754,13 @@ export default function Home() {
     if ((!promptText && !mediaContent) || chatMutation.isPending) return;
     if (!overridePrompt) setInput("");
     setForceChat(true);
-
     const turnId = Date.now();
     const mediaPreview = mediaContent?.preview;
     setTurns(prev => [...prev, { id: turnId, userMessage: promptText || "📎 Media allegato", assistantReply: "", mediaPreview }]);
-
     const newApiMessages: ChatMessage[] = [...apiMessages, { role: "user", content: promptText || "Analizza questo contenuto e suggerisci un itinerario" }];
     setApiMessages(newApiMessages);
-
     const mediaForBackend = mediaContent ? { mediaType: mediaContent.mediaType, data: mediaContent.data } : undefined;
     setMediaContent(null);
-
     chatMutation.mutate(
       { data: { messages: newApiMessages, existingItinerary: currentItinerary, mediaContent: mediaForBackend } as any },
       {
@@ -921,7 +792,14 @@ export default function Home() {
   const handleNewTrip = () => {
     setTurns([]); setApiMessages([]); setCurrentItinerary(undefined);
     setInput(""); setMediaContent(null); setForceChat(false);
+    setIdeas([]); setMediaFiles([]);
   };
+
+  // Handler persistenti per idee e media
+  const handleAddIdea    = (idea: string) => setIdeas(prev => [...prev, idea]);
+  const handleRemoveIdea = (idx: number)  => setIdeas(prev => prev.filter((_, i) => i !== idx));
+  const handleUploadMedia = (newFiles: Array<{ name: string; preview: string }>) => setMediaFiles(prev => [...prev, ...newFiles]);
+  const handleRemoveMedia = (idx: number) => setMediaFiles(prev => prev.filter((_, i) => i !== idx));
 
   const hasItinerary = turns.some(t => t.itinerary);
   const isLanding = turns.length === 0 && !chatMutation.isPending && !forceChat;
@@ -932,12 +810,7 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto" style={{ background: "#0a0a12", position: "relative" }}>
           <LandingNav onLoginClick={() => setAuthOpen(true)} onEnterChat={() => setForceChat(true)} />
           <HeroLanding onSubmit={handleSubmit} isPending={chatMutation.isPending} />
-          <HowItWorks />
-          <TripCounter />
-          <Partners />
-          <Reviews />
-          <Faq />
-          <SiteFooter />
+          <HowItWorks /><TripCounter /><Partners /><Reviews /><Faq /><SiteFooter />
         </div>
         <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
       </Layout>
@@ -965,14 +838,9 @@ export default function Home() {
 
         {/* CHAT */}
         <section className="flex flex-col min-h-0 shrink-0" style={{ width: "38vw", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
-          <div className="px-4 py-3 flex items-center justify-between shrink-0"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
+          <div className="px-4 py-3 flex items-center justify-between shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
             <div className="flex items-center gap-2">
-              {!sidebarOpen && (
-                <button onClick={() => setSidebarOpen(true)} style={{ color: "rgba(255,255,255,0.4)", marginRight: "4px" }}>
-                  <Menu className="w-4 h-4" />
-                </button>
-              )}
+              {!sidebarOpen && <button onClick={() => setSidebarOpen(true)} style={{ color: "rgba(255,255,255,0.4)", marginRight: "4px" }}><Menu className="w-4 h-4" /></button>}
               <div className="w-2 h-2 rounded-full" style={{ background: "linear-gradient(135deg,#f97316,#a855f7)" }} />
               <span className="text-sm font-bold text-white">Waydora</span>
             </div>
@@ -984,11 +852,9 @@ export default function Home() {
                   {saveMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}Salva
                 </button>
               )}
-              <button onClick={handleNewTrip}
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"
+              <button onClick={handleNewTrip} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"
                 style={{ color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.1)" }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}>
+                onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; }} onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}>
                 <PlusCircle className="w-3.5 h-3.5" />Nuovo
               </button>
             </div>
@@ -1016,7 +882,9 @@ export default function Home() {
           <div className="flex-1 min-h-0">
             {activeTool === "map"
               ? <MapTool itinerary={currentItinerary} />
-              : <ToolContent tool={activeTool} itinerary={currentItinerary} />
+              : <ToolContent tool={activeTool} itinerary={currentItinerary}
+                  ideas={ideas} onAddIdea={handleAddIdea} onRemoveIdea={handleRemoveIdea}
+                  mediaFiles={mediaFiles} onUploadMedia={handleUploadMedia} onRemoveMedia={handleRemoveMedia} />
             }
           </div>
         </aside>
@@ -1026,13 +894,9 @@ export default function Home() {
       <div className="flex-1 min-h-0 lg:hidden flex flex-col">
         <Tabs defaultValue="chat" className="flex-1 flex flex-col min-h-0">
           <div className="px-3 pt-3 shrink-0">
-            <TabsList className="w-full grid grid-cols-3 rounded-xl p-1"
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}>
+            <TabsList className="w-full grid grid-cols-3 rounded-xl p-1" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)" }}>
               {[{ value: "chat", label: "Chat" }, { value: "trip", label: "Itinerario" }, { value: "map", label: "Mappa" }].map((t) => (
-                <TabsTrigger key={t.value} value={t.value}
-                  className="text-xs font-semibold rounded-lg data-[state=active]:bg-[rgba(255,255,255,0.12)] data-[state=active]:text-white text-[rgba(255,255,255,0.4)]">
-                  {t.label}
-                </TabsTrigger>
+                <TabsTrigger key={t.value} value={t.value} className="text-xs font-semibold rounded-lg data-[state=active]:bg-[rgba(255,255,255,0.12)] data-[state=active]:text-white text-[rgba(255,255,255,0.4)]">{t.label}</TabsTrigger>
               ))}
             </TabsList>
           </div>
@@ -1063,24 +927,19 @@ export default function Home() {
                     <button onClick={handleSave} disabled={saveMutation.isPending}
                       className="flex items-center gap-2 px-6 py-3 rounded-full font-semibold text-sm text-white"
                       style={{ background: "linear-gradient(135deg,#f97316,#a855f7)", boxShadow: "0 4px 20px rgba(249,115,22,0.3)" }}>
-                      {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      Salva e condividi
+                      {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}Salva e condividi
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="h-full flex items-center justify-center text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>
-                  Pianifica un viaggio per vedere l'itinerario
-                </div>
+                <div className="h-full flex items-center justify-center text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>Pianifica un viaggio per vedere l'itinerario</div>
               )}
             </div>
           </TabsContent>
 
           <TabsContent value="map" className="flex-1 min-h-0 mt-2">
             <div className="h-full">
-              {currentItinerary ? <TripMap itinerary={currentItinerary} /> : (
-                <div className="h-full flex items-center justify-center text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>In attesa dell'itinerario...</div>
-              )}
+              {currentItinerary ? <TripMap itinerary={currentItinerary} /> : <div className="h-full flex items-center justify-center text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>In attesa dell'itinerario...</div>}
             </div>
           </TabsContent>
         </Tabs>
