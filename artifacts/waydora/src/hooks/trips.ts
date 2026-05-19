@@ -42,6 +42,8 @@ export type SavedTripRow = {
   title: string;
   notes: string;
   created_at: string;
+  // campo locale per i preferiti dai viaggi curati
+  featured_trip_id?: string;
 };
 
 // ── Genera slug univoco ───────────────────────────────────────────────────
@@ -87,7 +89,6 @@ export function useChatSessions(userId: string | undefined) {
       updated_at: new Date().toISOString(),
     };
     if (session.id) {
-      // Aggiorna esistente
       const { data, error } = await supabase
         .from("chat_sessions")
         .update(payload)
@@ -99,7 +100,6 @@ export function useChatSessions(userId: string | undefined) {
         return data as ChatSessionRow;
       }
     } else {
-      // Inserisce nuova
       const { data, error } = await supabase
         .from("chat_sessions")
         .insert({ ...payload, created_at: new Date().toISOString() })
@@ -224,7 +224,7 @@ export function useSavedTrips(userId: string | undefined) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Salva un itinerario generato dall'AI
+  // ── Salva un itinerario generato dall'AI ──────────────────────────────
   const saveItinerary = useCallback(async (itinerary: ItineraryData, title?: string) => {
     if (!userId) return null;
     const slug = generateSlug();
@@ -248,31 +248,48 @@ export function useSavedTrips(userId: string | undefined) {
     return null;
   }, [userId]);
 
-  // Salva un viaggio da "Lasciati Ispirare" (con cuore)
-  const saveInspiredTrip = useCallback(async (tripId: string, title: string, itinerary?: any) => {
-    if (!userId) return null;
-    // Controlla se già salvato
-    const exists = saved.find(s => s.trip_id === tripId);
-    if (exists) return exists;
-    const slug = generateSlug();
-    const { data, error } = await supabase
-      .from("saved_trips")
-      .insert({
-        user_id: userId,
-        trip_id: tripId,
-        itinerary: itinerary ?? null,
-        share_slug: slug,
-        title,
-        notes: "",
-        created_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-    if (!error && data) {
-      setSaved(prev => [data as SavedTripRow, ...prev]);
-      return data as SavedTripRow;
+  // ── Salva/rimuove un viaggio curato (cuore) ───────────────────────────
+  // I viaggi curati del team NON hanno un trip_id su Supabase.
+  // Li salviamo in saved_trips con featured_trip_id nel campo notes (workaround)
+  // e itinerary null (sono template, non itinerari completi).
+  const toggleFeaturedTrip = useCallback(async (featuredId: string, title: string) => {
+    if (!userId) return false;
+
+    // Controlla se già salvato cercando nel campo notes il featured_id
+    const existing = saved.find(s => s.notes === `featured:${featuredId}`);
+
+    if (existing) {
+      // Rimuovi
+      const { error } = await supabase
+        .from("saved_trips")
+        .delete()
+        .eq("id", existing.id);
+      if (!error) {
+        setSaved(prev => prev.filter(s => s.id !== existing.id));
+        return false; // ora non è più salvato
+      }
+    } else {
+      // Aggiungi
+      const slug = generateSlug();
+      const { data, error } = await supabase
+        .from("saved_trips")
+        .insert({
+          user_id: userId,
+          itinerary: null,
+          share_slug: slug,
+          title,
+          trip_id: null,
+          notes: `featured:${featuredId}`, // identifica il viaggio curato
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+      if (!error && data) {
+        setSaved(prev => [data as SavedTripRow, ...prev]);
+        return true; // ora è salvato
+      }
     }
-    return null;
+    return existing ? false : false;
   }, [userId, saved]);
 
   const remove = useCallback(async (id: string) => {
@@ -280,7 +297,6 @@ export function useSavedTrips(userId: string | undefined) {
     setSaved(prev => prev.filter(s => s.id !== id));
   }, []);
 
-  // Carica un viaggio condiviso via slug (senza auth)
   const getBySlug = useCallback(async (slug: string): Promise<SavedTripRow | null> => {
     const { data, error } = await supabase
       .from("saved_trips")
@@ -291,12 +307,19 @@ export function useSavedTrips(userId: string | undefined) {
     return data as SavedTripRow;
   }, []);
 
-  const isLiked = useCallback((tripId: string) => saved.some(s => s.trip_id === tripId), [saved]);
+  // Controlla se un viaggio curato è nei preferiti
+  const isFeaturedLiked = useCallback(
+    (featuredId: string) => saved.some(s => s.notes === `featured:${featuredId}`),
+    [saved]
+  );
 
-  return { saved, loading, saveItinerary, saveInspiredTrip, remove, getBySlug, isLiked, reload: load };
+  return {
+    saved, loading, saveItinerary, toggleFeaturedTrip,
+    remove, getBySlug, isFeaturedLiked, reload: load,
+  };
 }
 
-// ── Hook: localStorage fallback per sessioni (utente non loggato) ─────────
+// ── Hook: localStorage per sessioni utenti non loggati ────────────────────
 
 export function useLocalSessions() {
   const STORAGE_KEY = "waydora_sessions";
@@ -305,14 +328,12 @@ export function useLocalSessions() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]"); } catch { return []; }
   };
 
-  const save = (sessions: any[]) => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.slice(0, 10))); } catch {}
-  };
-
   const add = (session: any) => {
-    const sessions = load();
-    const updated = [session, ...sessions.filter((s: any) => s.id !== session.id)].slice(0, 10);
-    save(updated);
+    try {
+      const sessions = load();
+      const updated = [session, ...sessions.filter((s: any) => s.id !== session.id)].slice(0, 10);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch {}
   };
 
   const clear = () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} };

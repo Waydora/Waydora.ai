@@ -540,7 +540,7 @@ export default function Home() {
   // Hooks Supabase
   const { sessions: dbSessions, upsert: upsertSession } = useChatSessions(user?.id);
   const { trips: userTrips, upsert: upsertTrip, publish: publishTrip, remove: removeTrip } = useUserTrips(user?.id);
-  const { saved: savedTrips, saveItinerary, saveInspiredTrip, remove: removeSaved, isLiked } = useSavedTrips(user?.id);
+  const { saved: savedTrips, saveItinerary, toggleFeaturedTrip, remove: removeSaved, isFeaturedLiked } = useSavedTrips(user?.id);
 
   // Sessioni locali per utenti non loggati
   const [localSessionsList, setLocalSessionsList] = useState<any[]>(() => localSessions.load());
@@ -646,15 +646,11 @@ export default function Home() {
   };
 
   // ── Like su "Lasciati ispirare" ──────────────────────────────────────────
-  const handleLike = async (tripId: string, title: string) => {
-    if (!user) { setAuthOpen(true); return; }
-    if (isLiked(tripId)) {
-      const existing = savedTrips.find(s => s.trip_id === tripId);
-      if (existing) await removeSaved(existing.id);
-    } else {
-      await saveInspiredTrip(tripId, title);
-    }
-  };
+  // NUOVO
+const handleLike = async (tripId: string, title: string) => {
+  if (!user) { setAuthOpen(true); return; }
+  await toggleFeaturedTrip(tripId, title);
+};
 
   const hasItinerary = turns.some(t => t.itinerary);
   const publishedUserTrips = userTrips.filter(t => t.status === "published");
@@ -694,9 +690,9 @@ export default function Home() {
         {activeView==="inspire" && (
           <div className="flex-1 min-h-0 overflow-hidden">
             <InspirePage onSelectTrip={p=>handleSubmit(p)}
-              likedIds={savedTrips.filter(s=>s.trip_id).map(s=>s.trip_id!)}
-              onLike={handleLike}
-              publishedUserTrips={publishedUserTrips} />
+  onLikeFeatured={handleLike}
+  isFeaturedLiked={isFeaturedLiked}
+  publishedUserTrips={publishedUserTrips} />
           </div>
         )}
 
