@@ -49,7 +49,7 @@ function WaydoraLogo() {
   return (
     <Link href="/">
       <button style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
-        <img src="/LOGO1.png" alt="Waydora" style={{ height: "28px", objectFit: "contain", filter: "brightness(0) invert(1)" }} />
+        <img src="/LOGO1.png" alt="Waydora" style={{ height: "36px", objectFit: "contain", filter: "brightness(0) invert(1)" }} />
       </button>
     </Link>
   );
