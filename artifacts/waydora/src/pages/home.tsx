@@ -28,42 +28,23 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 
-// ── Tipi ──────────────────────────────────────────────────────────────────
-type ChatTurn = {
-  id: number;
-  userMessage: string;
-  assistantReply: string;
-  itinerary?: ItineraryData;
-  mediaPreview?: string;
-};
+type ChatTurn = { id: number; userMessage: string; assistantReply: string; itinerary?: ItineraryData; mediaPreview?: string; };
 type MediaContent = { mediaType: string; data: string; preview: string; name: string; };
 type ActiveView = "chat" | "inspire" | "create" | "saved";
-type MobileScreen = "chat" | "map"; // mobile ha due schermate principali
+type MobileScreen = "chat" | "map" | "inspire" | "create" | "saved";
 
-// ── Stili ─────────────────────────────────────────────────────────────────
-const glassDark = {
-  background: "rgba(10,10,18,0.92)",
-  backdropFilter: "blur(24px) saturate(160%)",
-  WebkitBackdropFilter: "blur(24px) saturate(160%)",
-  border: "1px solid rgba(255,255,255,0.08)",
-} as React.CSSProperties;
-
-const itineraryCard = {
-  background: "rgba(22,14,38,0.98)",
-  border: "1px solid rgba(255,255,255,0.09)",
-  borderRadius: "16px", padding: "16px", marginTop: "8px",
-} as React.CSSProperties;
-
+const glassDark = { background: "rgba(10,10,18,0.92)", backdropFilter: "blur(24px) saturate(160%)", WebkitBackdropFilter: "blur(24px) saturate(160%)", border: "1px solid rgba(255,255,255,0.08)" } as React.CSSProperties;
+const itineraryCard = { background: "rgba(22,14,38,0.98)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "16px", padding: "16px", marginTop: "8px" } as React.CSSProperties;
 const activeTabStyle   = { background: "rgba(255,255,255,0.10)", color: "#ffffff",               border: "1px solid rgba(255,255,255,0.18)" } as React.CSSProperties;
 const inactiveTabStyle = { background: "transparent",            color: "rgba(255,255,255,0.38)", border: "1px solid transparent"           } as React.CSSProperties;
 
 const QUICK_SUGGESTIONS = [
-  { label: "➕ Aggiungi giorno",    prompt: "Aggiungi un altro giorno all'itinerario" },
-  { label: "🍽️ Più ristoranti",    prompt: "Suggeriscimi altri ristoranti locali da non perdere" },
-  { label: "📸 Spot Instagram",    prompt: "Dammi i migliori spot per foto Instagram in questa destinazione" },
-  { label: "💰 Più economico",     prompt: "Rendi l'itinerario più economico mantenendo le esperienze migliori" },
-  { label: "🏨 Consigli hotel",    prompt: "Dove mi consigli di dormire? Sia lusso che budget" },
-  { label: "🚗 Come spostarsi",    prompt: "Come mi sposto tra le varie tappe? Mezzi pubblici o noleggio auto?" },
+  { label: "➕ Aggiungi giorno",  prompt: "Aggiungi un altro giorno all'itinerario" },
+  { label: "🍽️ Ristoranti",      prompt: "Suggeriscimi altri ristoranti locali da non perdere" },
+  { label: "📸 Spot Instagram",  prompt: "Dammi i migliori spot per foto Instagram in questa destinazione" },
+  { label: "💰 Più economico",   prompt: "Rendi l'itinerario più economico mantenendo le esperienze migliori" },
+  { label: "🏨 Hotel",           prompt: "Dove mi consigli di dormire? Sia lusso che budget" },
+  { label: "🚗 Trasporti",       prompt: "Come mi sposto tra le varie tappe? Mezzi pubblici o noleggio auto?" },
 ];
 
 const MAP_TOOLS = [
@@ -82,49 +63,14 @@ function generateTitle(turns: ChatTurn[], itinerary?: ItineraryData): string {
   return first.length > 32 ? first.substring(0, 32) + "..." : first || "Nuova chat";
 }
 
-// ── Toolbar (desktop orizzontale, mobile floating) ────────────────────────
-function MapToolbar({ active, onChange, mobile = false }: { active: string; onChange: (id: string) => void; mobile?: boolean }) {
-  if (mobile) {
-    return (
-      <div style={{
-        position: "absolute", top: "12px", left: "50%", transform: "translateX(-50%)",
-        zIndex: 20, display: "flex", gap: "4px", padding: "6px 8px", borderRadius: "16px",
-        background: "rgba(10,10,18,0.88)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-        border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
-        overflowX: "auto", maxWidth: "calc(100vw - 32px)", scrollbarWidth: "none",
-      }}>
-        {MAP_TOOLS.map((t) => {
-          const Icon = t.icon;
-          const isActive = active === t.id;
-          return (
-            <button key={t.id} onClick={() => onChange(t.id)}
-              style={{
-                display: "flex", alignItems: "center", gap: "4px", padding: "5px 10px",
-                borderRadius: "10px", fontSize: "11px", fontWeight: 600, whiteSpace: "nowrap",
-                cursor: "pointer", flexShrink: 0, border: "none", transition: "all 0.15s",
-                background: isActive ? "rgba(255,255,255,0.15)" : "transparent",
-                color: isActive ? "#fff" : "rgba(255,255,255,0.45)",
-              }}>
-              <Icon style={{ width: "13px", height: "13px" }} />{t.label}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
+// ── Desktop MapToolbar ────────────────────────────────────────────────────
+function MapToolbar({ active, onChange }: { active: string; onChange: (id: string) => void }) {
   return (
     <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto [&::-webkit-scrollbar]:hidden shrink-0"
       style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
       {MAP_TOOLS.map((t) => {
-        const Icon = t.icon;
-        const isActive = active === t.id;
-        return (
-          <button key={t.id} onClick={() => onChange(t.id)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all"
-            style={isActive ? activeTabStyle : inactiveTabStyle}>
-            <Icon className="w-3.5 h-3.5" />{t.label}
-          </button>
-        );
+        const Icon = t.icon; const isActive = active === t.id;
+        return <button key={t.id} onClick={() => onChange(t.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all" style={isActive ? activeTabStyle : inactiveTabStyle}><Icon className="w-3.5 h-3.5" />{t.label}</button>;
       })}
     </div>
   );
@@ -134,26 +80,20 @@ function MapToolbar({ active, onChange, mobile = false }: { active: string; onCh
 function MapTool({ itinerary }: { itinerary?: ItineraryData }) {
   const open = () => {
     if (!itinerary) return;
-    const points = (itinerary.days?.flatMap((d: any) => d.activities) ?? [])
-      .filter((a: any) => a.coordinates?.lat && a.coordinates?.lng)
-      .map((a: any) => `${a.coordinates.lat},${a.coordinates.lng}`).slice(0, 10);
+    const points = (itinerary.days?.flatMap((d: any) => d.activities) ?? []).filter((a: any) => a.coordinates?.lat && a.coordinates?.lng).map((a: any) => `${a.coordinates.lat},${a.coordinates.lng}`).slice(0, 10);
     if (!points.length) { window.open(`https://www.google.com/maps/search/${encodeURIComponent(itinerary.destination)}`, "_blank"); return; }
     if (points.length === 1) { window.open(`https://www.google.com/maps/search/${points[0]}`, "_blank"); return; }
     window.open(`https://www.google.com/maps/dir/${points.map(p => encodeURIComponent(p)).join("/")}`, "_blank");
   };
+  if (!itinerary) return <div className="h-full flex flex-col items-center justify-center gap-3" style={{ color: "rgba(255,255,255,0.3)" }}><Map style={{ width: "36px", height: "36px", opacity: 0.3 }} /><span className="text-sm">La mappa apparirà qui</span></div>;
   return (
-    <div className="h-full flex flex-col" style={{ position: "relative" }}>
-      {itinerary && (
-        <div style={{ position: "absolute", bottom: "16px", right: "16px", zIndex: 10 }}>
-          <button onClick={open} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "8px 14px", borderRadius: "9999px", background: "rgba(66,133,244,0.9)", color: "#fff", border: "none", cursor: "pointer", boxShadow: "0 2px 12px rgba(66,133,244,0.4)" }}>
-            <Navigation style={{ width: "13px", height: "13px" }} />Google Maps<ExternalLink style={{ width: "11px", height: "11px" }} />
-          </button>
-        </div>
-      )}
-      {itinerary
-        ? <TripMap itinerary={itinerary} />
-        : <div className="h-full flex flex-col items-center justify-center gap-3" style={{ color: "rgba(255,255,255,0.3)" }}><Map style={{ width: "36px", height: "36px", opacity: 0.3 }} /><span className="text-sm">La mappa apparirà qui</span></div>
-      }
+    <div className="h-full flex flex-col">
+      <div className="px-3 py-2 shrink-0 flex items-center justify-end" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <button onClick={open} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full" style={{ background: "rgba(66,133,244,0.15)", color: "#4285f4", border: "1px solid rgba(66,133,244,0.3)", cursor: "pointer" }}>
+          <Navigation style={{ width: "12px", height: "12px" }} />Apri in Google Maps<ExternalLink style={{ width: "11px", height: "11px" }} />
+        </button>
+      </div>
+      <div className="flex-1 min-h-0"><TripMap itinerary={itinerary} /></div>
     </div>
   );
 }
@@ -169,10 +109,8 @@ function CalendarTool({ itinerary }: { itinerary?: ItineraryData }) {
       const nds = nd.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
       const acts = day.activities?.map((a: any) => `• ${a.time} - ${a.title}`).join("\n") ?? "";
       const url = new URL("https://calendar.google.com/calendar/render");
-      url.searchParams.set("action", "TEMPLATE");
-      url.searchParams.set("text", `${itinerary.destination} - Giorno ${day.day}: ${day.title}`);
-      url.searchParams.set("dates", `${ds}/${nds}`);
-      url.searchParams.set("details", `${day.summary}\n\n${acts}\n\nCreato con Waydora 🗺️`);
+      url.searchParams.set("action", "TEMPLATE"); url.searchParams.set("text", `${itinerary.destination} - Giorno ${day.day}: ${day.title}`);
+      url.searchParams.set("dates", `${ds}/${nds}`); url.searchParams.set("details", `${day.summary}\n\n${acts}\n\nCreato con Waydora 🗺️`);
       url.searchParams.set("location", itinerary.destination);
       setTimeout(() => window.open(url.toString(), "_blank"), i * 500);
     });
@@ -296,7 +234,7 @@ function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFil
   return null;
 }
 
-// ── Sidebar ───────────────────────────────────────────────────────────────
+// ── Sidebar (drawer su mobile) ────────────────────────────────────────────
 function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView, onChangeView, onLoginClick, isMobile = false }: {
   open: boolean; onClose: () => void; onNewTrip: () => void;
   sessions: Array<{ id: string | number; title: string; turns: any[]; itinerary?: any; apiMessages?: any[] }>;
@@ -306,35 +244,34 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
 }) {
   const { user, logout } = useAuth();
 
-  const content = (
-    <div className="flex flex-col h-full" style={{ ...glassDark, borderRight: isMobile ? "none" : "1px solid rgba(255,255,255,0.07)" }}>
-      <div className="px-4 py-4 flex items-center justify-between shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+  const sidebarContent = (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...glassDark, borderRight: isMobile ? "none" : "1px solid rgba(255,255,255,0.07)" }}>
+      <div style={{ padding: "16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
         <Logo variant="header" />
-        <button onClick={onClose} style={{ color: "rgba(255,255,255,0.35)", background: "none", border: "none", cursor: "pointer", display: "flex" }}>
-          <X className="w-5 h-5" />
+        <button onClick={onClose} style={{ color: "rgba(255,255,255,0.35)", background: "none", border: "none", cursor: "pointer" }}>
+          <X style={{ width: "18px", height: "18px" }} />
         </button>
       </div>
 
-      <div className="px-3 pt-3 pb-1 shrink-0">
+      <div style={{ padding: "12px" }}>
         <button onClick={() => { onNewTrip(); if (isMobile) onClose(); }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
-          style={activeView === "chat" ? activeTabStyle : inactiveTabStyle}>
-          <PlusCircle className="w-4 h-4 shrink-0" />Nuova chat
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "12px", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: 600, transition: "all 0.15s", ...(activeView === "chat" ? activeTabStyle : inactiveTabStyle) }}>
+          <PlusCircle style={{ width: "16px", height: "16px", flexShrink: 0 }} />Nuova chat
         </button>
       </div>
 
       {sessions.length > 0 && (
-        <div className="px-3 pb-2 shrink-0">
-          <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(255,255,255,0.28)", padding: "8px 4px 4px" }}>Recenti</div>
+        <div style={{ padding: "0 12px 8px" }}>
+          <div style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(255,255,255,0.28)", padding: "4px 4px 6px" }}>Recenti</div>
           <ScrollArea style={{ maxHeight: "180px" }}>
-            <div className="space-y-0.5">
+            <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
               {sessions.map((s) => (
                 <button key={s.id} onClick={() => { onLoadSession(s); onChangeView("chat"); if (isMobile) onClose(); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all"
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", borderRadius: "10px", border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                   <MessageSquare style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0, fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.75)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</div>
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.75)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>
                 </button>
               ))}
             </div>
@@ -344,7 +281,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
 
       <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: "4px 12px" }} />
 
-      <div className="px-3 py-2 space-y-1 shrink-0">
+      <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: "4px" }}>
         {([
           { id: "inspire", label: "Lasciati ispirare", icon: Compass },
           { id: "create",  label: "Crea un viaggio",   icon: Edit3 },
@@ -352,16 +289,19 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
         ] as const).map(item => {
           const Icon = item.icon;
           return (
-            <button key={item.id} onClick={() => { onChangeView(item.id); if (isMobile) onClose(); }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
-              style={activeView === item.id ? activeTabStyle : inactiveTabStyle}>
-              <Icon className="w-4 h-4 shrink-0" />{item.label}
+            <button key={item.id}
+              onClick={() => {
+                onChangeView(item.id);
+                if (isMobile) onClose(); // chiude la sidebar e mostra la pagina
+              }}
+              style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "12px", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: 600, transition: "all 0.15s", ...(activeView === item.id ? activeTabStyle : inactiveTabStyle) }}>
+              <Icon style={{ width: "16px", height: "16px", flexShrink: 0 }} />{item.label}
             </button>
           );
         })}
       </div>
 
-      <div className="flex-1" />
+      <div style={{ flex: 1 }} />
 
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: "12px" }}>
         {user ? (
@@ -372,8 +312,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
               <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</div>
               <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
             </div>
-            <button onClick={logout} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "6px", cursor: "pointer", color: "rgba(255,255,255,0.45)", flexShrink: 0, display: "flex" }}
-              onMouseEnter={e => { e.currentTarget.style.color = "#fff"; }} onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}>
+            <button onClick={logout} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "6px", cursor: "pointer", color: "rgba(255,255,255,0.45)", flexShrink: 0, display: "flex" }}>
               <LogOut style={{ width: "14px", height: "14px" }} />
             </button>
           </div>
@@ -391,14 +330,13 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
       <AnimatePresence>
         {open && (
           <>
-            {/* Overlay scuro */}
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={onClose}
-              style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
-            {/* Drawer dal lato sinistro */}
-            <motion.div initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              style={{ position: "fixed", left: 0, top: 0, bottom: 0, width: "280px", zIndex: 50 }}>
-              {content}
+              style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }} />
+            <motion.div initial={{ x: -290 }} animate={{ x: 0 }} exit={{ x: -290 }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              style={{ position: "fixed", left: 0, top: 0, bottom: 0, width: "285px", zIndex: 50 }}>
+              {sidebarContent}
             </motion.div>
           </>
         )}
@@ -410,11 +348,23 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
     <AnimatePresence>
       {open && (
         <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 260, opacity: 1 }} exit={{ width: 0, opacity: 0 }} transition={{ duration: 0.22 }}
-          className="flex flex-col min-h-0 overflow-hidden shrink-0">
-          {content}
+          style={{ flexShrink: 0, overflow: "hidden" }}>
+          {sidebarContent}
         </motion.aside>
       )}
     </AnimatePresence>
+  );
+}
+
+// ── Mobile page header con back button ───────────────────────────────────
+function MobilePageHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", display: "flex", padding: 0 }}>
+        <ArrowLeft style={{ width: "20px", height: "20px" }} />
+      </button>
+      <span style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>{title}</span>
+    </div>
   );
 }
 
@@ -429,11 +379,9 @@ function UserBubble({ text, mediaPreview }: { text: string; mediaPreview?: strin
     </div>
   );
 }
-
 function AssistantBubble({ text }: { text: string }) {
   return <div className="flex justify-start"><div style={{ maxWidth: "85%", padding: "10px 14px", borderRadius: "18px 18px 18px 4px", background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.11)", color: "rgba(255,255,255,0.88)", fontSize: "14px", lineHeight: 1.65 }}>{text}</div></div>;
 }
-
 function TypingIndicator() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
@@ -445,7 +393,6 @@ function TypingIndicator() {
     </motion.div>
   );
 }
-
 function WelcomeMessage({ userName }: { userName?: string }) {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="flex flex-col items-center justify-center h-full gap-4 text-center px-6">
@@ -454,7 +401,7 @@ function WelcomeMessage({ userName }: { userName?: string }) {
         <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#fff", marginBottom: "8px" }}>{userName ? `Ciao, ${userName.split(" ")[0]}! 👋` : "Ciao! 👋"}</h3>
         <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", lineHeight: 1.6, maxWidth: "280px" }}>Sono Waydora, la tua assistente di viaggio AI. Dimmi dove vuoi andare!</p>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center", marginTop: "8px" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
         {["🗺️ 3 giorni a Tokyo", "🏖️ Settimana al mare", "🏛️ Weekend a Roma"].map(s => <span key={s} style={{ fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)" }}>{s}</span>)}
       </div>
     </motion.div>
@@ -469,20 +416,14 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
   const [isRecording, setIsRecording] = useState(false);
   const [recognition, setRecognition] = useState<any>(null);
   const active = (value.trim() || mediaContent) && !isPending;
-
   const hc = (e: React.ChangeEvent<HTMLTextAreaElement>) => { onChange(e.target.value); const ta = e.target; ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 120) + "px"; };
   const hf = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return;
     const isImg = file.type.startsWith("image/"); const isVid = file.type.startsWith("video/");
-    if (!isImg && !isVid) return;
-    if (file.size > 20 * 1024 * 1024) { alert("Max 20MB"); return; }
-    const preview = URL.createObjectURL(file);
-    const reader = new FileReader();
+    if (!isImg && !isVid) return; if (file.size > 20 * 1024 * 1024) { alert("Max 20MB"); return; }
+    const preview = URL.createObjectURL(file); const reader = new FileReader();
     reader.onload = ev => { const b64 = (ev.target?.result as string)?.split(",")[1]; if (b64) onMediaAttach({ mediaType: isImg ? file.type : "image/jpeg", data: b64, preview, name: file.name }); };
-    if (isImg) { reader.readAsDataURL(file); } else {
-      const v = document.createElement("video"); v.src = preview; v.currentTime = 1;
-      v.onloadeddata = () => { const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext("2d")?.drawImage(v, 0, 0); c.toBlob(blob => { if (!blob) return; const fr = new FileReader(); fr.onload = ev => { const b64 = (ev.target?.result as string)?.split(",")[1]; if (b64) onMediaAttach({ mediaType: "image/jpeg", data: b64, preview, name: file.name }); }; fr.readAsDataURL(blob); }, "image/jpeg", 0.85); };
-    }
+    if (isImg) { reader.readAsDataURL(file); } else { const v = document.createElement("video"); v.src = preview; v.currentTime = 1; v.onloadeddata = () => { const c = document.createElement("canvas"); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext("2d")?.drawImage(v, 0, 0); c.toBlob(blob => { if (!blob) return; const fr = new FileReader(); fr.onload = ev => { const b64 = (ev.target?.result as string)?.split(",")[1]; if (b64) onMediaAttach({ mediaType: "image/jpeg", data: b64, preview, name: file.name }); }; fr.readAsDataURL(blob); }, "image/jpeg", 0.85); }; }
     e.target.value = "";
   };
   const toggleRec = () => {
@@ -495,7 +436,6 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
     rec.start(); setRecognition(rec); setIsRecording(true);
   };
   const hasTT = /tiktok\.com/i.test(value);
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
       {mediaContent && <div style={{ position: "relative", display: "inline-block", alignSelf: "flex-start" }}><img src={mediaContent.preview} alt="allegato" style={{ height: "80px", borderRadius: "10px", objectFit: "cover", border: "1px solid rgba(255,255,255,0.15)" }} /><button onClick={onMediaRemove} style={{ position: "absolute", top: "-6px", right: "-6px", width: "20px", height: "20px", borderRadius: "50%", background: "rgba(0,0,0,0.8)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X style={{ width: "11px", height: "11px" }} /></button></div>}
@@ -520,7 +460,7 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
 
 function QuickSuggestions({ onSelect, visible }: { onSelect: (p: string) => void; visible: boolean }) {
   if (!visible) return null;
-  return <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ display: "flex", flexWrap: "wrap", gap: "6px", padding: "8px 0 0" }}>{QUICK_SUGGESTIONS.map(s => <button key={s.label} onClick={() => onSelect(s.prompt)} style={{ fontSize: "12px", fontWeight: 600, padding: "5px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)", cursor: "pointer", transition: "all 0.15s", whiteSpace: "nowrap" }} onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.13)"; e.currentTarget.style.color = "#fff"; }} onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}>{s.label}</button>)}</motion.div>;
+  return <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ display: "flex", flexWrap: "wrap", gap: "6px", padding: "8px 0 0" }}>{QUICK_SUGGESTIONS.map(s => <button key={s.label} onClick={() => onSelect(s.prompt)} style={{ fontSize: "12px", fontWeight: 600, padding: "5px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)", cursor: "pointer", whiteSpace: "nowrap" }} onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.13)"; e.currentTarget.style.color = "#fff"; }} onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}>{s.label}</button>)}</motion.div>;
 }
 
 function ChatTurnView({ turn }: { turn: ChatTurn }) {
@@ -528,10 +468,8 @@ function ChatTurnView({ turn }: { turn: ChatTurn }) {
     <div className="space-y-3">
       <UserBubble text={turn.userMessage} mediaPreview={turn.mediaPreview} />
       {turn.assistantReply === "" ? <TypingIndicator /> : (
-        <>
-          <AssistantBubble text={turn.assistantReply} />
-          {turn.itinerary && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={itineraryCard}><ItineraryResults itinerary={turn.itinerary} /></motion.div>}
-        </>
+        <><AssistantBubble text={turn.assistantReply} />
+        {turn.itinerary && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={itineraryCard}><ItineraryResults itinerary={turn.itinerary} /></motion.div>}</>
       )}
     </div>
   );
@@ -588,7 +526,6 @@ export default function Home() {
 
   const [localSessionsList, setLocalSessionsList] = useState<any[]>(() => localSessions.load());
   const sidebarSessions = user ? dbSessions : localSessionsList;
-
   const { data: suggestions } = useListSuggestions();
   const chatMutation = useChat();
 
@@ -597,8 +534,7 @@ export default function Home() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("chat") === "1") {
-      setShowLanding(false);
-      setActiveView("chat");
+      setShowLanding(false); setActiveView("chat"); setMobileScreen("chat");
       window.history.replaceState({}, "", "/");
     }
   }, []);
@@ -615,8 +551,7 @@ export default function Home() {
     } else {
       const localId = id ?? Date.now().toString();
       const session = { id: localId, title, turns: t, itinerary, apiMessages: msgs ?? [], createdAt: new Date().toISOString() };
-      localSessions.add(session);
-      setLocalSessionsList(localSessions.load());
+      localSessions.add(session); setLocalSessionsList(localSessions.load());
       return localId;
     }
   }, [user, upsertSession, localSessions]);
@@ -625,14 +560,10 @@ export default function Home() {
     const promptText = (overridePrompt ?? input).trim();
     if ((!promptText && !mediaContent) || chatMutation.isPending) return;
     if (!overridePrompt) setInput("");
-    setShowLanding(false);
-    setActiveView("chat");
-    setMobileScreen("chat");
+    setShowLanding(false); setActiveView("chat"); setMobileScreen("chat");
 
-    const turnId = Date.now();
-    const mediaPreview = mediaContent?.preview;
+    const turnId = Date.now(); const mediaPreview = mediaContent?.preview;
     setTurns(prev => [...prev, { id: turnId, userMessage: promptText || "📎 Media allegato", assistantReply: "", mediaPreview }]);
-
     const newMsgs: ChatMessage[] = [...apiMessages, { role: "user", content: promptText || "Analizza questo contenuto" }];
     setApiMessages(newMsgs);
     const mediaForBackend = mediaContent ? { mediaType: mediaContent.mediaType, data: mediaContent.data } : undefined;
@@ -654,9 +585,7 @@ export default function Home() {
         onError: (err: any) => {
           setTurns(prev => prev.filter(t => t.id !== turnId));
           setApiMessages(prev => prev.slice(0, -1));
-          const msg = err?.message?.includes("429") || err?.status === 429
-            ? "Hai raggiunto il limite orario di richieste. Riprova tra qualche minuto."
-            : "Qualcosa è andato storto. Riprova.";
+          const msg = err?.message?.includes("429") || err?.status === 429 ? "Hai raggiunto il limite orario. Riprova tra qualche minuto." : "Qualcosa è andato storto. Riprova.";
           toast({ title: msg, variant: "destructive" });
         },
       }
@@ -679,18 +608,18 @@ export default function Home() {
   }, [turns, currentItinerary, apiMessages, currentSessionId, persistSession]);
 
   const handleLoadSession = (s: any) => {
-    setTurns(s.turns ?? []);
-    setApiMessages(s.apiMessages ?? s.api_messages ?? []);
-    setCurrentItinerary(s.itinerary);
-    setCurrentSessionId(s.id?.toString());
-    setShowLanding(false);
-    setActiveView("chat");
-    setMobileScreen("chat");
+    setTurns(s.turns ?? []); setApiMessages(s.apiMessages ?? s.api_messages ?? []);
+    setCurrentItinerary(s.itinerary); setCurrentSessionId(s.id?.toString());
+    setShowLanding(false); setActiveView("chat"); setMobileScreen("chat");
   };
 
   const handleChangeView = (view: ActiveView) => {
-    setActiveView(view);
-    setShowLanding(false);
+    setActiveView(view); setShowLanding(false);
+    // Su mobile, mappa la view alla schermata mobile
+    if (view === "inspire") setMobileScreen("inspire");
+    else if (view === "create") setMobileScreen("create");
+    else if (view === "saved") setMobileScreen("saved");
+    else setMobileScreen("chat");
   };
 
   const handleLike = async (tripId: string, title: string) => {
@@ -715,58 +644,49 @@ export default function Home() {
     );
   }
 
-  // ── Pannello chat condiviso (usato sia desktop che mobile) ────────────────
-  const chatPanel = (
+  // ── Pannello chat (condiviso desktop/mobile) ───────────────────────────
+  const chatSection = (
     <section className="flex flex-col min-h-0 h-full">
-      {/* Header chat */}
-      <div className="px-4 py-3 flex items-center justify-between shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
-        <div className="flex items-center gap-2">
-          {/* Mobile: hamburger | Desktop: toggle sidebar */}
-          <button
-            onClick={() => { if (window.innerWidth < 1024) setMobileSidebarOpen(true); else setSidebarOpen(true); }}
-            style={{ color: "rgba(255,255,255,0.4)", background: "none", border: "none", cursor: "pointer", display: "flex", marginRight: "4px" }}>
-            <Menu className="w-5 h-5" />
+      <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button onClick={() => { if (window.innerWidth < 1024) setMobileSidebarOpen(true); else setSidebarOpen(true); }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex" }}>
+            <Menu style={{ width: "20px", height: "20px" }} />
           </button>
-          <div className="w-2 h-2 rounded-full" style={{ background: "linear-gradient(135deg,#f97316,#a855f7)" }} />
-          <span className="text-sm font-bold text-white">Waydora</span>
+          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)" }} />
+          <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>Waydora</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {currentItinerary && (
-            <button onClick={handleSave} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.09)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)", cursor: "pointer" }}>
-              <Save className="w-3 h-3" />Salva
+            <button onClick={handleSave} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)", cursor: "pointer" }}>
+              <Save style={{ width: "12px", height: "12px" }} />Salva
             </button>
           )}
-          {/* Mobile: pulsante per passare alla mappa */}
+          {/* Mobile: tasto per andare alla mappa */}
           {currentItinerary && (
             <button onClick={() => setMobileScreen("map")}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full lg:hidden"
-              style={{ background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer" }}>
-              <Map className="w-3.5 h-3.5" />Mappa
+              style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer" }}
+              className="lg:hidden">
+              <Map style={{ width: "12px", height: "12px" }} />Mappa
             </button>
           )}
-          <button onClick={handleNewTrip} className="hidden lg:flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full"
-            style={{ color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer" }}
-            onMouseEnter={e => { e.currentTarget.style.color = "#fff"; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.45)"; }}>
-            <PlusCircle className="w-3.5 h-3.5" />Nuovo
+          <button onClick={handleNewTrip}
+            style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", background: "transparent" }}
+            className="hidden lg:flex">
+            <PlusCircle style={{ width: "12px", height: "12px" }} />Nuovo
           </button>
         </div>
       </div>
-
-      {/* Messaggi */}
-      <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full" style={{ scrollbarColor: "rgba(255,255,255,0.15) transparent" }}>
+      <div ref={chatScrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "20px" }}>
         {turns.length === 0 ? <WelcomeMessage userName={user?.name} /> : turns.map(turn => <ChatTurnView key={turn.id} turn={turn} />)}
       </div>
-
-      {/* Input */}
-      <div className="px-4 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
+      <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
         <QuickSuggestions onSelect={p => handleSubmit(p)} visible={hasItinerary && !chatMutation.isPending} />
         <div style={{ marginTop: hasItinerary ? "8px" : "0" }}>
           <AdvancedChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()} isPending={chatMutation.isPending}
             onMediaAttach={setMediaContent} mediaContent={mediaContent} onMediaRemove={() => setMediaContent(null)}
             placeholder="Dimmi dove vuoi andare..." />
         </div>
-        <p className="text-center text-xs mt-2 hidden lg:block" style={{ color: "rgba(255,255,255,0.15)" }}>Shift+Invio per andare a capo</p>
       </div>
     </section>
   );
@@ -781,27 +701,19 @@ export default function Home() {
 
       {/* ── DESKTOP ── */}
       <div className="flex-1 min-h-0 hidden lg:flex">
-        {!sidebarOpen && (
-          <button onClick={() => setSidebarOpen(true)} className="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 rounded-r-xl"
-            style={{ background: "rgba(10,10,18,0.9)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        )}
+        {!sidebarOpen && <button onClick={() => setSidebarOpen(true)} className="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 rounded-r-xl" style={{ background: "rgba(10,10,18,0.9)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}><ChevronRight style={{ width: "16px", height: "16px" }} /></button>}
 
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewTrip={handleNewTrip}
           sessions={sidebarSessions} onLoadSession={handleLoadSession}
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} />
 
-        {/* Pagine non-chat */}
         {activeView === "inspire" && <div className="flex-1 min-h-0 overflow-hidden"><InspirePage onSelectTrip={p => handleSubmit(p)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} /></div>}
         {activeView === "create"  && <div className="flex-1 min-h-0 overflow-hidden"><CreateTripPage userId={user?.id} trips={userTrips} onSaveDraft={async d => await upsertTrip(d)} onPublish={async id => await publishTrip(id)} onDelete={removeTrip} /></div>}
         {activeView === "saved"   && <div className="flex-1 min-h-0 overflow-hidden"><SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} /></div>}
 
         {activeView === "chat" && (
           <>
-            <section className="flex flex-col min-h-0 shrink-0" style={{ width: "38vw", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
-              {chatPanel}
-            </section>
+            <section className="flex flex-col min-h-0 shrink-0" style={{ width: "38vw", borderRight: "1px solid rgba(255,255,255,0.07)" }}>{chatSection}</section>
             <aside className="flex flex-col min-h-0 flex-1">
               <MapToolbar active={activeTool} onChange={setActiveTool} />
               <div className="flex-1 min-h-0">
@@ -816,35 +728,74 @@ export default function Home() {
 
       {/* ── MOBILE ── */}
       <div className="flex-1 min-h-0 lg:hidden flex flex-col">
-        {/* Sidebar mobile come drawer */}
+        {/* Sidebar drawer */}
         <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} onNewTrip={handleNewTrip}
           sessions={sidebarSessions} onLoadSession={handleLoadSession}
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} isMobile />
 
-        {/* Schermata chat mobile */}
+        {/* Chat principale */}
         {mobileScreen === "chat" && (
-          <div className="flex-1 min-h-0 flex flex-col">
-            {chatPanel}
-          </div>
+          <div className="flex-1 min-h-0 flex flex-col">{chatSection}</div>
         )}
 
-        {/* Schermata mappa mobile con floating toolbar */}
+        {/* Mappa con floating toolbar */}
         {mobileScreen === "map" && (
           <div className="flex-1 min-h-0 flex flex-col" style={{ position: "relative" }}>
-            {/* Back button */}
+            {/* Back */}
             <button onClick={() => setMobileScreen("chat")}
               style={{ position: "absolute", top: "12px", left: "12px", zIndex: 20, display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "9999px", background: "rgba(10,10,18,0.88)", backdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }}>
               <ArrowLeft style={{ width: "14px", height: "14px" }} />Chat
             </button>
 
-            {/* Floating toolbar centrata */}
-            <MapToolbar active={activeTool} onChange={setActiveTool} mobile />
-
-            {/* Contenuto tool */}
-            <div className="flex-1 min-h-0" style={{ position: "relative" }}>
+            {/* Toolbar floating in basso (non sovrappone contenuto) */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: activeTool === "map" ? "hidden" : "auto" }}>
               <ToolContent tool={activeTool} itinerary={currentItinerary}
                 ideas={ideas} onAddIdea={i => setIdeas(prev => [...prev, i])} onRemoveIdea={idx => setIdeas(prev => prev.filter((_, i) => i !== idx))}
                 mediaFiles={mediaFiles} onUploadMedia={f => setMediaFiles(prev => [...prev, ...f])} onRemoveMedia={idx => setMediaFiles(prev => prev.filter((_, i) => i !== idx))} />
+            </div>
+
+            {/* Toolbar a pill centrata in basso */}
+            <div style={{ flexShrink: 0, padding: "10px 16px 20px", display: "flex", justifyContent: "center", ...glassDark, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ display: "flex", gap: "2px", overflowX: "auto", scrollbarWidth: "none", maxWidth: "100%" }}>
+                {MAP_TOOLS.map(t => {
+                  const Icon = t.icon; const isActive = activeTool === t.id;
+                  return (
+                    <button key={t.id} onClick={() => setActiveTool(t.id)}
+                      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", padding: "7px 10px", borderRadius: "10px", border: "none", flexShrink: 0, cursor: "pointer", transition: "all 0.15s", background: isActive ? "rgba(255,255,255,0.12)" : "transparent", color: isActive ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "52px" }}>
+                      <Icon style={{ width: "17px", height: "17px" }} />
+                      <span style={{ fontSize: "9px", fontWeight: 600 }}>{t.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pagine mobile full-screen con header back */}
+        {mobileScreen === "inspire" && (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <MobilePageHeader title="Lasciati ispirare" onBack={() => setMobileScreen("chat")} />
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <InspirePage onSelectTrip={p => handleSubmit(p)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} />
+            </div>
+          </div>
+        )}
+
+        {mobileScreen === "create" && (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <MobilePageHeader title="Crea un viaggio" onBack={() => setMobileScreen("chat")} />
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <CreateTripPage userId={user?.id} trips={userTrips} onSaveDraft={async d => await upsertTrip(d)} onPublish={async id => await publishTrip(id)} onDelete={removeTrip} />
+            </div>
+          </div>
+        )}
+
+        {mobileScreen === "saved" && (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <MobilePageHeader title="Viaggi salvati" onBack={() => setMobileScreen("chat")} />
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              <SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} />
             </div>
           </div>
         )}
