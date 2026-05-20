@@ -1,20 +1,26 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import {
-  Loader2, Home, MapPin, Copy, Map, Mail,
-  Share2, CheckSquare, Square, Lightbulb,
-  Camera, DollarSign, Plus, X, ShoppingBag,
-  MessageSquare, Check,
+  Loader2, MessageSquare, Copy, Navigation, ExternalLink,
+  CheckSquare, Square, Lightbulb, Camera, DollarSign,
+  Plus, X, ShoppingBag, Check, Send, Download, Cloud,
+  Calendar, Map, Sparkles, User, Lock,
 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { ItineraryResults } from "@/components/itinerary-results";
 import { TripMap } from "@/components/trip-map";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
- 
+import { fetchWeather, type WeatherData } from "@/lib/weather";
+import { useAuth } from "@/hooks/auth";
+
 const AMAZON_TAG = "waydora-21";
- 
+const API_BASE   = import.meta.env.VITE_API_URL ?? "https://waydora-api-production.up.railway.app";
+
+// Limite chiamate AI per tipo utente
+const RATE_LIMIT_GUEST  = 10;  // non loggato
+const RATE_LIMIT_USER   = 50;  // loggato
+
 // ── Stili ─────────────────────────────────────────────────────────────────
 const glassDark = {
   background: "rgba(10,10,18,0.92)",
@@ -22,146 +28,493 @@ const glassDark = {
   WebkitBackdropFilter: "blur(24px)",
   border: "1px solid rgba(255,255,255,0.08)",
 } as React.CSSProperties;
- 
-const activeTab  = { background: "rgba(255,255,255,0.10)", color: "#ffffff",               border: "1px solid rgba(255,255,255,0.18)" } as React.CSSProperties;
-const inactiveTab = { background: "transparent",           color: "rgba(255,255,255,0.38)", border: "1px solid transparent"           } as React.CSSProperties;
- 
-// ── Tool tabs ─────────────────────────────────────────────────────────────
+
+const activeTabStyle   = { background: "rgba(255,255,255,0.10)", color: "#ffffff",               border: "1px solid rgba(255,255,255,0.18)" } as React.CSSProperties;
+const inactiveTabStyle = { background: "transparent",            color: "rgba(255,255,255,0.38)", border: "1px solid transparent"           } as React.CSSProperties;
+
 const TOOLS = [
-  { id: "itinerary", label: "Itinerario", icon: MapPin },
-  { id: "map",       label: "Mappa",      icon: Map },
+  { id: "itinerary", label: "Itinerario", icon: Map },
+  { id: "map",       label: "Mappa",      icon: Navigation },
+  { id: "calendar",  label: "Calendario", icon: Calendar },
+  { id: "weather",   label: "Meteo",      icon: Cloud },
   { id: "ideas",     label: "Idee",       icon: Lightbulb },
   { id: "bagaglio",  label: "Bagaglio",   icon: CheckSquare },
   { id: "media",     label: "Media",      icon: Camera },
   { id: "expenses",  label: "Spese",      icon: DollarSign },
 ];
- 
-// ── IdeasPanel ────────────────────────────────────────────────────────────
-function IdeasPanel({ slug }: { slug: string }) {
-  const [ideas, setIdeas]   = useState<Array<{ id: string; text: string; author: string; ts: string }>>([]);
-  const [input, setInput]   = useState("");
-  const [name,  setName]    = useState(() => localStorage.getItem("waydora_guest_name") ?? "");
-  const [saving, setSaving] = useState(false);
- 
-  // Carica idee da Supabase (campo notes del saved_trip o tabella dedicata)
-  // Per semplicità usiamo localStorage con sync manuale — Realtime in futuro
+
+// ── Logo ──────────────────────────────────────────────────────────────────
+function WaydoraLogo() {
+  return (
+    <Link href="/">
+      <button style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
+        <img src="/LOGO1.png" alt="Waydora" style={{ height: "26px", objectFit: "contain", filter: "brightness(0) invert(1)" }}
+          onError={e => {
+            (e.target as HTMLImageElement).style.display = "none";
+            const span = (e.target as HTMLImageElement).nextSibling as HTMLElement;
+            if (span) span.style.display = "inline";
+          }} />
+        <span style={{ display: "none", fontSize: "15px", fontWeight: 900, color: "#fff" }}>
+          waydora<span style={{ color: "#a855f7" }}>.</span>
+        </span>
+      </button>
+    </Link>
+  );
+}
+
+// ── Tipo messaggio ────────────────────────────────────────────────────────
+type TripMessage = {
+  id: string;
+  share_slug: string;
+  author: string;
+  text: string;
+  type: "message" | "ai_request" | "ai_update";
+  created_at: string;
+};
+
+// ── Chat realtime con modifiche AI ────────────────────────────────────────
+function TripChat({ slug, itinerary, onItineraryUpdate }: {
+  slug: string;
+  itinerary: any;
+  onItineraryUpdate: (newItinerary: any) => void;
+}) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [messages,   setMessages]   = useState<TripMessage[]>([]);
+  const [input,      setInput]      = useState("");
+  const [name,       setName]       = useState(() => user?.name ?? localStorage.getItem("waydora_guest_name") ?? "");
+  const [isAiMode,   setIsAiMode]   = useState(false);
+  const [aiPending,  setAiPending]  = useState(false);
+  const [aiCallsLeft, setAiCallsLeft] = useState<number | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<any>(null);
+
+  const rateKey   = `trip_ai_calls_${slug}`;
+  const rateLimit = user ? RATE_LIMIT_USER : RATE_LIMIT_GUEST;
+
+  // Conta chiamate AI rimaste (localStorage)
   useEffect(() => {
-    const stored = localStorage.getItem(`trip_ideas_${slug}`);
-    if (stored) { try { setIdeas(JSON.parse(stored)); } catch {} }
-  }, [slug]);
- 
-  const persist = (updated: typeof ideas) => {
-    localStorage.setItem(`trip_ideas_${slug}`, JSON.stringify(updated));
+    const stored = localStorage.getItem(rateKey);
+    if (stored) {
+      const { count, resetAt } = JSON.parse(stored);
+      if (Date.now() > resetAt) {
+        localStorage.removeItem(rateKey);
+        setAiCallsLeft(rateLimit);
+      } else {
+        setAiCallsLeft(rateLimit - count);
+      }
+    } else {
+      setAiCallsLeft(rateLimit);
+    }
+  }, [rateKey, rateLimit]);
+
+  const incrementAiCalls = () => {
+    const stored = localStorage.getItem(rateKey);
+    let count = 1;
+    const resetAt = Date.now() + 60 * 60 * 1000;
+    if (stored) {
+      const data = JSON.parse(stored);
+      if (Date.now() < data.resetAt) { count = data.count + 1; }
+    }
+    localStorage.setItem(rateKey, JSON.stringify({ count, resetAt }));
+    setAiCallsLeft(rateLimit - count);
+    return count <= rateLimit;
   };
- 
-  const addIdea = () => {
+
+  // Carica messaggi storici da Supabase
+  useEffect(() => {
+    supabase.from("trip_messages").select("*").eq("share_slug", slug)
+      .order("created_at", { ascending: true }).limit(100)
+      .then(({ data }) => { if (data) setMessages(data as TripMessage[]); });
+  }, [slug]);
+
+  // Supabase Realtime — ascolta nuovi messaggi
+  useEffect(() => {
+    const channel = supabase.channel(`trip_chat_${slug}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "trip_messages",
+        filter: `share_slug=eq.${slug}`,
+      }, (payload) => {
+        const msg = payload.new as TripMessage;
+        setMessages(prev => {
+          if (prev.find(m => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+      })
+      .subscribe();
+
+    channelRef.current = channel;
+    return () => { supabase.removeChannel(channel); };
+  }, [slug]);
+
+  // Supabase Realtime — ascolta aggiornamenti itinerario
+  useEffect(() => {
+    const channel = supabase.channel(`trip_itinerary_${slug}`)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "saved_trips",
+        filter: `share_slug=eq.${slug}`,
+      }, (payload) => {
+        if (payload.new?.itinerary) {
+          onItineraryUpdate(payload.new.itinerary);
+          toast({ title: "✨ Itinerario aggiornato!", description: "Un membro del gruppo ha modificato il viaggio." });
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [slug, onItineraryUpdate, toast]);
+
+  // Scroll al fondo
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Invia messaggio normale
+  const sendMessage = async (text: string, type: TripMessage["type"] = "message") => {
+    const author = (user?.name ?? name.trim()) || "Anonimo";
+    if (!user) localStorage.setItem("waydora_guest_name", author);
+    await supabase.from("trip_messages").insert({ share_slug: slug, author, text, type });
+  };
+
+  // Invia richiesta di modifica AI
+  const sendAiRequest = useCallback(async () => {
+    if (!input.trim() || aiPending) return;
+
+    if (!incrementAiCalls()) {
+      toast({ title: `Limite raggiunto`, description: user ? "Hai esaurito le modifiche AI per questa ora." : "Accedi per avere più modifiche AI disponibili.", variant: "destructive" });
+      return;
+    }
+
+    const prompt = input.trim();
+    setInput(""); setAiPending(true);
+
+    // Mostra la richiesta in chat
+    await sendMessage(`✨ Richiesta AI: ${prompt}`, "ai_request");
+
+    try {
+      // Chiama il backend con l'itinerario attuale
+      const response = await fetch(`${API_BASE}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            { role: "user", content: prompt }
+          ],
+          existingItinerary: itinerary,
+        }),
+      });
+
+      if (response.status === 429) {
+        const data = await response.json();
+        toast({ title: "Troppe richieste", description: data.error, variant: "destructive" });
+        setAiPending(false); return;
+      }
+
+      const data = await response.json();
+
+      if (data.itinerary) {
+        // Aggiorna itinerario su Supabase → tutti vedono il cambiamento in tempo reale
+        await supabase.from("saved_trips")
+          .update({ itinerary: data.itinerary, updated_at: new Date().toISOString() })
+          .eq("share_slug", slug);
+
+        await sendMessage(`✅ Itinerario aggiornato: ${data.reply}`, "ai_update");
+      } else {
+        await sendMessage(`🤖 Waydora: ${data.reply}`, "ai_update");
+      }
+    } catch {
+      toast({ title: "Errore", description: "Riprova tra poco.", variant: "destructive" });
+    }
+
+    setAiPending(false);
+  }, [input, aiPending, itinerary, slug, user, toast]);
+
+  // Invia messaggio normale
+  const sendNormalMessage = async () => {
     if (!input.trim()) return;
-    const author = name.trim() || "Anonimo";
-    localStorage.setItem("waydora_guest_name", author);
-    const newIdea = { id: Date.now().toString(), text: input.trim(), author, ts: new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) };
-    const updated = [...ideas, newIdea];
-    setIdeas(updated);
-    persist(updated);
+    await sendMessage(input.trim(), "message");
     setInput("");
   };
- 
-  const removeIdea = (id: string) => {
-    const updated = ideas.filter(i => i.id !== id);
-    setIdeas(updated);
-    persist(updated);
+
+  const handleSend = () => {
+    if (isAiMode) sendAiRequest();
+    else sendNormalMessage();
   };
- 
+
+  const msgStyle = (type: TripMessage["type"]): React.CSSProperties => {
+    if (type === "ai_request") return { background: "rgba(168,85,247,0.12)", border: "1px solid rgba(168,85,247,0.25)", borderRadius: "12px", padding: "10px 12px" };
+    if (type === "ai_update")  return { background: "rgba(52,211,153,0.1)",  border: "1px solid rgba(52,211,153,0.25)",  borderRadius: "12px", padding: "10px 12px" };
+    return { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "10px 12px" };
+  };
+
   return (
-    <div style={{ padding: "20px", height: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
-      <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>💡 Idee condivise</div>
-      <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", marginTop: "-8px" }}>
-        Aggiungi idee per questo viaggio — visibili a tutti con il link.
-      </p>
- 
-      {/* Nome */}
-      <input value={name} onChange={e => { setName(e.target.value); localStorage.setItem("waydora_guest_name", e.target.value); }}
-        placeholder="Il tuo nome (opzionale)"
-        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "8px 12px", color: "#fff", fontSize: "12px", outline: "none" }} />
- 
-      {/* Input idea */}
-      <div style={{ display: "flex", gap: "8px" }}>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") addIdea(); }}
-          placeholder="Scrivi un'idea..."
-          style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "9px 12px", color: "#fff", fontSize: "13px", outline: "none" }} />
-        <button onClick={addIdea} style={{ width: "38px", height: "38px", borderRadius: "10px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-          <Plus style={{ width: "16px", height: "16px" }} />
-        </button>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+
+      {/* Header chat */}
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <MessageSquare style={{ width: "15px", height: "15px", color: "#a78bfa" }} />
+          <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>Chat di gruppo</span>
+          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)", background: "rgba(255,255,255,0.06)", padding: "2px 8px", borderRadius: "9999px" }}>
+            {messages.length} messaggi
+          </span>
+        </div>
+        {/* Switcher modalità */}
+        <div style={{ display: "flex", gap: "4px", background: "rgba(255,255,255,0.06)", borderRadius: "10px", padding: "3px" }}>
+          <button onClick={() => setIsAiMode(false)}
+            style={{ padding: "5px 10px", borderRadius: "7px", border: "none", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s", background: !isAiMode ? "rgba(255,255,255,0.12)" : "transparent", color: !isAiMode ? "#fff" : "rgba(255,255,255,0.4)" }}>
+            💬 Commenta
+          </button>
+          <button onClick={() => setIsAiMode(true)}
+            style={{ padding: "5px 10px", borderRadius: "7px", border: "none", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s", background: isAiMode ? "rgba(168,85,247,0.25)" : "transparent", color: isAiMode ? "#a78bfa" : "rgba(255,255,255,0.4)" }}>
+            ✨ Modifica AI
+          </button>
+        </div>
       </div>
- 
-      {/* Lista idee */}
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
-        {ideas.length === 0
-          ? <div style={{ textAlign: "center", padding: "40px 20px", color: "rgba(255,255,255,0.3)" }}>
-              <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>💡</div>
-              <p style={{ fontSize: "13px" }}>Nessuna idea ancora — sii il primo!</p>
+
+      {/* Nome utente (solo se non loggato) */}
+      {!user && (
+        <div style={{ padding: "8px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+          <input value={name} onChange={e => { setName(e.target.value); localStorage.setItem("waydora_guest_name", e.target.value); }}
+            placeholder="Il tuo nome (opzionale)"
+            style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "6px 12px", color: "#fff", fontSize: "12px", outline: "none" }} />
+        </div>
+      )}
+
+      {/* Avviso modalità AI */}
+      {isAiMode && (
+        <div style={{ padding: "8px 16px", background: "rgba(168,85,247,0.08)", borderBottom: "1px solid rgba(168,85,247,0.15)", flexShrink: 0 }}>
+          <div style={{ fontSize: "12px", color: "#c4b5fd", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span>✨ Modalità modifica AI — le tue richieste cambieranno l'itinerario per tutti</span>
+            {aiCallsLeft !== null && (
+              <span style={{ fontSize: "11px", color: aiCallsLeft <= 3 ? "#f87171" : "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)", padding: "2px 8px", borderRadius: "9999px", flexShrink: 0 }}>
+                {aiCallsLeft} rimaste
+                {!user && aiCallsLeft <= 3 && <span style={{ marginLeft: "4px" }}>· <Link href="/"><span style={{ color: "#a78bfa", cursor: "pointer" }}>Accedi</span></Link> per di più</span>}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Messaggi */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+        {messages.length === 0
+          ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "40px 20px" }}>
+              <MessageSquare style={{ width: "32px", height: "32px", opacity: 0.3 }} />
+              <p style={{ fontSize: "13px" }}>Nessun messaggio ancora.</p>
+              <p style={{ fontSize: "12px" }}>Commenta o proponi una modifica AI!</p>
             </div>
-          : ideas.map(idea => (
-            <div key={idea.id} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "10px 12px", display: "flex", gap: "10px" }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)", marginBottom: "4px" }}>{idea.text}</div>
-                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.35)" }}>— {idea.author} · {idea.ts}</div>
+          : messages.map(msg => (
+            <div key={msg.id} style={msgStyle(msg.type)}>
+              <div style={{ fontSize: "13px", color: msg.type === "ai_update" ? "rgba(52,211,153,0.9)" : "rgba(255,255,255,0.85)", marginBottom: "4px", lineHeight: 1.5 }}>{msg.text}</div>
+              <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", display: "flex", alignItems: "center", gap: "4px" }}>
+                {msg.type === "message" && <User style={{ width: "9px", height: "9px" }} />}
+                {msg.type === "ai_request" && <Sparkles style={{ width: "9px", height: "9px", color: "#a78bfa" }} />}
+                {msg.type === "ai_update"  && <Check style={{ width: "9px", height: "9px", color: "#34d399" }} />}
+                {msg.author} · {new Date(msg.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
               </div>
-              <button onClick={() => removeIdea(idea.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 0, flexShrink: 0 }}>
-                <X style={{ width: "13px", height: "13px" }} />
-              </button>
             </div>
           ))
         }
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+          <textarea value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            placeholder={isAiMode
+              ? "Es: aggiungi una giornata al mare, rimuovi l'attività di domenica, rendi il budget più economico..."
+              : "Scrivi un commento... (Invio per inviare)"
+            }
+            rows={1} disabled={aiPending}
+            style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: `1px solid ${isAiMode ? "rgba(168,85,247,0.3)" : "rgba(255,255,255,0.12)"}`, borderRadius: "14px", padding: "9px 14px", color: "#fff", fontSize: "13px", outline: "none", resize: "none", maxHeight: "100px", fontFamily: "inherit", opacity: aiPending ? 0.6 : 1 }} />
+          <button onClick={handleSend} disabled={!input.trim() || aiPending}
+            style={{ width: "40px", height: "40px", borderRadius: "50%", border: "none", flexShrink: 0, cursor: input.trim() && !aiPending ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", background: input.trim() && !aiPending ? (isAiMode ? "linear-gradient(135deg,#a855f7,#6366f1)" : "linear-gradient(135deg,#f97316,#a855f7)") : "rgba(255,255,255,0.07)", color: "#fff" }}>
+            {aiPending ? <Loader2 style={{ width: "15px", height: "15px", animation: "wd-spin 0.8s linear infinite" }} /> : <Send style={{ width: "15px", height: "15px" }} />}
+          </button>
+        </div>
+        {!user && isAiMode && (
+          <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)", marginTop: "6px", textAlign: "center" }}>
+            Non loggato: {RATE_LIMIT_GUEST} modifiche AI/ora · <Link href="/"><span style={{ color: "#a78bfa", cursor: "pointer" }}>Accedi</span></Link> per {RATE_LIMIT_USER} modifiche/ora
+          </p>
+        )}
+      </div>
+      <style>{`@keyframes wd-spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
+// ── MapPanel ──────────────────────────────────────────────────────────────
+function MapPanel({ itinerary }: { itinerary: any }) {
+  const open = () => {
+    const points = (itinerary.days?.flatMap((d: any) => d.activities) ?? [])
+      .filter((a: any) => a.coordinates?.lat && a.coordinates?.lng)
+      .map((a: any) => `${a.coordinates.lat},${a.coordinates.lng}`).slice(0, 10);
+    if (!points.length) { window.open(`https://www.google.com/maps/search/${encodeURIComponent(itinerary.destination)}`, "_blank"); return; }
+    if (points.length === 1) { window.open(`https://www.google.com/maps/search/${points[0]}`, "_blank"); return; }
+    window.open(`https://www.google.com/maps/dir/${points.map((p: string) => encodeURIComponent(p)).join("/")}`, "_blank");
+  };
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, display: "flex", justifyContent: "flex-end" }}>
+        <button onClick={open} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "6px 14px", borderRadius: "9999px", background: "rgba(66,133,244,0.15)", color: "#4285f4", border: "1px solid rgba(66,133,244,0.3)", cursor: "pointer" }}>
+          <Navigation style={{ width: "12px", height: "12px" }} />Apri in Google Maps<ExternalLink style={{ width: "11px", height: "11px" }} />
+        </button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0 }}><TripMap itinerary={itinerary} /></div>
+    </div>
+  );
+}
+
+// ── CalendarPanel ─────────────────────────────────────────────────────────
+function CalendarPanel({ itinerary }: { itinerary: any }) {
+  const exp = () => {
+    const today = new Date();
+    itinerary.days?.forEach((day: any, i: number) => {
+      const d = new Date(today); d.setDate(today.getDate() + i);
+      const ds = d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+      const nd = new Date(d); nd.setDate(d.getDate() + 1);
+      const nds = nd.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+      const acts = day.activities?.map((a: any) => `• ${a.time} - ${a.title}`).join("\n") ?? "";
+      const url = new URL("https://calendar.google.com/calendar/render");
+      url.searchParams.set("action", "TEMPLATE");
+      url.searchParams.set("text", `${itinerary.destination} - Giorno ${day.day}: ${day.title}`);
+      url.searchParams.set("dates", `${ds}/${nds}`);
+      url.searchParams.set("details", `${day.summary}\n\n${acts}\n\nCreato con Waydora 🗺️`);
+      url.searchParams.set("location", itinerary.destination);
+      setTimeout(() => window.open(url.toString(), "_blank"), i * 500);
+    });
+  };
+  return (
+    <div style={{ padding: "20px", height: "100%", overflowY: "auto" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
+        <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>📅 Calendario viaggio</div>
+        <button onClick={exp} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "7px 14px", borderRadius: "9999px", background: "rgba(66,133,244,0.15)", color: "#4285f4", border: "1px solid rgba(66,133,244,0.3)", cursor: "pointer" }}>
+          <Download style={{ width: "12px", height: "12px" }} />Importa in Google Calendar
+        </button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        {itinerary.days?.map((day: any, i: number) => (
+          <div key={day.day} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px 14px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+              <div style={{ width: "22px", height: "22px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 900, color: "#fff" }}>{i + 1}</div>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>{day.title}</div>
+            </div>
+            {day.activities?.map((a: any, ai: number) => (
+              <div key={ai} style={{ display: "flex", gap: "8px", fontSize: "12px", marginBottom: "3px" }}>
+                <span style={{ color: "rgba(255,255,255,0.4)", minWidth: "80px" }}>{a.time}</span>
+                <span style={{ color: "rgba(255,255,255,0.7)" }}>{a.title}</span>
+              </div>
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
- 
+
+// ── WeatherPanel ──────────────────────────────────────────────────────────
+function WeatherPanel({ destination, durationDays }: { destination: string; durationDays: number }) {
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState(false);
+  useEffect(() => {
+    fetchWeather(destination, Math.min(durationDays + 1, 14))
+      .then(d => { if (d) setWeather(d); else setError(true); })
+      .catch(() => setError(true)).finally(() => setLoading(false));
+  }, [destination, durationDays]);
+  if (loading) return <div className="flex items-center justify-center h-full gap-3"><Loader2 style={{ width: "22px", height: "22px", color: "rgba(255,255,255,0.4)", animation: "wd-spin 0.8s linear infinite" }} /><span style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)" }}>Caricamento...</span></div>;
+  if (error || !weather) return <div className="flex flex-col items-center justify-center h-full gap-3"><div style={{ fontSize: "2.5rem" }}>⛅</div><p style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)" }}>Dati non disponibili</p></div>;
+  return (
+    <div style={{ padding: "20px", height: "100%", overflowY: "auto" }}>
+      <div style={{ marginBottom: "16px" }}>
+        <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>🌤 Meteo a {weather.location}</div>
+        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>{weather.country}</div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {weather.days.map((day, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "10px 14px" }}>
+            <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.45)", minWidth: "72px" }}>{new Date(day.date).toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short" })}</div>
+            <img src={day.icon} alt={day.condition} style={{ width: "30px", height: "30px" }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff" }}>{day.condition}</div>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)" }}>💨 {day.maxWindKph} km/h · 🌧 {day.chanceOfRain}%</div>
+            </div>
+            <div style={{ fontSize: "16px", fontWeight: 800, color: "#fff" }}>{day.avgTempC}°C</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── IdeasPanel ────────────────────────────────────────────────────────────
+function IdeasPanel({ slug }: { slug: string }) {
+  const [ideas, setIdeas] = useState<Array<{ id: string; text: string; author: string; ts: string }>>([]);
+  const [input, setInput] = useState("");
+  const [name,  setName]  = useState(() => localStorage.getItem("waydora_guest_name") ?? "");
+  useEffect(() => { const s = localStorage.getItem(`trip_ideas_${slug}`); if (s) { try { setIdeas(JSON.parse(s)); } catch {} } }, [slug]);
+  const persist = (u: typeof ideas) => localStorage.setItem(`trip_ideas_${slug}`, JSON.stringify(u));
+  const add = () => {
+    if (!input.trim()) return;
+    const author = name.trim() || "Anonimo"; localStorage.setItem("waydora_guest_name", author);
+    const updated = [...ideas, { id: Date.now().toString(), text: input.trim(), author, ts: new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) }];
+    setIdeas(updated); persist(updated); setInput("");
+  };
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: "16px", gap: "12px" }}>
+      <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>💡 Idee</div>
+      <input value={name} onChange={e => { setName(e.target.value); localStorage.setItem("waydora_guest_name", e.target.value); }} placeholder="Il tuo nome" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "7px 12px", color: "#fff", fontSize: "12px", outline: "none" }} />
+      <div style={{ display: "flex", gap: "8px" }}>
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} placeholder="Aggiungi un'idea..." style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "8px 12px", color: "#fff", fontSize: "13px", outline: "none" }} />
+        <button onClick={add} style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><Plus style={{ width: "15px", height: "15px" }} /></button>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "7px" }}>
+        {ideas.length === 0 ? <div style={{ textAlign: "center", padding: "40px", color: "rgba(255,255,255,0.3)" }}><div style={{ fontSize: "2rem", marginBottom: "8px" }}>💡</div><p style={{ fontSize: "13px" }}>Nessuna idea ancora</p></div>
+          : ideas.map(idea => (
+            <div key={idea.id} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", padding: "10px 12px", display: "flex", gap: "8px" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)" }}>{idea.text}</div>
+                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", marginTop: "3px" }}>— {idea.author} · {idea.ts}</div>
+              </div>
+              <button onClick={() => { const u = ideas.filter(i => i.id !== idea.id); setIdeas(u); persist(u); }} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 0 }}><X style={{ width: "13px", height: "13px" }} /></button>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
 // ── BaggagePanel ──────────────────────────────────────────────────────────
 function BaggagePanel({ packingList, destination }: { packingList: any[]; destination: string }) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
- 
-  if (!packingList || packingList.length === 0) return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", color: "rgba(255,255,255,0.3)", padding: "32px", textAlign: "center" }}>
-      <CheckSquare style={{ width: "32px", height: "32px", opacity: 0.3 }} />
-      <p style={{ fontSize: "13px" }}>Nessun bagaglio in questo itinerario</p>
-    </div>
-  );
- 
+  if (!packingList?.length) return <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: "rgba(255,255,255,0.3)" }}><CheckSquare style={{ width: "32px", height: "32px", opacity: 0.3 }} /><p style={{ fontSize: "13px" }}>Nessun bagaglio</p></div>;
   return (
     <div style={{ padding: "20px", overflowY: "auto", height: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
-        <CheckSquare style={{ width: "16px", height: "16px", color: "rgba(255,255,255,0.6)" }} />
-        <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>Lista Bagaglio</h3>
-      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "18px" }}><CheckSquare style={{ width: "16px", height: "16px", color: "rgba(255,255,255,0.6)" }} /><h3 style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>Lista Bagaglio</h3></div>
       <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
         {packingList.map((cat: any, ci: number) => (
           <div key={cat.category}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
               <h4 style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.2em", color: "rgba(255,255,255,0.5)" }}>{cat.category}</h4>
-              <a href={`https://www.amazon.it/s?k=${encodeURIComponent(cat.category)}+viaggio&tag=${AMAZON_TAG}`} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: "10px", color: "#ff9900", textDecoration: "none", opacity: 0.6 }}
-                onMouseEnter={e => (e.currentTarget.style.opacity = "1")} onMouseLeave={e => (e.currentTarget.style.opacity = "0.6")}>
-                Acquista tutto →
-              </a>
+              <a href={`https://www.amazon.it/s?k=${encodeURIComponent(cat.category)}+viaggio&tag=${AMAZON_TAG}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: "10px", color: "#ff9900", textDecoration: "none", opacity: 0.6 }}>Acquista tutto →</a>
             </div>
             <ul style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               {cat.items.map((item: string, ii: number) => {
-                const key = `${ci}-${ii}`;
-                const isChecked = checked[key];
+                const key = `${ci}-${ii}`; const isChecked = checked[key];
                 return (
-                  <li key={ii} onClick={() => setChecked(p => ({ ...p, [key]: !p[key] }))}
-                    style={{ display: "flex", alignItems: "flex-start", gap: "8px", fontSize: "13px", cursor: "pointer" }}>
-                    <button style={{ marginTop: "1px", flexShrink: 0, background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+                  <li key={ii} onClick={() => setChecked(p => ({ ...p, [key]: !p[key] }))} style={{ display: "flex", alignItems: "flex-start", gap: "8px", fontSize: "13px", cursor: "pointer" }}>
+                    <button style={{ marginTop: "1px", flexShrink: 0, background: "none", border: "none", padding: 0 }}>
                       {isChecked ? <CheckSquare style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.5)" }} /> : <Square style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.2)" }} />}
                     </button>
                     <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
                       <span style={{ color: isChecked ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.75)", textDecoration: isChecked ? "line-through" : "none" }}>{item}</span>
-                      <a href={`https://www.amazon.it/s?k=${encodeURIComponent(item)}+viaggio&tag=${AMAZON_TAG}`} target="_blank" rel="noopener noreferrer"
-                        style={{ flexShrink: 0, opacity: 0.4, color: "#ff9900", textDecoration: "none" }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = "1")} onMouseLeave={e => (e.currentTarget.style.opacity = "0.4")}>
-                        <ShoppingBag style={{ width: "13px", height: "13px" }} />
-                      </a>
+                      <a href={`https://www.amazon.it/s?k=${encodeURIComponent(item)}+viaggio&tag=${AMAZON_TAG}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, opacity: 0.4, color: "#ff9900", textDecoration: "none" }}><ShoppingBag style={{ width: "13px", height: "13px" }} /></a>
                     </div>
                   </li>
                 );
@@ -171,92 +524,38 @@ function BaggagePanel({ packingList, destination }: { packingList: any[]; destin
         ))}
       </div>
       <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px solid rgba(255,255,255,0.07)", textAlign: "center" }}>
-        <a href={`https://www.amazon.it/s?k=accessori+viaggio+${encodeURIComponent(destination)}&tag=${AMAZON_TAG}`} target="_blank" rel="noopener noreferrer"
-          style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 700, padding: "8px 16px", borderRadius: "9999px", background: "rgba(255,153,0,0.12)", color: "#ff9900", border: "1px solid rgba(255,153,0,0.25)", textDecoration: "none" }}>
-          <ShoppingBag style={{ width: "14px", height: "14px" }} />
-          Tutto il necessario su Amazon
+        <a href={`https://www.amazon.it/s?k=accessori+viaggio+${encodeURIComponent(destination)}&tag=${AMAZON_TAG}`} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 700, padding: "8px 16px", borderRadius: "9999px", background: "rgba(255,153,0,0.12)", color: "#ff9900", border: "1px solid rgba(255,153,0,0.25)", textDecoration: "none" }}>
+          <ShoppingBag style={{ width: "14px", height: "14px" }} />Tutto il necessario su Amazon
         </a>
       </div>
     </div>
   );
 }
- 
+
 // ── MediaPanel ────────────────────────────────────────────────────────────
 function MediaPanel({ slug }: { slug: string }) {
   const [files, setFiles] = useState<Array<{ name: string; preview: string }>>([]);
   const fileRef = useRef<HTMLInputElement>(null);
- 
-  useEffect(() => {
-    const stored = localStorage.getItem(`trip_media_${slug}`);
-    if (stored) { try { setFiles(JSON.parse(stored)); } catch {} }
-  }, [slug]);
- 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newFiles = Array.from(e.target.files ?? []).map(f => ({ name: f.name, preview: URL.createObjectURL(f) }));
-    const updated = [...files, ...newFiles];
-    setFiles(updated);
-    // Nota: object URL non sopravvive al refresh — per persistenza reale serve Supabase Storage
-    e.target.value = "";
-  };
- 
-  const remove = (i: number) => setFiles(prev => prev.filter((_, idx) => idx !== i));
- 
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => { setFiles(prev => [...prev, ...Array.from(e.target.files ?? []).map(f => ({ name: f.name, preview: URL.createObjectURL(f) }))]); e.target.value = ""; };
   return (
-    <div style={{ padding: "20px", height: "100%", display: "flex", flexDirection: "column", gap: "16px" }}>
+    <div style={{ padding: "20px", height: "100%", display: "flex", flexDirection: "column", gap: "14px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>📸 Foto e media</div>
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={handleUpload} />
-        <button onClick={() => fileRef.current?.click()} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer" }}>
-          <Plus style={{ width: "13px", height: "13px" }} />Carica
-        </button>
+        <button onClick={() => fileRef.current?.click()} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer" }}><Plus style={{ width: "13px", height: "13px" }} />Carica</button>
       </div>
-      <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)", marginTop: "-8px" }}>
-        Carica foto e video del viaggio — visibili a tutti con il link.
-      </p>
-      {files.length === 0
-        ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "12px", color: "rgba(255,255,255,0.3)", textAlign: "center" }}>
-            <Camera style={{ width: "36px", height: "36px", opacity: 0.3 }} />
-            <p style={{ fontSize: "13px" }}>Nessun media ancora</p>
-            <button onClick={() => fileRef.current?.click()} style={{ fontSize: "12px", fontWeight: 600, padding: "8px 16px", borderRadius: "9999px", background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer" }}>
-              Carica la prima foto
-            </button>
-          </div>
-        : <div style={{ flex: 1, overflowY: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-            {files.map((f, i) => (
-              <div key={i} style={{ position: "relative", borderRadius: "10px", overflow: "hidden", aspectRatio: "1" }}>
-                <img src={f.preview} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                <button onClick={() => remove(i)} style={{ position: "absolute", top: "4px", right: "4px", width: "20px", height: "20px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>
-                  <X style={{ width: "11px", height: "11px" }} />
-                </button>
-              </div>
-            ))}
-          </div>
-      }
+      {files.length === 0 ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center" }}><Camera style={{ width: "36px", height: "36px", opacity: 0.3 }} /><p style={{ fontSize: "13px" }}>Nessun media ancora</p></div>
+        : <div style={{ flex: 1, overflowY: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>{files.map((f, i) => <div key={i} style={{ position: "relative", borderRadius: "10px", overflow: "hidden", aspectRatio: "1" }}><img src={f.preview} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))} style={{ position: "absolute", top: "4px", right: "4px", width: "20px", height: "20px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X style={{ width: "11px", height: "11px" }} /></button></div>)}</div>}
     </div>
   );
 }
- 
-// ── ExpensesPanel ─────────────────────────────────────────────────────────
-function ExpensesPanel() {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", textAlign: "center", padding: "32px" }}>
-      <div style={{ fontSize: "2.8rem" }}>💰</div>
-      <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Gestione spese</div>
-      <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", maxWidth: "240px" }}>Dividi le spese con il gruppo e tieni traccia del budget</div>
-      <div style={{ fontSize: "12px", fontWeight: 600, padding: "6px 16px", borderRadius: "9999px", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.12)" }}>
-        Disponibile prossimamente
-      </div>
-    </div>
-  );
-}
- 
-// ── Toolbar desktop ───────────────────────────────────────────────────────
+
+// ── ToolbarDesktop ────────────────────────────────────────────────────────
 function ToolbarDesktop({ active, onChange }: { active: string; onChange: (id: string) => void }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", width: "56px", borderRight: "1px solid rgba(255,255,255,0.07)", ...glassDark, gap: "4px", padding: "12px 6px" }}>
+    <div style={{ display: "flex", flexDirection: "column", width: "56px", borderRight: "1px solid rgba(255,255,255,0.07)", gap: "4px", padding: "12px 6px", flexShrink: 0, ...glassDark }}>
       {TOOLS.map(t => {
-        const Icon = t.icon;
-        const isActive = active === t.id;
+        const Icon = t.icon; const isActive = active === t.id;
         return (
           <button key={t.id} onClick={() => onChange(t.id)} title={t.label}
             style={{ width: "44px", height: "44px", borderRadius: "12px", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s", background: isActive ? "rgba(255,255,255,0.12)" : "transparent", color: isActive ? "#fff" : "rgba(255,255,255,0.38)" }}
@@ -269,19 +568,19 @@ function ToolbarDesktop({ active, onChange }: { active: string; onChange: (id: s
     </div>
   );
 }
- 
+
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function Trip() {
   const params = useParams();
   const slug = params.slug ?? "";
   const { toast } = useToast();
- 
-  const [itinerary, setItinerary] = useState<any>(null);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState(false);
+
+  const [itinerary,  setItinerary]  = useState<any>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(false);
   const [activeTool, setActiveTool] = useState("itinerary");
-  const [copied, setCopied] = useState(false);
- 
+  const [copied,     setCopied]     = useState(false);
+
   useEffect(() => {
     if (!slug) return;
     supabase.from("saved_trips").select("*").eq("share_slug", slug).single()
@@ -291,170 +590,116 @@ export default function Trip() {
         setLoading(false);
       });
   }, [slug]);
- 
-  useEffect(() => {
-    if (itinerary?.destination) document.title = `${itinerary.destination} — Waydora`;
-  }, [itinerary]);
- 
+
+  useEffect(() => { if (itinerary?.destination) document.title = `${itinerary.destination} — Waydora`; }, [itinerary]);
+
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/trip/${slug}` : "";
- 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-    toast({ title: "Link copiato!" });
-  };
- 
-  // ── Loading ──────────────────────────────────────────────────────────────
-  if (loading) return (
-    <Layout>
-      <div className="flex-1 flex items-center justify-center" style={{ background: "#0a0a12" }}>
-        <Loader2 style={{ width: "36px", height: "36px", color: "#a78bfa", animation: "spin 0.8s linear infinite" }} />
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      </div>
-    </Layout>
-  );
- 
-  // ── 404 ──────────────────────────────────────────────────────────────────
-  if (error || !itinerary) return (
-    <Layout>
-      <div className="flex-1 flex flex-col items-center justify-center gap-6 text-center p-8" style={{ background: "#0a0a12" }}>
-        <div style={{ fontSize: "4rem" }}>🗺️</div>
-        <h2 style={{ fontSize: "22px", fontWeight: 900, color: "#fff" }}>Viaggio non trovato</h2>
-        <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.45)", maxWidth: "380px" }}>
-          Il link potrebbe essere scaduto o il viaggio è stato eliminato.
-        </p>
-        <Link href="/">
-          <button style={{ padding: "11px 28px", borderRadius: "9999px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>
-            ← Torna alla home
-          </button>
-        </Link>
-      </div>
-    </Layout>
-  );
- 
-  // ── Render contenuto per tool attivo ─────────────────────────────────────
+  const handleCopy = async () => { await navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); toast({ title: "Link copiato!" }); };
+
   const renderTool = (tool: string) => {
-    if (tool === "itinerary") return (
-      <div style={{ padding: "28px 32px", maxWidth: "720px", margin: "0 auto", paddingBottom: "64px" }}>
-        <ItineraryResults itinerary={itinerary} />
-      </div>
-    );
-    if (tool === "map") return <TripMap itinerary={itinerary} />;
-    if (tool === "ideas")    return <IdeasPanel slug={slug} />;
-    if (tool === "bagaglio") return <BaggagePanel packingList={itinerary.packingList ?? []} destination={itinerary.destination} />;
-    if (tool === "media")    return <MediaPanel slug={slug} />;
-    if (tool === "expenses") return <ExpensesPanel />;
+    if (!itinerary) return null;
+    if (tool === "map")       return <MapPanel itinerary={itinerary} />;
+    if (tool === "calendar")  return <CalendarPanel itinerary={itinerary} />;
+    if (tool === "weather")   return <WeatherPanel destination={itinerary.destination} durationDays={itinerary.durationDays ?? 3} />;
+    if (tool === "ideas")     return <IdeasPanel slug={slug} />;
+    if (tool === "bagaglio")  return <BaggagePanel packingList={itinerary.packingList ?? []} destination={itinerary.destination} />;
+    if (tool === "media")     return <MediaPanel slug={slug} />;
+    if (tool === "expenses")  return <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6"><div style={{ fontSize: "2.8rem" }}>💰</div><div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Gestione spese</div><div style={{ fontSize: "12px", fontWeight: 600, padding: "6px 16px", borderRadius: "9999px", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.12)" }}>Disponibile prossimamente</div></div>;
     return null;
   };
- 
-  // ── Layout ────────────────────────────────────────────────────────────────
+
+  if (loading) return <Layout><div className="flex-1 flex items-center justify-center" style={{ background: "#0a0a12" }}><Loader2 style={{ width: "36px", height: "36px", color: "#a78bfa", animation: "spin 0.8s linear infinite" }} /><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div></Layout>;
+  if (error || !itinerary) return <Layout><div className="flex-1 flex flex-col items-center justify-center gap-6 text-center p-8" style={{ background: "#0a0a12" }}><div style={{ fontSize: "4rem" }}>🗺️</div><h2 style={{ fontSize: "22px", fontWeight: 900, color: "#fff" }}>Viaggio non trovato</h2><p style={{ fontSize: "14px", color: "rgba(255,255,255,0.45)", maxWidth: "380px" }}>Il link potrebbe essere scaduto o il viaggio è stato eliminato.</p><Link href="/"><button style={{ padding: "11px 28px", borderRadius: "9999px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>← Torna alla home</button></Link></div></Layout>;
+
   return (
     <Layout>
-      {/* Sfondo */}
       <div style={{ position: "fixed", inset: 0, zIndex: -1, background: "#0a0a12" }}>
         <div style={{ position: "absolute", top: "-10%", right: "-5%", width: "50vw", height: "50vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(249,115,22,0.12) 0%,transparent 65%)", filter: "blur(70px)" }} />
         <div style={{ position: "absolute", bottom: "5%", left: "-5%", width: "45vw", height: "45vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(168,85,247,0.12) 0%,transparent 65%)", filter: "blur(70px)" }} />
       </div>
- 
-      {/* ── DESKTOP ── */}
+
+      {/* ── DESKTOP: layout a 3 colonne — toolbar | contenuto | chat ── */}
       <div className="flex-1 min-h-0 hidden lg:flex flex-col">
- 
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
- 
-          {/* Sinistra: Home + Pianificatore */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Link href="/">
-              <button style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "9px", padding: "7px 12px", color: "rgba(255,255,255,0.7)", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}
-                onMouseEnter={e => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
-                onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.7)"; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}>
-                <Home style={{ width: "13px", height: "13px" }} />
-                Home
-              </button>
-            </Link>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <WaydoraLogo />
+            <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
             <Link href="/?chat=1">
-              <button style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "9px", padding: "7px 12px", color: "rgba(255,255,255,0.7)", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}
+              <button style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "9px", padding: "6px 12px", color: "rgba(255,255,255,0.7)", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}
                 onMouseEnter={e => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
                 onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.7)"; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}>
-                <MessageSquare style={{ width: "13px", height: "13px" }} />
-                Pianificatore
+                <MessageSquare style={{ width: "13px", height: "13px" }} />Pianificatore
               </button>
             </Link>
           </div>
- 
-          {/* Centro: titolo viaggio */}
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "1.2rem" }}>{itinerary.heroEmoji ?? "🗺️"}</span>
+            <span style={{ fontSize: "1.1rem" }}>{itinerary.heroEmoji ?? "🗺️"}</span>
             <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{itinerary.title}</span>
           </div>
- 
-          {/* Destra: condividi */}
-          <button onClick={handleCopy}
-            style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 16px", borderRadius: "9999px", background: copied ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.09)", border: copied ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(255,255,255,0.18)", color: copied ? "#34d399" : "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
+          <button onClick={handleCopy} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 16px", borderRadius: "9999px", background: copied ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.09)", border: copied ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(255,255,255,0.18)", color: copied ? "#34d399" : "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
             {copied ? <Check style={{ width: "13px", height: "13px" }} /> : <Copy style={{ width: "13px", height: "13px" }} />}
             {copied ? "Copiato!" : "Copia link"}
           </button>
         </div>
- 
-        {/* Body: toolbar verticale + contenuto */}
+
+        {/* Body a 3 colonne */}
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+          {/* Toolbar verticale */}
           <ToolbarDesktop active={activeTool} onChange={setActiveTool} />
+
+          {/* Contenuto centrale */}
           <div style={{ flex: 1, minHeight: 0, overflowY: activeTool === "map" ? "hidden" : "auto" }}>
-            {renderTool(activeTool)}
+            {activeTool === "itinerary"
+              ? <div style={{ padding: "28px 32px", maxWidth: "680px", margin: "0 auto", paddingBottom: "48px" }}><ItineraryResults itinerary={itinerary} /></div>
+              : renderTool(activeTool)
+            }
+          </div>
+
+          {/* Chat di gruppo — sempre visibile a destra */}
+          <div style={{ width: "340px", flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", minHeight: 0 }}>
+            <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />
           </div>
         </div>
       </div>
- 
+
       {/* ── MOBILE ── */}
       <div className="flex-1 min-h-0 lg:hidden flex flex-col">
- 
-        {/* Header mobile */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <Link href="/">
-              <button style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "12px" }}>
-                <Home style={{ width: "14px", height: "14px" }} />
-              </button>
-            </Link>
-            <span style={{ color: "rgba(255,255,255,0.2)", fontSize: "12px" }}>|</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <WaydoraLogo />
+            <div style={{ width: "1px", height: "16px", background: "rgba(255,255,255,0.1)" }} />
             <Link href="/?chat=1">
-              <button style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "12px" }}>
-                <MessageSquare style={{ width: "14px", height: "14px" }} />
-                <span>Pianificatore</span>
+              <button style={{ background: "none", border: "none", color: "rgba(255,255,255,0.55)", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600 }}>
+                <MessageSquare style={{ width: "13px", height: "13px" }} />Pianificatore
               </button>
             </Link>
           </div>
-          <button onClick={handleCopy}
-            style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={handleCopy} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", border: "1px solid rgba(255,255,255,0.15)", color: copied ? "#34d399" : "#fff", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
             {copied ? <Check style={{ width: "12px", height: "12px" }} /> : <Copy style={{ width: "12px", height: "12px" }} />}
             {copied ? "Copiato!" : "Copia"}
           </button>
         </div>
- 
+
         {/* Tab bar mobile */}
-        <div style={{ padding: "8px 12px 0", flexShrink: 0 }}>
+        <div style={{ padding: "8px 12px 0", flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
           <div style={{ display: "flex", gap: "4px", overflowX: "auto", scrollbarWidth: "none" }}>
-            {TOOLS.map(t => {
-              const Icon = t.icon;
-              const isActive = activeTool === t.id;
+            {[...TOOLS, { id: "chat", label: "Chat", icon: MessageSquare }].map(t => {
+              const Icon = t.icon; const isActive = activeTool === t.id;
               return (
                 <button key={t.id} onClick={() => setActiveTool(t.id)}
-                  style={{ display: "flex", alignItems: "center", gap: "5px", padding: "7px 12px", borderRadius: "9px", fontSize: "11px", fontWeight: 600, whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0, transition: "all 0.15s", ...(isActive ? activeTab : inactiveTab) }}>
-                  <Icon style={{ width: "13px", height: "13px" }} />
-                  {t.label}
+                  style={{ display: "flex", alignItems: "center", gap: "5px", padding: "7px 12px", borderRadius: "9px", fontSize: "11px", fontWeight: 600, whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0, transition: "all 0.15s", ...(isActive ? activeTabStyle : inactiveTabStyle) }}>
+                  <Icon style={{ width: "13px", height: "13px" }} />{t.label}
                 </button>
               );
             })}
           </div>
         </div>
- 
-        {/* Contenuto */}
+
         <div style={{ flex: 1, minHeight: 0, overflowY: activeTool === "map" ? "hidden" : "auto" }}>
-          {activeTool === "itinerary"
-            ? <div style={{ padding: "16px", paddingBottom: "48px" }}><ItineraryResults itinerary={itinerary} /></div>
-            : renderTool(activeTool)
-          }
+          {activeTool === "itinerary" && <div style={{ padding: "16px", paddingBottom: "32px" }}><ItineraryResults itinerary={itinerary} /></div>}
+          {activeTool === "chat"      && <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />}
+          {activeTool !== "itinerary" && activeTool !== "chat" && renderTool(activeTool)}
         </div>
       </div>
     </Layout>

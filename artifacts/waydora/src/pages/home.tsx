@@ -29,6 +29,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
+
+// Intercetta ?chat=1 dal link "Pianificatore" nella pagina trip
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("chat") === "1") {
+    setShowLanding(false);
+    setActiveView("chat");
+    // Pulisce il param dall'URL senza ricaricare la pagina
+    window.history.replaceState({}, "", "/");
+  }
+}, []);
+
 // ── Tipi ──────────────────────────────────────────────────────────────────
 type ChatTurn = {
   id: number;
@@ -601,14 +613,15 @@ export default function Home() {
             if (sid) setCurrentSessionId(sid);
           }
         },
-        onError: () => {
-          setTurns(prev => prev.filter(t=>t.id!==turnId));
-          setApiMessages(prev => prev.slice(0,-1));
-          toast({ title:"Qualcosa è andato storto", description:"Riprova.", variant:"destructive" });
-        },
-      }
-    );
-  }, [input,mediaContent,apiMessages,currentItinerary,turns,currentSessionId,chatMutation,toast,persistSession]);
+        onError: (err: any) => {
+  setTurns(prev => prev.filter(t => t.id !== turnId));
+  setApiMessages(prev => prev.slice(0, -1));
+  // Controlla se è rate limit (429)
+  const msg = err?.message?.includes("429") || err?.status === 429
+    ? "Hai raggiunto il limite orario di richieste. Riprova tra qualche minuto."
+    : "Qualcosa è andato storto. Riprova.";
+  toast({ title: msg, variant: "destructive" });
+}, [input,mediaContent,apiMessages,currentItinerary,turns,currentSessionId,chatMutation,toast,persistSession]);
 
   // ── Salva itinerario su Supabase ─────────────────────────────────────────
   const handleSave = async () => {
