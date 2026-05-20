@@ -4,7 +4,7 @@ import {
   Loader2, MessageSquare, Copy, Navigation, ExternalLink,
   CheckSquare, Square, Lightbulb, Camera, DollarSign,
   Plus, X, ShoppingBag, Check, Send, Download, Cloud,
-  Calendar, Map, Sparkles, User, Lock,
+  Calendar, Map, Sparkles, User,
 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { ItineraryResults } from "@/components/itinerary-results";
@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { fetchWeather, type WeatherData } from "@/lib/weather";
 import { useAuth } from "@/hooks/auth";
+// Logo caricato dalla cartella public
 
 const AMAZON_TAG = "waydora-21";
 const API_BASE   = import.meta.env.VITE_API_URL ?? "https://waydora-api-production.up.railway.app";
@@ -48,15 +49,7 @@ function WaydoraLogo() {
   return (
     <Link href="/">
       <button style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
-        <img src="/LOGO1.png" alt="Waydora" style={{ height: "26px", objectFit: "contain", filter: "brightness(0) invert(1)" }}
-          onError={e => {
-            (e.target as HTMLImageElement).style.display = "none";
-            const span = (e.target as HTMLImageElement).nextSibling as HTMLElement;
-            if (span) span.style.display = "inline";
-          }} />
-        <span style={{ display: "none", fontSize: "15px", fontWeight: 900, color: "#fff" }}>
-          waydora<span style={{ color: "#a855f7" }}>.</span>
-        </span>
+        <img src="/LOGO1.png" alt="Waydora" style={{ height: "28px", objectFit: "contain", filter: "brightness(0) invert(1)" }} />
       </button>
     </Link>
   );
@@ -265,11 +258,11 @@ function TripChat({ slug, itinerary, onItineraryUpdate }: {
         {/* Switcher modalità */}
         <div style={{ display: "flex", gap: "4px", background: "rgba(255,255,255,0.06)", borderRadius: "10px", padding: "3px" }}>
           <button onClick={() => setIsAiMode(false)}
-            style={{ padding: "5px 10px", borderRadius: "7px", border: "none", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s", background: !isAiMode ? "rgba(255,255,255,0.12)" : "transparent", color: !isAiMode ? "#fff" : "rgba(255,255,255,0.4)" }}>
+            style={{ padding: "6px 14px", borderRadius: "7px", border: "none", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s", background: !isAiMode ? "rgba(255,255,255,0.12)" : "transparent", color: !isAiMode ? "#fff" : "rgba(255,255,255,0.4)" }}>
             💬 Commenta
           </button>
           <button onClick={() => setIsAiMode(true)}
-            style={{ padding: "5px 10px", borderRadius: "7px", border: "none", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s", background: isAiMode ? "rgba(168,85,247,0.25)" : "transparent", color: isAiMode ? "#a78bfa" : "rgba(255,255,255,0.4)" }}>
+            style={{ padding: "6px 14px", borderRadius: "7px", border: "none", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s", background: isAiMode ? "rgba(168,85,247,0.25)" : "transparent", color: isAiMode ? "#a78bfa" : "rgba(255,255,255,0.4)" }}>
             ✨ Modifica AI
           </button>
         </div>
@@ -328,7 +321,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate }: {
           <textarea value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
             placeholder={isAiMode
-              ? "Es: aggiungi una giornata al mare, rimuovi l'attività di domenica, rendi il budget più economico..."
+              ? "Es: aggiungi una giornata, rendi il budget più economico..."
               : "Scrivi un commento... (Invio per inviare)"
             }
             rows={1} disabled={aiPending}
@@ -657,7 +650,7 @@ export default function Trip() {
           </div>
 
           {/* Chat di gruppo — sempre visibile a destra */}
-          <div style={{ width: "340px", flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", minHeight: 0 }}>
+          <div style={{ width: "420px", flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", minHeight: 0 }}>
             <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />
           </div>
         </div>
