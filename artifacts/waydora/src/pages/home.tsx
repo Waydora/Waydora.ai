@@ -64,7 +64,6 @@ function generateTitle(turns: ChatTurn[], itinerary?: ItineraryData): string {
   return first.length > 32 ? first.substring(0, 32) + "..." : first || "Nuova chat";
 }
 
-// ── Desktop MapToolbar ────────────────────────────────────────────────────
 function MapToolbar({ active, onChange }: { active: string; onChange: (id: string) => void }) {
   return (
     <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto [&::-webkit-scrollbar]:hidden shrink-0"
@@ -77,7 +76,6 @@ function MapToolbar({ active, onChange }: { active: string; onChange: (id: strin
   );
 }
 
-// ── Tool components ───────────────────────────────────────────────────────
 function MapTool({ itinerary }: { itinerary?: ItineraryData }) {
   const open = () => {
     if (!itinerary) return;
@@ -235,7 +233,6 @@ function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFil
   return null;
 }
 
-// ── Sidebar più larga su mobile ───────────────────────────────────────────
 function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView, onChangeView, onLoginClick, isMobile = false }: {
   open: boolean; onClose: () => void; onNewTrip: () => void;
   sessions: Array<{ id: string | number; title: string; turns: any[]; itinerary?: any; apiMessages?: any[] }>;
@@ -251,21 +248,18 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
 
   const content = (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", ...glassDark, borderRight: isMobile ? "none" : "1px solid rgba(255,255,255,0.07)" }}>
-      {/* Header sidebar — logo porta alla landing solo da qui */}
       <div style={{ padding: isMobile ? "20px 16px" : "16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
         <Logo variant="header" />
         <button onClick={onClose} style={{ color: "rgba(255,255,255,0.35)", background: "none", border: "none", cursor: "pointer" }}>
           <X style={{ width: isMobile ? "22px" : "18px", height: isMobile ? "22px" : "18px" }} />
         </button>
       </div>
-
       <div style={{ padding: isMobile ? "14px" : "12px" }}>
         <button onClick={() => { onNewTrip(); if (isMobile) onClose(); }}
           style={{ width: "100%", display: "flex", alignItems: "center", gap: "12px", padding: itemPadding, borderRadius: "14px", border: "none", cursor: "pointer", fontSize, fontWeight: 600, transition: "all 0.15s", ...(activeView === "chat" ? activeTabStyle : inactiveTabStyle) }}>
           <PlusCircle style={{ width: iconSize, height: iconSize, flexShrink: 0 }} />Nuova chat
         </button>
       </div>
-
       {sessions.length > 0 && (
         <div style={{ padding: isMobile ? "0 14px 10px" : "0 12px 8px" }}>
           <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(255,255,255,0.28)", padding: "4px 4px 8px" }}>Recenti</div>
@@ -284,9 +278,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
           </ScrollArea>
         </div>
       )}
-
       <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: `4px ${isMobile ? "14px" : "12px"}` }} />
-
       <div style={{ padding: isMobile ? "10px 14px" : "8px 12px", display: "flex", flexDirection: "column", gap: "4px" }}>
         {([
           { id: "inspire", label: "Lasciati ispirare", icon: Compass },
@@ -302,9 +294,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
           );
         })}
       </div>
-
       <div style={{ flex: 1 }} />
-
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: isMobile ? "16px" : "12px" }}>
         {user ? (
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -356,7 +346,6 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
   );
 }
 
-// ── Mobile page header ────────────────────────────────────────────────────
 function MobilePageHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
@@ -368,7 +357,6 @@ function MobilePageHeader({ title, onBack }: { title: string; onBack: () => void
   );
 }
 
-// ── Chat components ───────────────────────────────────────────────────────
 function UserBubble({ text, mediaPreview }: { text: string; mediaPreview?: string }) {
   return (
     <div className="flex justify-end">
@@ -461,7 +449,6 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
   );
 }
 
-// ── Suggerimenti rapidi come lista orizzontale ────────────────────────────
 function QuickSuggestions({ onSelect, visible }: { onSelect: (p: string) => void; visible: boolean }) {
   if (!visible) return null;
   return (
@@ -524,11 +511,8 @@ export default function Home() {
   const [mobileSidebarOpen,setMobileSidebarOpen]= useState(false);
   const [activeTool,       setActiveTool]       = useState("map");
   const [authOpen,         setAuthOpen]         = useState(false);
-  // ── KEY: usa sessionStorage per non tornare alla landing al refresh ──────
   const [showLanding,      setShowLanding]      = useState(() => {
-    if (typeof window !== "undefined") {
-      return sessionStorage.getItem("waydora_in_app") !== "1";
-    }
+    if (typeof window !== "undefined") return sessionStorage.getItem("waydora_in_app") !== "1";
     return true;
   });
   const [activeView,       setActiveView]       = useState<ActiveView>("chat");
@@ -536,14 +520,16 @@ export default function Home() {
   const [ideas,            setIdeas]            = useState<string[]>([]);
   const [mediaFiles,       setMediaFiles]       = useState<Array<{ name: string; preview: string }>>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>();
-  const [mapReady,         setMapReady]         = useState(false); // notifica mappa pronta
+  const [mapReady,         setMapReady]         = useState(false);
   const [mapNotifShown,    setMapNotifShown]    = useState(false);
 
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
   const chatScrollRef = useRef<HTMLDivElement>(null);
-  const swipeStartX = useRef<number>(0);
+  // refs per swipe — solo dal bordo sinistro
+  const swipeStartX = useRef<number>(-1);
+  const swipeStartY = useRef<number>(0);
   const localSessions = useLocalSessions();
 
   const { sessions: dbSessions, upsert: upsertSession } = useChatSessions(user?.id);
@@ -556,7 +542,6 @@ export default function Home() {
 
   useEffect(() => { document.title = "Waydora — Travel simple, everywhere!"; }, []);
 
-  // Intercetta ?chat=1
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("chat") === "1") {
@@ -570,37 +555,53 @@ export default function Home() {
     setTimeout(() => { chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" }); }, 80);
   }, [turns]);
 
-  // Notifica mappa pronta quando arriva un itinerario
   useEffect(() => {
     if (currentItinerary && !mapReady && !mapNotifShown) {
       setMapReady(true); setMapNotifShown(true);
-      toast({
-        title: "🗺️ Mappa pronta!",
-        description: "Tocca 'Mappa' per vedere il percorso del viaggio.",
-      });
+      toast({ title: "Mappa pronta!", description: "Tocca 'Mappa' per vedere il percorso." });
     }
   }, [currentItinerary]);
 
-  // ── Swipe gesture: destra → apre sidebar, sinistra → nessun effetto (no landing) ──
+  // ── Swipe gesture corretta ────────────────────────────────────────────
+  // Solo swipe che PARTE dal bordo sinistro (x < 20px) apre la sidebar.
+  // Nessun altro swipe cambia schermata — l'utente rimane sempre dove si trova.
   useEffect(() => {
-    const handleTouchStart = (e: TouchEvent) => { swipeStartX.current = e.touches[0].clientX; };
-    const handleTouchEnd = (e: TouchEvent) => {
-      const deltaX = e.changedTouches[0].clientX - swipeStartX.current;
-      if (deltaX > 60 && swipeStartX.current < 40) {
-        // Swipe da bordo sinistro → apre sidebar
-        setMobileSidebarOpen(true);
-      } else if (deltaX < -60 && mobileScreen === "map") {
-        // Swipe sinistra su mappa → torna alla chat
-        setMobileScreen("chat");
+    const handleTouchStart = (e: TouchEvent) => {
+      const x = e.touches[0].clientX;
+      // Registra il gesto SOLO se parte dai primi 20px del bordo sinistro
+      if (x <= 20) {
+        swipeStartX.current = x;
+        swipeStartY.current = e.touches[0].clientY;
+      } else {
+        swipeStartX.current = -1; // -1 = ignora completamente questo gesto
       }
     };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      // Se non era partito dal bordo, ignora
+      if (swipeStartX.current < 0) return;
+
+      const endX = e.changedTouches[0].clientX;
+      const endY = e.changedTouches[0].clientY;
+      const deltaX = endX - swipeStartX.current;
+      const deltaY = Math.abs(endY - swipeStartY.current);
+
+      // Swipe orizzontale verso destra (>80px) e non prevalentemente verticale
+      if (deltaX > 80 && deltaY < 60) {
+        setMobileSidebarOpen(true);
+      }
+
+      // Reset sempre
+      swipeStartX.current = -1;
+    };
+
     window.addEventListener("touchstart", handleTouchStart, { passive: true });
-    window.addEventListener("touchend", handleTouchEnd, { passive: true });
+    window.addEventListener("touchend",   handleTouchEnd,   { passive: true });
     return () => {
       window.removeEventListener("touchstart", handleTouchStart);
-      window.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchend",   handleTouchEnd);
     };
-  }, [mobileScreen]);
+  }, []); // ← dipendenze VUOTE: il listener non dipende da mobileScreen né da altro stato
 
   const persistSession = useCallback(async (t: ChatTurn[], itinerary?: ItineraryData, msgs?: ChatMessage[], id?: string) => {
     const title = generateTitle(t, itinerary);
@@ -695,7 +696,6 @@ export default function Home() {
   const hasItinerary = turns.some(t => t.itinerary);
   const publishedUserTrips = userTrips.filter(t => t.status === "published");
 
-  // ── LANDING ──────────────────────────────────────────────────────────────
   if (showLanding) {
     return (
       <Layout>
@@ -709,11 +709,9 @@ export default function Home() {
     );
   }
 
-  // ── Header chat mobile (più spesso) ──────────────────────────────────────
   const mobileHeader = (
     <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark, minHeight: "60px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        {/* Hamburger più grande */}
         <button onClick={() => setMobileSidebarOpen(true)}
           style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "8px", cursor: "pointer", color: "rgba(255,255,255,0.8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg width="20" height="16" viewBox="0 0 20 16" fill="none"><rect y="0" width="20" height="2.5" rx="1.25" fill="currentColor"/><rect y="6.75" width="20" height="2.5" rx="1.25" fill="currentColor"/><rect y="13.5" width="20" height="2.5" rx="1.25" fill="currentColor"/></svg>
@@ -729,15 +727,16 @@ export default function Home() {
             <Save style={{ width: "14px", height: "14px" }} />Salva
           </button>
         )}
-        {/* Pulsante Mappa con notifica pulsante quando pronta */}
         {currentItinerary && (
           <button onClick={() => { setMobileScreen("map"); setMapReady(false); }}
-            style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "13px", fontWeight: 600, padding: "7px 13px", borderRadius: "9999px", cursor: "pointer", position: "relative", transition: "all 0.2s", background: mapReady ? "linear-gradient(135deg,#f97316,#a855f7)" : "rgba(255,255,255,0.07)", color: mapReady ? "#fff" : "rgba(255,255,255,0.7)", border: mapReady ? "none" : "1px solid rgba(255,255,255,0.12)", boxShadow: mapReady ? "0 0 16px rgba(249,115,22,0.4)" : "none" }}>
-            <Map style={{ width: "14px", height: "14px" }} />
-            {mapReady ? "✨ Mappa" : "Mappa"}
+            style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "13px", fontWeight: 600, padding: "7px 13px", borderRadius: "9999px", cursor: "pointer", transition: "all 0.2s",
+              background: mapReady ? "linear-gradient(135deg,#f97316,#a855f7)" : "rgba(255,255,255,0.07)",
+              color: mapReady ? "#fff" : "rgba(255,255,255,0.7)",
+              border: mapReady ? "none" : "1px solid rgba(255,255,255,0.12)",
+              boxShadow: mapReady ? "0 0 16px rgba(249,115,22,0.4)" : "none" }}>
+            <Map style={{ width: "14px", height: "14px" }} />Mappa
           </button>
         )}
-        {/* + per nuova chat */}
         <button onClick={handleNewTrip}
           style={{ width: "34px", height: "34px", borderRadius: "50%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <Plus style={{ width: "18px", height: "18px" }} />
@@ -746,10 +745,8 @@ export default function Home() {
     </div>
   );
 
-  // ── Pannello chat ─────────────────────────────────────────────────────────
   const chatSection = (
     <section className="flex flex-col min-h-0 h-full">
-      {/* Desktop header */}
       <div className="hidden lg:flex px-4 py-3 items-center justify-between shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {!sidebarOpen && <button onClick={() => setSidebarOpen(true)} style={{ color: "rgba(255,255,255,0.4)", background: "none", border: "none", cursor: "pointer", marginRight: "4px", display: "flex" }}><ChevronRight style={{ width: "18px", height: "18px" }} /></button>}
@@ -761,13 +758,10 @@ export default function Home() {
           <button onClick={handleNewTrip} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", background: "transparent" }}><PlusCircle style={{ width: "12px", height: "12px" }} />Nuovo</button>
         </div>
       </div>
-      {/* Mobile header */}
       <div className="lg:hidden">{mobileHeader}</div>
-
       <div ref={chatScrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "20px" }}>
         {turns.length === 0 ? <WelcomeMessage userName={user?.name} /> : turns.map(turn => <ChatTurnView key={turn.id} turn={turn} />)}
       </div>
-
       <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
         <QuickSuggestions onSelect={p => handleSubmit(p)} visible={hasItinerary && !chatMutation.isPending} />
         <div style={{ marginTop: hasItinerary ? "8px" : "0" }}>
@@ -779,7 +773,6 @@ export default function Home() {
     </section>
   );
 
-  // ── APP ───────────────────────────────────────────────────────────────────
   return (
     <Layout>
       <div className="fixed inset-0 -z-10" style={{ background: "#0a0a12" }}>
@@ -787,18 +780,15 @@ export default function Home() {
         <div style={{ position: "absolute", bottom: "5%", left: "-5%", width: "45vw", height: "45vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(168,85,247,0.15) 0%,transparent 65%)", filter: "blur(70px)" }} />
       </div>
 
-      {/* ── DESKTOP ── */}
+      {/* DESKTOP */}
       <div className="flex-1 min-h-0 hidden lg:flex">
         {!sidebarOpen && <button onClick={() => setSidebarOpen(true)} className="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 rounded-r-xl" style={{ background: "rgba(10,10,18,0.9)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}><ChevronRight style={{ width: "16px", height: "16px" }} /></button>}
-
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewTrip={handleNewTrip}
           sessions={sidebarSessions} onLoadSession={handleLoadSession}
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} />
-
         {activeView === "inspire" && <div className="flex-1 min-h-0 overflow-hidden"><InspirePage onSelectTrip={p => handleSubmit(p)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} /></div>}
         {activeView === "create"  && <div className="flex-1 min-h-0 overflow-hidden"><CreateTripPage userId={user?.id} trips={userTrips} onSaveDraft={async d => await upsertTrip(d)} onPublish={async id => await publishTrip(id)} onDelete={removeTrip} /></div>}
         {activeView === "saved"   && <div className="flex-1 min-h-0 overflow-hidden"><SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} /></div>}
-
         {activeView === "chat" && (
           <>
             <section className="flex flex-col min-h-0 shrink-0" style={{ width: "38vw", borderRight: "1px solid rgba(255,255,255,0.07)" }}>{chatSection}</section>
@@ -814,20 +804,16 @@ export default function Home() {
         )}
       </div>
 
-      {/* ── MOBILE ── */}
+      {/* MOBILE */}
       <div className="flex-1 min-h-0 lg:hidden flex flex-col">
-        {/* Sidebar drawer */}
         <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} onNewTrip={handleNewTrip}
           sessions={sidebarSessions} onLoadSession={handleLoadSession}
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} isMobile />
 
-        {/* Chat */}
         {mobileScreen === "chat" && <div className="flex-1 min-h-0 flex flex-col">{chatSection}</div>}
 
-        {/* Mappa mobile — header in alto con ← Chat, toolbar in basso */}
         {mobileScreen === "map" && (
           <div className="flex-1 min-h-0 flex flex-col">
-            {/* Header con back */}
             <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark, minHeight: "60px" }}>
               <button onClick={() => setMobileScreen("chat")}
                 style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "10px", padding: "8px 14px", color: "#fff", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
@@ -836,17 +822,14 @@ export default function Home() {
               <span style={{ fontSize: "14px", fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>
                 {MAP_TOOLS.find(t => t.id === activeTool)?.label ?? "Mappa"}
               </span>
-              <div style={{ width: "80px" }} /> {/* spacer per centrare il titolo */}
+              <div style={{ width: "80px" }} />
             </div>
-
-            {/* Contenuto tool */}
             <div style={{ flex: 1, minHeight: 0, overflowY: activeTool === "map" ? "hidden" : "auto" }}>
               <ToolContent tool={activeTool} itinerary={currentItinerary}
                 ideas={ideas} onAddIdea={i => setIdeas(prev => [...prev, i])} onRemoveIdea={idx => setIdeas(prev => prev.filter((_, i) => i !== idx))}
                 mediaFiles={mediaFiles} onUploadMedia={f => setMediaFiles(prev => [...prev, ...f])} onRemoveMedia={idx => setMediaFiles(prev => prev.filter((_, i) => i !== idx))} />
             </div>
-
-            {/* Toolbar bassa */}
+            {/* Toolbar bassa — nessun swipe listener qui, il problema era nel window listener */}
             <div style={{ flexShrink: 0, padding: "10px 12px 20px", display: "flex", justifyContent: "center", ...glassDark, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ display: "flex", gap: "2px", overflowX: "auto", scrollbarWidth: "none", maxWidth: "100%" }}>
                 {MAP_TOOLS.map(t => {
@@ -864,7 +847,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Pagine mobile full-screen */}
         {mobileScreen === "inspire" && (
           <div className="flex-1 min-h-0 flex flex-col">
             <MobilePageHeader title="Lasciati ispirare" onBack={() => setMobileScreen("chat")} />
@@ -878,7 +860,6 @@ export default function Home() {
           <div className="flex-1 min-h-0 flex flex-col">
             <MobilePageHeader title="Crea un viaggio" onBack={() => setMobileScreen("chat")} />
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-              {/* Mobile: solo editor, niente split con mappa */}
               <CreateTripPage userId={user?.id} trips={userTrips}
                 onSaveDraft={async d => await upsertTrip(d)} onPublish={async id => await publishTrip(id)}
                 onDelete={removeTrip} mobileOnly />
