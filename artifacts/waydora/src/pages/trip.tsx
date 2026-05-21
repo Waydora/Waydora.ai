@@ -4,7 +4,7 @@ import {
   Loader2, MessageSquare, Copy, Navigation, ExternalLink,
   CheckSquare, Square, Lightbulb, Camera, DollarSign,
   Plus, X, ShoppingBag, Check, Send, Download, Cloud,
-  Calendar, Map, Sparkles, User, ChevronDown,
+  Calendar, FileText, Sparkles, User, ArrowLeft,
 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { ItineraryResults } from "@/components/itinerary-results";
@@ -20,7 +20,6 @@ const API_BASE   = import.meta.env.VITE_API_URL ?? "https://waydora-api-producti
 const RATE_LIMIT_GUEST = 10;
 const RATE_LIMIT_USER  = 50;
 
-// ── Stili ─────────────────────────────────────────────────────────────────
 const glassDark = {
   background: "rgba(10,10,18,0.92)",
   backdropFilter: "blur(24px)",
@@ -28,11 +27,9 @@ const glassDark = {
   border: "1px solid rgba(255,255,255,0.08)",
 } as React.CSSProperties;
 
-const activeTabStyle   = { background: "rgba(255,255,255,0.10)", color: "#ffffff",               border: "1px solid rgba(255,255,255,0.18)" } as React.CSSProperties;
-const inactiveTabStyle = { background: "transparent",            color: "rgba(255,255,255,0.38)", border: "1px solid transparent"           } as React.CSSProperties;
-
+// ── Icone toolbar — FileText per Itinerario (non Map) ─────────────────────
 const TOOLS = [
-  { id: "itinerary", label: "Itinerario", icon: Map },
+  { id: "itinerary", label: "Itinerario", icon: FileText },   // ← cambiata da Map
   { id: "map",       label: "Mappa",      icon: Navigation },
   { id: "calendar",  label: "Calendario", icon: Calendar },
   { id: "weather",   label: "Meteo",      icon: Cloud },
@@ -49,25 +46,15 @@ function WaydoraLogo() {
       <button style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center" }}>
         <img src="/LOGO1.png" alt="Waydora"
           style={{ height: "36px", objectFit: "contain", filter: "brightness(0) invert(1)" }}
-          onError={e => {
-            (e.target as HTMLImageElement).style.display = "none";
-            const fb = document.createElement("span");
-            fb.style.cssText = "font-size:16px;font-weight:900;color:#fff;";
-            fb.innerHTML = 'waydora<span style="color:#a855f7">.</span>';
-            (e.target as HTMLImageElement).parentNode?.appendChild(fb);
-          }} />
+          onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
       </button>
     </Link>
   );
 }
 
-// ── TripMessage type ──────────────────────────────────────────────────────
-type TripMessage = {
-  id: string; share_slug: string; author: string;
-  text: string; type: "message" | "ai_request" | "ai_update"; created_at: string;
-};
+type TripMessage = { id: string; share_slug: string; author: string; text: string; type: "message" | "ai_request" | "ai_update"; created_at: string; };
 
-// ── Chat di gruppo con AI ─────────────────────────────────────────────────
+// ── Chat di gruppo ────────────────────────────────────────────────────────
 function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
   slug: string; itinerary: any; onItineraryUpdate: (i: any) => void; onClose?: () => void;
 }) {
@@ -93,18 +80,14 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
   }, [rateKey, rateLimit]);
 
   useEffect(() => {
-    supabase.from("trip_messages").select("*").eq("share_slug", slug)
-      .order("created_at", { ascending: true }).limit(100)
+    supabase.from("trip_messages").select("*").eq("share_slug", slug).order("created_at", { ascending: true }).limit(100)
       .then(({ data }) => { if (data) setMessages(data as TripMessage[]); });
   }, [slug]);
 
   useEffect(() => {
     const channel = supabase.channel(`trip_chat_${slug}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "trip_messages", filter: `share_slug=eq.${slug}` },
-        (payload) => {
-          const msg = payload.new as TripMessage;
-          setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg]);
-        })
+        (payload) => { const msg = payload.new as TripMessage; setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg]); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [slug]);
@@ -126,8 +109,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
 
   const incrementAiCalls = () => {
     const stored = localStorage.getItem(rateKey);
-    let count = 1;
-    const resetAt = Date.now() + 60 * 60 * 1000;
+    let count = 1; const resetAt = Date.now() + 60 * 60 * 1000;
     if (stored) { const d = JSON.parse(stored); if (Date.now() < d.resetAt) count = d.count + 1; }
     localStorage.setItem(rateKey, JSON.stringify({ count, resetAt }));
     setAiCallsLeft(rateLimit - count);
@@ -143,7 +125,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
   const sendAiRequest = useCallback(async () => {
     if (!input.trim() || aiPending) return;
     if (!incrementAiCalls()) {
-      toast({ title: "Limite raggiunto", description: user ? "Limite AI raggiunto per questa ora." : "Accedi per più modifiche AI.", variant: "destructive" });
+      toast({ title: "Limite raggiunto", description: user ? "Limite AI raggiunto." : "Accedi per più modifiche AI.", variant: "destructive" });
       return;
     }
     const prompt = input.trim(); setInput(""); setAiPending(true);
@@ -180,7 +162,6 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Header */}
       <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <MessageSquare style={{ width: "15px", height: "15px", color: "#a78bfa" }} />
@@ -211,7 +192,6 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
         </div>
       )}
 
-      {/* Messaggi */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
         {messages.length === 0
           ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "40px 20px" }}>
@@ -229,7 +209,6 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
         <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
           <textarea value={input} onChange={e => setInput(e.target.value)}
@@ -251,13 +230,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
 // ── Tool panels ───────────────────────────────────────────────────────────
 function MapPanel({ itinerary }: { itinerary: any }) {
   const [mapLoaded, setMapLoaded] = useState(false);
-
-  // Lazy load — la mappa parte solo quando il pannello è visibile
-  useEffect(() => {
-    const timer = setTimeout(() => setMapLoaded(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
-
+  useEffect(() => { const t = setTimeout(() => setMapLoaded(true), 100); return () => clearTimeout(t); }, []);
   const openMaps = () => {
     const points = (itinerary.days?.flatMap((d: any) => d.activities) ?? [])
       .filter((a: any) => a.coordinates?.lat && a.coordinates?.lng)
@@ -265,7 +238,6 @@ function MapPanel({ itinerary }: { itinerary: any }) {
     if (!points.length) { window.open(`https://www.google.com/maps/search/${encodeURIComponent(itinerary.destination)}`, "_blank"); return; }
     window.open(`https://www.google.com/maps/dir/${points.map((p: string) => encodeURIComponent(p)).join("/")}`, "_blank");
   };
-
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, display: "flex", justifyContent: "flex-end" }}>
@@ -274,14 +246,7 @@ function MapPanel({ itinerary }: { itinerary: any }) {
         </button>
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
-        {mapLoaded
-          ? <TripMap itinerary={itinerary} />
-          : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", gap: "10px", color: "rgba(255,255,255,0.4)" }}>
-              <Loader2 style={{ width: "22px", height: "22px", animation: "wd-spin 0.8s linear infinite" }} />
-              <span style={{ fontSize: "13px" }}>Caricamento mappa...</span>
-              <style>{`@keyframes wd-spin{to{transform:rotate(360deg)}}`}</style>
-            </div>
-        }
+        {mapLoaded ? <TripMap itinerary={itinerary} /> : <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", gap: "10px", color: "rgba(255,255,255,0.4)" }}><Loader2 style={{ width: "22px", height: "22px", animation: "wd-spin 0.8s linear infinite" }} /><span style={{ fontSize: "13px" }}>Caricamento mappa...</span><style>{`@keyframes wd-spin{to{transform:rotate(360deg)}}`}</style></div>}
       </div>
     </div>
   );
@@ -297,10 +262,8 @@ function CalendarPanel({ itinerary }: { itinerary: any }) {
       const nds = nd.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
       const acts = day.activities?.map((a: any) => `• ${a.time} - ${a.title}`).join("\n") ?? "";
       const url = new URL("https://calendar.google.com/calendar/render");
-      url.searchParams.set("action", "TEMPLATE");
-      url.searchParams.set("text", `${itinerary.destination} - Giorno ${day.day}: ${day.title}`);
-      url.searchParams.set("dates", `${ds}/${nds}`);
-      url.searchParams.set("details", `${day.summary}\n\n${acts}\n\nCreato con Waydora 🗺️`);
+      url.searchParams.set("action", "TEMPLATE"); url.searchParams.set("text", `${itinerary.destination} - Giorno ${day.day}: ${day.title}`);
+      url.searchParams.set("dates", `${ds}/${nds}`); url.searchParams.set("details", `${day.summary}\n\n${acts}\n\nCreato con Waydora 🗺️`);
       url.searchParams.set("location", itinerary.destination);
       setTimeout(() => window.open(url.toString(), "_blank"), i * 500);
     });
@@ -337,7 +300,6 @@ function WeatherPanel({ destination, durationDays }: { destination: string; dura
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(false);
-  // Importa lazy
   useEffect(() => {
     import("@/lib/weather").then(({ fetchWeather }) => {
       fetchWeather(destination, Math.min(durationDays + 1, 14))
@@ -349,10 +311,7 @@ function WeatherPanel({ destination, durationDays }: { destination: string; dura
   if (error || !weather) return <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "10px" }}><div style={{ fontSize: "2.5rem" }}>⛅</div><p style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)" }}>Dati non disponibili</p></div>;
   return (
     <div style={{ padding: "20px", height: "100%", overflowY: "auto" }}>
-      <div style={{ marginBottom: "16px" }}>
-        <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>🌤 Meteo a {weather.location}</div>
-        <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>{weather.country}</div>
-      </div>
+      <div style={{ marginBottom: "16px" }}><div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>🌤 Meteo a {weather.location}</div><div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)" }}>{weather.country}</div></div>
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         {weather.days.map((day, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "10px 14px" }}>
@@ -455,48 +414,31 @@ function ToolbarDesktop({ active, onChange }: { active: string; onChange: (id: s
   );
 }
 
-// ── Toolbar MOBILE — barra in basso fissa ─────────────────────────────────
-function ToolbarMobile({ active, onChange }: { active: string; onChange: (id: string) => void }) {
-  return (
-    <div style={{
-      position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 30,
-      display: "flex", overflowX: "auto", scrollbarWidth: "none",
-      padding: "8px 8px 12px",
-      ...glassDark,
-      borderTop: "1px solid rgba(255,255,255,0.1)",
-      boxShadow: "0 -4px 24px rgba(0,0,0,0.4)",
-    }}>
-      {TOOLS.map(t => {
-        const Icon = t.icon; const isActive = active === t.id;
-        return (
-          <button key={t.id} onClick={() => onChange(t.id)}
-            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "6px 12px", borderRadius: "10px", border: "none", flexShrink: 0, cursor: "pointer", transition: "all 0.15s", background: isActive ? "rgba(255,255,255,0.12)" : "transparent", color: isActive ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "52px" }}>
-            <Icon style={{ width: "18px", height: "18px" }} />
-            <span style={{ fontSize: "9px", fontWeight: 600 }}>{t.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── FAB Chat mobile ───────────────────────────────────────────────────────
+// ── FAB Chat mobile — colori gradiente logo (arancio→viola) ───────────────
+// Posizionato in basso a destra ma SOPRA i controlli zoom della mappa
+// I controlli zoom di Google Maps sono a ~80px dal bordo destro e ~100px dal basso
 function ChatFAB({ messageCount, onClick }: { messageCount: number; onClick: () => void }) {
   return (
     <button onClick={onClick}
       style={{
-        position: "fixed", bottom: "80px", right: "16px", zIndex: 35,
+        position: "fixed",
+        bottom: "130px", // abbastanza sopra i controlli zoom (che sono ~70-100px dal basso)
+        right: "16px",
+        zIndex: 35,
         width: "52px", height: "52px", borderRadius: "50%",
-        background: "linear-gradient(135deg,#a855f7,#6366f1)",
-        border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-        boxShadow: "0 4px 20px rgba(168,85,247,0.5)",
+        // Gradiente colori logo waydora: arancio → viola
+        background: "linear-gradient(135deg, #f97316, #a855f7)",
+        border: "2px solid rgba(255,255,255,0.15)",
+        cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: "0 4px 20px rgba(249,115,22,0.4), 0 2px 8px rgba(168,85,247,0.3)",
         transition: "transform 0.15s",
       }}
-      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.08)"; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}>
+      onTouchStart={e => { e.currentTarget.style.transform = "scale(0.95)"; }}
+      onTouchEnd={e => { e.currentTarget.style.transform = "scale(1)"; }}>
       <MessageSquare style={{ width: "22px", height: "22px", color: "#fff" }} />
       {messageCount > 0 && (
-        <div style={{ position: "absolute", top: "-2px", right: "-2px", width: "18px", height: "18px", borderRadius: "50%", background: "#f97316", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#fff" }}>
+        <div style={{ position: "absolute", top: "-3px", right: "-3px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#f97316" }}>
           {messageCount > 9 ? "9+" : messageCount}
         </div>
       )}
@@ -512,14 +454,11 @@ function ChatDrawer({ slug, itinerary, onItineraryUpdate, open, onClose }: {
     <AnimatePresence>
       {open && (
         <>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onClose}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}
             style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.5)" }} />
-          <motion.div
-            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+          <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
             style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50, height: "75vh", borderRadius: "20px 20px 0 0", overflow: "hidden", ...glassDark }}>
-            {/* Handle */}
             <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 0" }}>
               <div style={{ width: "40px", height: "4px", borderRadius: "2px", background: "rgba(255,255,255,0.2)" }} />
             </div>
@@ -537,13 +476,13 @@ export default function Trip() {
   const slug = params.slug ?? "";
   const { toast } = useToast();
 
-  const [itinerary,     setItinerary]     = useState<any>(null);
-  const [loading,       setLoading]       = useState(true);
-  const [error,         setError]         = useState(false);
-  const [activeTool,    setActiveTool]    = useState("itinerary");
-  const [copied,        setCopied]        = useState(false);
-  const [chatOpen,      setChatOpen]      = useState(false); // mobile FAB
-  const [msgCount,      setMsgCount]      = useState(0);
+  const [itinerary,  setItinerary]  = useState<any>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(false);
+  const [activeTool, setActiveTool] = useState("itinerary");
+  const [copied,     setCopied]     = useState(false);
+  const [chatOpen,   setChatOpen]   = useState(false);
+  const [msgCount,   setMsgCount]   = useState(0);
 
   useEffect(() => {
     if (!slug) return;
@@ -555,7 +494,6 @@ export default function Trip() {
       });
   }, [slug]);
 
-  // Conta messaggi per il badge FAB
   useEffect(() => {
     if (!slug) return;
     supabase.from("trip_messages").select("id", { count: "exact", head: true }).eq("share_slug", slug)
@@ -574,11 +512,7 @@ export default function Trip() {
 
   const renderTool = (tool: string) => {
     if (!itinerary) return null;
-    if (tool === "itinerary") return (
-      <div style={{ padding: "28px 32px", maxWidth: "680px", margin: "0 auto", paddingBottom: "48px" }}>
-        <ItineraryResults itinerary={itinerary} />
-      </div>
-    );
+    if (tool === "itinerary") return <div style={{ padding: "28px 32px", maxWidth: "680px", margin: "0 auto", paddingBottom: "48px" }}><ItineraryResults itinerary={itinerary} /></div>;
     if (tool === "map")       return <MapPanel itinerary={itinerary} />;
     if (tool === "calendar")  return <CalendarPanel itinerary={itinerary} />;
     if (tool === "weather")   return <WeatherPanel destination={itinerary.destination} durationDays={itinerary.durationDays ?? 3} />;
@@ -601,6 +535,28 @@ export default function Trip() {
     </Layout>
   );
 
+  // ── Header condiviso (più spesso) ─────────────────────────────────────────
+  const pageHeader = (isMobile: boolean) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "12px 14px" : "10px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark, minHeight: isMobile ? "58px" : "54px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: isMobile ? "10px" : "12px" }}>
+        <WaydoraLogo />
+        <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
+        <Link href="/?chat=1">
+          <button style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "9px", padding: isMobile ? "6px 10px" : "6px 12px", color: "rgba(255,255,255,0.7)", fontSize: isMobile ? "12px" : "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}>
+            <MessageSquare style={{ width: "13px", height: "13px" }} />{isMobile ? "Pianif." : "Pianificatore"}
+          </button>
+        </Link>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        {!isMobile && <><span style={{ fontSize: "1.1rem" }}>{itinerary.heroEmoji ?? "🗺️"}</span><span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{itinerary.title}</span></>}
+      </div>
+      <button onClick={handleCopy} style={{ display: "flex", alignItems: "center", gap: "6px", padding: isMobile ? "6px 12px" : "7px 16px", borderRadius: "9999px", background: copied ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.09)", border: copied ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(255,255,255,0.18)", color: copied ? "#34d399" : "#fff", fontSize: isMobile ? "11px" : "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
+        {copied ? <Check style={{ width: "13px", height: "13px" }} /> : <Copy style={{ width: "13px", height: "13px" }} />}
+        {copied ? "Copiato!" : "Copia"}
+      </button>
+    </div>
+  );
+
   return (
     <Layout>
       <div style={{ position: "fixed", inset: 0, zIndex: -1, background: "#0a0a12" }}>
@@ -610,30 +566,7 @@ export default function Trip() {
 
       {/* ── DESKTOP ── */}
       <div className="flex-1 min-h-0 hidden lg:flex flex-col">
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <WaydoraLogo />
-            <div style={{ width: "1px", height: "20px", background: "rgba(255,255,255,0.1)" }} />
-            <Link href="/?chat=1">
-              <button style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "9px", padding: "6px 12px", color: "rgba(255,255,255,0.7)", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}
-                onMouseEnter={e => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
-                onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.7)"; e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}>
-                <MessageSquare style={{ width: "13px", height: "13px" }} />Pianificatore
-              </button>
-            </Link>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "1.1rem" }}>{itinerary.heroEmoji ?? "🗺️"}</span>
-            <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{itinerary.title}</span>
-          </div>
-          <button onClick={handleCopy} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "7px 16px", borderRadius: "9999px", background: copied ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.09)", border: copied ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(255,255,255,0.18)", color: copied ? "#34d399" : "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
-            {copied ? <Check style={{ width: "13px", height: "13px" }} /> : <Copy style={{ width: "13px", height: "13px" }} />}
-            {copied ? "Copiato!" : "Copia link"}
-          </button>
-        </div>
-
-        {/* Body: toolbar | contenuto | chat */}
+        {pageHeader(false)}
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
           <ToolbarDesktop active={activeTool} onChange={setActiveTool} />
           <div style={{ flex: 1, minHeight: 0, overflowY: activeTool === "map" ? "hidden" : "auto" }}>
@@ -646,25 +579,10 @@ export default function Trip() {
       </div>
 
       {/* ── MOBILE ── */}
-      <div className="flex-1 min-h-0 lg:hidden flex flex-col" style={{ paddingBottom: "68px" }}>
-        {/* Header mobile */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <WaydoraLogo />
-            <div style={{ width: "1px", height: "16px", background: "rgba(255,255,255,0.1)" }} />
-            <Link href="/?chat=1">
-              <button style={{ background: "none", border: "none", color: "rgba(255,255,255,0.55)", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600 }}>
-                <MessageSquare style={{ width: "13px", height: "13px" }} />Pianificatore
-              </button>
-            </Link>
-          </div>
-          <button onClick={handleCopy} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", border: "1px solid rgba(255,255,255,0.15)", color: copied ? "#34d399" : "#fff", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
-            {copied ? <Check style={{ width: "12px", height: "12px" }} /> : <Copy style={{ width: "12px", height: "12px" }} />}
-            {copied ? "Copiato!" : "Copia"}
-          </button>
-        </div>
+      <div className="flex-1 min-h-0 lg:hidden flex flex-col" style={{ paddingBottom: "72px" }}>
+        {pageHeader(true)}
 
-        {/* Contenuto — occupa tutto tranne header + toolbar */}
+        {/* Contenuto */}
         <div style={{ flex: 1, minHeight: 0, overflowY: activeTool === "map" ? "hidden" : "auto" }}>
           {activeTool === "itinerary"
             ? <div style={{ padding: "16px", paddingBottom: "24px" }}><ItineraryResults itinerary={itinerary} /></div>
@@ -672,10 +590,21 @@ export default function Trip() {
           }
         </div>
 
-        {/* Toolbar bassa fissa — NON sovrappone il contenuto */}
-        <ToolbarMobile active={activeTool} onChange={setActiveTool} />
+        {/* Toolbar bassa fissa */}
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 30, display: "flex", overflowX: "auto", scrollbarWidth: "none", padding: "8px 8px 14px", ...glassDark, borderTop: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 -4px 24px rgba(0,0,0,0.4)" }}>
+          {TOOLS.map(t => {
+            const Icon = t.icon; const isActive = activeTool === t.id;
+            return (
+              <button key={t.id} onClick={() => setActiveTool(t.id)}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "6px 12px", borderRadius: "10px", border: "none", flexShrink: 0, cursor: "pointer", transition: "all 0.15s", background: isActive ? "rgba(255,255,255,0.12)" : "transparent", color: isActive ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "52px" }}>
+                <Icon style={{ width: "18px", height: "18px" }} />
+                <span style={{ fontSize: "9px", fontWeight: 600 }}>{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
-        {/* FAB Chat */}
+        {/* FAB Chat — gradiente logo, sopra i controlli zoom */}
         <ChatFAB messageCount={msgCount} onClick={() => setChatOpen(true)} />
 
         {/* Drawer chat */}

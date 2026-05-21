@@ -140,6 +140,7 @@ interface CreateTripPageProps {
   onSaveDraft: (draft: Partial<UserTripRow> & { title: string }) => Promise<UserTripRow | null>;
   onPublish: (id: string) => Promise<UserTripRow | null>;
   onDelete: (id: string) => void;
+  mobileOnly?: boolean; // ← aggiungi
 }
 
 export function CreateTripPage({ userId, trips, onSaveDraft, onPublish, onDelete }: CreateTripPageProps) {
