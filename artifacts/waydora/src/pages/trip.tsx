@@ -38,7 +38,6 @@ const TOOLS = [
   { id: "expenses",  label: "Spese",      icon: DollarSign },
 ];
 
-// Altezza toolbar in basso (px) — usato per il paddingBottom della mappa
 const TOOLBAR_H = 80;
 
 function WaydoraLogo() {
@@ -52,7 +51,11 @@ function WaydoraLogo() {
   );
 }
 
-type TripMessage = { id: string; share_slug: string; author: string; text: string; type: "message" | "ai_request" | "ai_update"; created_at: string; };
+type TripMessage = {
+  id: string; share_slug: string; author: string;
+  text: string; type: "message" | "ai_request" | "ai_update" | "idea";
+  created_at: string;
+};
 
 // ── TripChat ──────────────────────────────────────────────────────────────
 function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
@@ -80,14 +83,24 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
   }, [rateKey, rateLimit]);
 
   useEffect(() => {
-    supabase.from("trip_messages").select("*").eq("share_slug", slug).order("created_at", { ascending: true }).limit(100)
+    // Carica messaggi (solo chat, non idee)
+    supabase.from("trip_messages").select("*")
+      .eq("share_slug", slug)
+      .in("type", ["message", "ai_request", "ai_update"])
+      .order("created_at", { ascending: true }).limit(100)
       .then(({ data }) => { if (data) setMessages(data as TripMessage[]); });
   }, [slug]);
 
   useEffect(() => {
     const ch = supabase.channel(`trip_chat_${slug}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "trip_messages", filter: `share_slug=eq.${slug}` },
-        p => { const m = p.new as TripMessage; setMessages(prev => prev.find(x => x.id === m.id) ? prev : [...prev, m]); })
+        p => {
+          const m = p.new as TripMessage;
+          // Solo messaggi chat (non idee)
+          if (["message", "ai_request", "ai_update"].includes(m.type)) {
+            setMessages(prev => prev.find(x => x.id === m.id) ? prev : [...prev, m]);
+          }
+        })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [slug]);
@@ -150,7 +163,6 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#0a0a12" }}>
-      {/* Header */}
       <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <MessageSquare style={{ width: "15px", height: "15px", color: "#a78bfa" }} />
@@ -181,7 +193,6 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
         </div>
       )}
 
-      {/* Messaggi */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px" }}>
         {messages.length === 0
           ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "40px 20px" }}>
@@ -199,7 +210,6 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
       <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
         <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
           <textarea value={input} onChange={e => setInput(e.target.value)}
@@ -218,7 +228,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
   );
 }
 
-// ── MapPanel — mappa occupa tutto, pulsante Google Maps sovrapposto ────────
+// ── MapPanel ──────────────────────────────────────────────────────────────
 function MapPanel({ itinerary, mobileToolbarH = 0 }: { itinerary: any; mobileToolbarH?: number }) {
   const [mapLoaded, setMapLoaded] = useState(false);
   useEffect(() => { const t = setTimeout(() => setMapLoaded(true), 100); return () => clearTimeout(t); }, []);
@@ -233,16 +243,12 @@ function MapPanel({ itinerary, mobileToolbarH = 0 }: { itinerary: any; mobileToo
 
   return (
     <div style={{ position: "relative", height: "100%", width: "100%" }}>
-      {/* Pulsante Google Maps sovrapposto in alto a destra */}
       <div style={{ position: "absolute", top: "12px", right: "12px", zIndex: 10 }}>
         <button onClick={openMaps}
           style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "7px 14px", borderRadius: "9999px", background: "rgba(66,133,244,0.92)", color: "#fff", border: "none", cursor: "pointer", boxShadow: "0 2px 12px rgba(66,133,244,0.4)" }}>
           <Navigation style={{ width: "12px", height: "12px" }} />Google Maps<ExternalLink style={{ width: "11px", height: "11px" }} />
         </button>
       </div>
-
-      {/* La mappa ha un paddingBottom pari all'altezza della toolbar
-          così i controlli zoom di Google Maps non vengono coperti */}
       <div style={{ position: "absolute", inset: 0, paddingBottom: mobileToolbarH > 0 ? `${mobileToolbarH}px` : "0" }}>
         {mapLoaded
           ? <TripMap itinerary={itinerary} />
@@ -330,26 +336,102 @@ function WeatherPanel({ destination, durationDays }: { destination: string; dura
   );
 }
 
+// ── IdeasPanel — condiviso in realtime via Supabase (type "idea") ──────────
 function IdeasPanel({ slug }: { slug: string }) {
-  const [ideas, setIdeas] = useState<Array<{ id: string; text: string; author: string; ts: string }>>([]);
+  const { user } = useAuth();
+  const [ideas, setIdeas] = useState<TripMessage[]>([]);
   const [input, setInput] = useState("");
-  const [name,  setName]  = useState(() => localStorage.getItem("waydora_guest_name") ?? "");
-  useEffect(() => { const s = localStorage.getItem(`trip_ideas_${slug}`); if (s) { try { setIdeas(JSON.parse(s)); } catch {} } }, [slug]);
-  const persist = (u: typeof ideas) => localStorage.setItem(`trip_ideas_${slug}`, JSON.stringify(u));
-  const add = () => { if (!input.trim()) return; const author = name.trim() || "Anonimo"; localStorage.setItem("waydora_guest_name", author); const updated = [...ideas, { id: Date.now().toString(), text: input.trim(), author, ts: new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) }]; setIdeas(updated); persist(updated); setInput(""); };
+  const [name,  setName]  = useState(() => user?.name ?? localStorage.getItem("waydora_guest_name") ?? "");
+
+  // Carica idee esistenti
+  useEffect(() => {
+    supabase.from("trip_messages").select("*")
+      .eq("share_slug", slug).eq("type", "idea")
+      .order("created_at", { ascending: true })
+      .then(({ data }) => { if (data) setIdeas(data as TripMessage[]); });
+  }, [slug]);
+
+  // Realtime: nuove idee arrivano a tutti
+  useEffect(() => {
+    const ch = supabase.channel(`trip_ideas_rt_${slug}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "trip_messages", filter: `share_slug=eq.${slug}` },
+        p => {
+          const m = p.new as TripMessage;
+          if (m.type === "idea") {
+            setIdeas(prev => prev.find(x => x.id === m.id) ? prev : [...prev, m]);
+          }
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [slug]);
+
+  const addIdea = async () => {
+    if (!input.trim()) return;
+    const author = (user?.name ?? name.trim()) || "Anonimo";
+    if (!user) localStorage.setItem("waydora_guest_name", author);
+    setName(author);
+    // Insert su Supabase — il realtime lo distribuisce a tutti
+    await supabase.from("trip_messages").insert({
+      share_slug: slug,
+      author,
+      text: input.trim(),
+      type: "idea",
+    });
+    setInput("");
+  };
+
+  const removeIdea = async (id: string) => {
+    // Rimozione locale immediata + delete su Supabase
+    setIdeas(prev => prev.filter(i => i.id !== id));
+    await supabase.from("trip_messages").delete().eq("id", id);
+  };
+
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: "16px", gap: "12px" }}>
-      <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>💡 Idee</div>
-      <input value={name} onChange={e => { setName(e.target.value); localStorage.setItem("waydora_guest_name", e.target.value); }} placeholder="Il tuo nome"
-        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "7px 12px", color: "#fff", fontSize: "12px", outline: "none" }} />
-      <div style={{ display: "flex", gap: "8px" }}>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} placeholder="Aggiungi un'idea..."
-          style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "8px 12px", color: "#fff", fontSize: "13px", outline: "none" }} />
-        <button onClick={add} style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><Plus style={{ width: "15px", height: "15px" }} /></button>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <Lightbulb style={{ width: "16px", height: "16px", color: "#fbbf24" }} />
+        <span style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Idee condivise</span>
+        <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.06)", padding: "2px 8px", borderRadius: "9999px" }}>visibili a tutti</span>
       </div>
+
+      {/* Nome utente se non loggato */}
+      {!user && (
+        <input value={name} onChange={e => { setName(e.target.value); localStorage.setItem("waydora_guest_name", e.target.value); }}
+          placeholder="Il tuo nome (opzionale)"
+          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "7px 12px", color: "#fff", fontSize: "12px", outline: "none" }} />
+      )}
+
+      {/* Input nuova idea */}
+      <div style={{ display: "flex", gap: "8px" }}>
+        <input value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") addIdea(); }}
+          placeholder="Aggiungi un'idea..."
+          style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "8px 12px", color: "#fff", fontSize: "13px", outline: "none" }} />
+        <button onClick={addIdea} style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+          <Plus style={{ width: "15px", height: "15px" }} />
+        </button>
+      </div>
+
+      {/* Lista idee */}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "7px" }}>
-        {ideas.length === 0 ? <div style={{ textAlign: "center", padding: "40px", color: "rgba(255,255,255,0.3)" }}><div style={{ fontSize: "2rem" }}>💡</div><p style={{ fontSize: "13px" }}>Nessuna idea</p></div>
-          : ideas.map(idea => <div key={idea.id} style={{ display: "flex", gap: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", padding: "10px 12px" }}><div style={{ flex: 1 }}><div style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)" }}>{idea.text}</div><div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", marginTop: "3px" }}>— {idea.author} · {idea.ts}</div></div><button onClick={() => { const u = ideas.filter(i => i.id !== idea.id); setIdeas(u); persist(u); }} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 0 }}><X style={{ width: "13px", height: "13px" }} /></button></div>)}
+        {ideas.length === 0
+          ? <div style={{ textAlign: "center", padding: "40px", color: "rgba(255,255,255,0.3)" }}>
+              <div style={{ fontSize: "2rem", marginBottom: "8px" }}>💡</div>
+              <p style={{ fontSize: "13px" }}>Nessuna idea ancora.</p>
+              <p style={{ fontSize: "12px" }}>Le idee che aggiungi sono visibili a tutti con il link.</p>
+            </div>
+          : ideas.map(idea => (
+            <div key={idea.id} style={{ display: "flex", gap: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px", padding: "10px 12px" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.85)" }}>{idea.text}</div>
+                <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)", marginTop: "3px" }}>— {idea.author} · {new Date(idea.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</div>
+              </div>
+              <button onClick={() => removeIdea(idea.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 0, flexShrink: 0 }}>
+                <X style={{ width: "13px", height: "13px" }} />
+              </button>
+            </div>
+          ))
+        }
       </div>
     </div>
   );
@@ -387,12 +469,17 @@ function MediaPanel({ slug }: { slug: string }) {
   return (
     <div style={{ padding: "20px", height: "100%", display: "flex", flexDirection: "column", gap: "14px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>📸 Foto e media</div>
+        <div>
+          <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>📸 Foto e media</div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginTop: "2px" }}>Solo visibili su questo dispositivo</div>
+        </div>
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => { setFiles(prev => [...prev, ...Array.from(e.target.files ?? []).map(f => ({ name: f.name, preview: URL.createObjectURL(f) }))]); e.target.value = ""; }} />
         <button onClick={() => fileRef.current?.click()} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer" }}><Plus style={{ width: "13px", height: "13px" }} />Carica</button>
       </div>
-      {files.length === 0 ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center" }}><Camera style={{ width: "36px", height: "36px", opacity: 0.3 }} /><p style={{ fontSize: "13px" }}>Nessun media ancora</p></div>
-        : <div style={{ flex: 1, overflowY: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>{files.map((f, i) => <div key={i} style={{ position: "relative", borderRadius: "10px", overflow: "hidden", aspectRatio: "1" }}><img src={f.preview} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={() => setFiles(p => p.filter((_, idx) => idx !== i))} style={{ position: "absolute", top: "4px", right: "4px", width: "20px", height: "20px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X style={{ width: "11px", height: "11px" }} /></button></div>)}</div>}
+      {files.length === 0
+        ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center" }}><Camera style={{ width: "36px", height: "36px", opacity: 0.3 }} /><p style={{ fontSize: "13px" }}>Nessun media ancora</p></div>
+        : <div style={{ flex: 1, overflowY: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>{files.map((f, i) => <div key={i} style={{ position: "relative", borderRadius: "10px", overflow: "hidden", aspectRatio: "1" }}><img src={f.preview} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={() => setFiles(p => p.filter((_, idx) => idx !== i))} style={{ position: "absolute", top: "4px", right: "4px", width: "20px", height: "20px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X style={{ width: "11px", height: "11px" }} /></button></div>)}</div>
+      }
     </div>
   );
 }
@@ -416,14 +503,13 @@ function ToolbarDesktop({ active, onChange }: { active: string; onChange: (id: s
   );
 }
 
-// ── FAB Chat — gradiente logo, non fixed per evitare problemi di z-index ──
+// ── FAB chat ──────────────────────────────────────────────────────────────
 function ChatFAB({ messageCount, onClick }: { messageCount: number; onClick: () => void }) {
   return (
     <button onClick={onClick}
       style={{
         position: "fixed",
-        // Sopra la toolbar (TOOLBAR_H) + spazio aggiuntivo per non coprire il + dello zoom
-        bottom: `${TOOLBAR_H + 24}px`,
+        bottom: `${TOOLBAR_H + 20}px`,
         right: "16px",
         zIndex: 35,
         width: "52px", height: "52px", borderRadius: "50%",
@@ -444,7 +530,7 @@ function ChatFAB({ messageCount, onClick }: { messageCount: number; onClick: () 
   );
 }
 
-// ── ChatDrawer mobile — bg esplicito per evitare pagina blu ───────────────
+// ── ChatDrawer — background solido, niente pagina blu ────────────────────
 function ChatDrawer({ slug, itinerary, onItineraryUpdate, open, onClose }: {
   slug: string; itinerary: any; onItineraryUpdate: (i: any) => void; open: boolean; onClose: () => void;
 }) {
@@ -452,27 +538,40 @@ function ChatDrawer({ slug, itinerary, onItineraryUpdate, open, onClose }: {
     <AnimatePresence>
       {open && (
         <>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}
-            style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.6)" }} />
+          {/* Overlay */}
           <motion.div
-            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 28, stiffness: 280 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+            style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.65)" }} />
+
+          {/* Drawer — background applicato PRIMA dell'animazione con initial style */}
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
             style={{
-              position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
-              height: "82vh",           // più alto per coprire la toolbar
+              position: "fixed", bottom: 0, left: 0, right: 0,
+              zIndex: 50,
+              height: "80vh",
               borderRadius: "20px 20px 0 0",
+              // Background SOLIDO — mai trasparente neanche durante l'animazione
+              backgroundColor: "#0d0a18",
+              borderTop: "1px solid rgba(255,255,255,0.12)",
+              borderLeft: "1px solid rgba(255,255,255,0.08)",
+              borderRight: "1px solid rgba(255,255,255,0.08)",
+              display: "flex",
+              flexDirection: "column",
               overflow: "hidden",
-              // Background esplicito — era trasparente e mostrava il blu dello schermo
-              background: "#0a0a12",
-              border: "1px solid rgba(255,255,255,0.1)",
-              display: "flex", flexDirection: "column",
+              // willChange ottimizza l'animazione senza rendere transparent il bg
+              willChange: "transform",
             }}>
-            {/* Handle pill */}
-            <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 0", flexShrink: 0 }}>
+            {/* Handle */}
+            <div style={{ display: "flex", justifyContent: "center", paddingTop: "10px", paddingBottom: "4px", flexShrink: 0, background: "#0d0a18" }}>
               <div style={{ width: "40px", height: "4px", borderRadius: "2px", background: "rgba(255,255,255,0.25)" }} />
             </div>
-            {/* Chat occupa tutto il resto */}
-            <div style={{ flex: 1, minHeight: 0 }}>
+            {/* Chat */}
+            <div style={{ flex: 1, minHeight: 0, background: "#0d0a18" }}>
               <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={onItineraryUpdate} onClose={onClose} />
             </div>
           </motion.div>
@@ -489,17 +588,17 @@ function renderTool(tool: string, itinerary: any, slug: string, isMobile = false
       <ItineraryResults itinerary={itinerary} />
     </div>
   );
-  if (tool === "map")      return <MapPanel itinerary={itinerary} mobileToolbarH={isMobile ? TOOLBAR_H : 0} />;
-  if (tool === "calendar") return <CalendarPanel itinerary={itinerary} />;
-  if (tool === "weather")  return <WeatherPanel destination={itinerary.destination} durationDays={itinerary.durationDays ?? 3} />;
-  if (tool === "ideas")    return <IdeasPanel slug={slug} />;
-  if (tool === "bagaglio") return <BaggagePanel packingList={itinerary.packingList ?? []} destination={itinerary.destination} />;
-  if (tool === "media")    return <MediaPanel slug={slug} />;
-  if (tool === "expenses") return (
+  if (tool === "map")       return <MapPanel itinerary={itinerary} mobileToolbarH={isMobile ? TOOLBAR_H : 0} />;
+  if (tool === "calendar")  return <CalendarPanel itinerary={itinerary} />;
+  if (tool === "weather")   return <WeatherPanel destination={itinerary.destination} durationDays={itinerary.durationDays ?? 3} />;
+  if (tool === "ideas")     return <IdeasPanel slug={slug} />;
+  if (tool === "bagaglio")  return <BaggagePanel packingList={itinerary.packingList ?? []} destination={itinerary.destination} />;
+  if (tool === "media")     return <MediaPanel slug={slug} />;
+  if (tool === "expenses")  return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", textAlign: "center", padding: "32px" }}>
       <div style={{ fontSize: "2.8rem" }}>💰</div>
       <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Gestione spese</div>
-      <div style={{ fontSize: "12px", fontWeight: 600, padding: "6px 16px", borderRadius: "9999px", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.12)" }}>Disponibile prossimamente</div>
+      <div style={{ fontSize: "12px", padding: "6px 16px", borderRadius: "9999px", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.12)" }}>Disponibile prossimamente</div>
     </div>
   );
   return null;
@@ -531,10 +630,13 @@ export default function Trip() {
 
   useEffect(() => {
     if (!slug) return;
-    supabase.from("trip_messages").select("id", { count: "exact", head: true }).eq("share_slug", slug)
+    // Conta solo messaggi chat (non idee)
+    supabase.from("trip_messages").select("id", { count: "exact", head: true })
+      .eq("share_slug", slug).in("type", ["message", "ai_request", "ai_update"])
       .then(({ count }) => { if (count) setMsgCount(count); });
     const ch = supabase.channel(`trip_count_${slug}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "trip_messages", filter: `share_slug=eq.${slug}` }, () => setMsgCount(p => p + 1))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "trip_messages", filter: `share_slug=eq.${slug}` },
+        p => { if (["message", "ai_request", "ai_update"].includes((p.new as TripMessage).type)) setMsgCount(prev => prev + 1); })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [slug]);
@@ -583,7 +685,7 @@ export default function Trip() {
         <div style={{ position: "absolute", bottom: "5%", left: "-5%", width: "45vw", height: "45vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(168,85,247,0.12) 0%,transparent 65%)", filter: "blur(70px)" }} />
       </div>
 
-      {/* ── DESKTOP ── */}
+      {/* DESKTOP */}
       <div className="flex-1 min-h-0 hidden lg:flex flex-col">
         {pageHeader(false)}
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
@@ -597,31 +699,19 @@ export default function Trip() {
         </div>
       </div>
 
-      {/* ── MOBILE ── */}
+      {/* MOBILE */}
       <div className="flex-1 min-h-0 lg:hidden flex flex-col">
         {pageHeader(true)}
-
-        {/* Contenuto — se è la mappa non mettere overflow:auto (gestisce TripMap) */}
         <div style={{
           flex: 1, minHeight: 0,
           overflow: activeTool === "map" ? "hidden" : "auto",
-          // Per i tool non-mappa: paddingBottom per non essere coperti dalla toolbar
           paddingBottom: activeTool === "map" ? "0" : `${TOOLBAR_H}px`,
         }}>
           {renderTool(activeTool, itinerary, slug, true)}
         </div>
 
         {/* Toolbar bassa fissa */}
-        <div style={{
-          position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 30,
-          height: `${TOOLBAR_H}px`,
-          display: "flex", alignItems: "center",
-          overflowX: "auto", scrollbarWidth: "none",
-          padding: "0 4px 8px",
-          ...glassDark,
-          borderTop: "1px solid rgba(255,255,255,0.1)",
-          boxShadow: "0 -4px 24px rgba(0,0,0,0.5)",
-        }}>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 30, height: `${TOOLBAR_H}px`, display: "flex", alignItems: "center", overflowX: "auto", scrollbarWidth: "none", padding: "0 4px 8px", ...glassDark, borderTop: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 -4px 24px rgba(0,0,0,0.5)" }}>
           {TOOLS.map(t => {
             const Icon = t.icon; const isActive = activeTool === t.id;
             return (
@@ -634,14 +724,9 @@ export default function Trip() {
           })}
         </div>
 
-        {/* FAB chat — sopra la toolbar, non sovrapposta ai controlli zoom */}
         <ChatFAB messageCount={msgCount} onClick={() => setChatOpen(true)} />
 
-        {/* Drawer chat — background esplicito, non più pagina blu */}
-        <ChatDrawer
-          slug={slug} itinerary={itinerary}
-          onItineraryUpdate={setItinerary}
-          open={chatOpen} onClose={() => setChatOpen(false)} />
+        <ChatDrawer slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} open={chatOpen} onClose={() => setChatOpen(false)} />
       </div>
     </Layout>
   );

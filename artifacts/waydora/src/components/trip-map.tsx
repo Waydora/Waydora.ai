@@ -12,15 +12,15 @@ function getDayColor(dayIndex: number): string {
 }
 
 type MarkerData = {
-  key: string;
-  lat: number;
-  lng: number;
-  day: number;
-  dayIndex: number;
-  title: string;
-  time: string;
-  category: string;
+  key: string; lat: number; lng: number;
+  day: number; dayIndex: number;
+  title: string; time: string; category: string;
 };
+
+// Rileva se siamo su mobile (viewport < 1024px)
+function isMobileViewport(): boolean {
+  return typeof window !== "undefined" && window.innerWidth < 1024;
+}
 
 export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -40,13 +40,9 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
         if (a.coordinates?.lat && a.coordinates?.lng) {
           out.push({
             key: `${day.day}-${actIdx}`,
-            lat: a.coordinates.lat,
-            lng: a.coordinates.lng,
-            day: day.day,
-            dayIndex,
-            title: a.title,
-            time: a.time,
-            category: a.category,
+            lat: a.coordinates.lat, lng: a.coordinates.lng,
+            day: day.day, dayIndex,
+            title: a.title, time: a.time, category: a.category,
           });
           dayPoints.push({ lat: a.coordinates.lat, lng: a.coordinates.lng });
         }
@@ -61,7 +57,8 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
     if (!apiKey || !mapRef.current) return;
 
-    // Carica Google Maps script se non già caricato
+    const mobile = isMobileViewport();
+
     const loadMap = () => {
       if (!mapRef.current) return;
 
@@ -70,27 +67,27 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
         : { lat: 41.9028, lng: 12.4964 };
 
       googleMapRef.current = new google.maps.Map(mapRef.current, {
-  center,
-  zoom: 10,
-  mapTypeId: "roadmap",
+        center,
+        zoom: 10,
+        mapTypeId: "roadmap",
 
-  gestureHandling: "cooperative",
-  zoomControl: true,
-  clickableIcons: false,
-  keyboardShortcuts: false,
+        // Su mobile: greedy = un dito per muovere la mappa, nessuno zoom controls
+        gestureHandling: mobile ? "greedy" : "cooperative",
+        zoomControl: !mobile,          // ← nasconde + e - su mobile
+        zoomControlOptions: mobile ? undefined : {
+          position: google.maps.ControlPosition.RIGHT_BOTTOM,
+        },
 
-  styles: [
-    {
-      featureType: "poi",
-      elementType: "labels",
-      stylers: [{ visibility: "off" }],
-    },
-  ],
+        clickableIcons: false,
+        keyboardShortcuts: false,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
 
-  mapTypeControl: false,
-  streetViewControl: false,
-  fullscreenControl: false,
-});
+        styles: [
+          { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+        ],
+      });
 
       // Pulisci vecchi marker e polyline
       markersRef.current.forEach(m => m.setMap(null));
@@ -100,7 +97,7 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
 
       const bounds = new google.maps.LatLngBounds();
 
-      // Aggiungi marker
+      // Marker
       markers.forEach((m) => {
         const color = getDayColor(m.dayIndex);
         const marker = new google.maps.Marker({
@@ -144,46 +141,33 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
       });
 
       // Route reali Google Directions
-Object.entries(polylinesByDay).forEach(([dayIdx, points]) => {
-  if (points.length < 2) return;
+      Object.entries(polylinesByDay).forEach(([dayIdx, points]) => {
+        if (points.length < 2) return;
 
-  const directionsService = new google.maps.DirectionsService();
+        const directionsService  = new google.maps.DirectionsService();
+        const directionsRenderer = new google.maps.DirectionsRenderer({
+          suppressMarkers: true,
+          preserveViewport: true,
+          polylineOptions: {
+            strokeColor: getDayColor(Number(dayIdx)),
+            strokeOpacity: 0.75,
+            strokeWeight: 5,
+          },
+        });
 
-  const directionsRenderer = new google.maps.DirectionsRenderer({
-    suppressMarkers: true,
-    preserveViewport: true,
-    polylineOptions: {
-      strokeColor: getDayColor(Number(dayIdx)),
-      strokeOpacity: 0.75,
-      strokeWeight: 5,
-    },
-  });
+        directionsRenderer.setMap(googleMapRef.current!);
 
-  directionsRenderer.setMap(googleMapRef.current!);
+        const origin      = points[0];
+        const destination = points[points.length - 1];
+        const waypoints   = points.slice(1, -1).map(p => ({ location: p, stopover: true }));
 
-  const origin = points[0];
-  const destination = points[points.length - 1];
-
-  const waypoints = points.slice(1, -1).map((p) => ({
-    location: p,
-    stopover: true,
-  }));
-
-  directionsService.route(
-    {
-      origin,
-      destination,
-      waypoints,
-      optimizeWaypoints: true,
-      travelMode: google.maps.TravelMode.WALKING,
-    },
-    (result, status) => {
-      if (status === "OK" && result) {
-        directionsRenderer.setDirections(result);
-      }
-    }
-  );
-});
+        directionsService.route(
+          { origin, destination, waypoints, optimizeWaypoints: true, travelMode: google.maps.TravelMode.WALKING },
+          (result, status) => {
+            if (status === "OK" && result) directionsRenderer.setDirections(result);
+          }
+        );
+      });
 
       // Fit bounds
       if (markers.length > 1) {
