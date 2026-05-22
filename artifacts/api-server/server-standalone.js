@@ -1,5 +1,8 @@
 const http = require("http");
 const https = require("https");
+const AnthropicLib = require("@anthropic-ai/sdk");
+const Anthropic = AnthropicLib.default ?? AnthropicLib;
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 55000, maxRetries: 0 });
 
 // ── Rate limiting per IP ──────────────────────────────────────────────────
 const WINDOW_MS    = 60 * 60 * 1000;
@@ -178,87 +181,48 @@ async function enrichWithTikTok(messages) {
   return enriched;
 }
 
-// ── Claude API ────────────────────────────────────────────────────────────
-function callClaude(messages, existingItinerary, mediaContent, userTier = "guest") {
-  return new Promise((resolve, reject) => {
-    const systemPrompt = existingItinerary
-      ? `${SYSTEM_PROMPT}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`
-      : SYSTEM_PROMPT;
+// ── Claude API (via SDK ufficiale) ────────────────────────────────────────
+async function callClaude(messages, existingItinerary, mediaContent, userTier = "guest") {
+  const systemPrompt = existingItinerary
+    ? `${SYSTEM_PROMPT}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`
+    : SYSTEM_PROMPT;
 
-    const lastMsg  = messages[messages.length - 1]?.content || "";
-    const textContent = typeof lastMsg === "string" ? lastMsg : "";
-    const daysMatch = textContent.match(/(\d+)\s*(giorni|day|notti|notte)/i);
-    const days = daysMatch ? parseInt(daysMatch[1]) : 3;
-    const tierLimit = TIER_TOKENS[userTier] ?? TIER_TOKENS.guest;
-    const maxTokens = Math.min(tierLimit, Math.max(2000, days * 800 + 2000));
+  const lastMsg     = messages[messages.length - 1]?.content || "";
+  const textContent = typeof lastMsg === "string" ? lastMsg : "";
+  const daysMatch   = textContent.match(/(\d+)\s*(giorni|day|notti|notte)/i);
+  const days        = daysMatch ? parseInt(daysMatch[1]) : 3;
+  const tierLimit   = TIER_TOKENS[userTier] ?? TIER_TOKENS.guest;
+  const maxTokens   = Math.min(tierLimit, Math.max(2000, days * 800 + 2000));
 
-    let claudeMessages = [...messages];
-    if (mediaContent && claudeMessages.length > 0) {
-      const last = claudeMessages[claudeMessages.length - 1];
-      const t = typeof last.content === "string" ? last.content : "";
-      claudeMessages[claudeMessages.length - 1] = {
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mediaContent.mediaType, data: mediaContent.data } },
-          { type: "text", text: t || "Analizza questa immagine e suggerisci un itinerario." },
-        ],
-      };
-    }
-
-    const body = JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: claudeMessages,
-    });
-
-    const options = {
-      hostname: "api.anthropic.com",
-      path: "/v1/messages",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        // Content-Length omesso: Node.js usa Transfer-Encoding chunked
-        // (evita mismatch con emoji/caratteri multi-byte nel system prompt)
-      },
+  let claudeMessages = [...messages];
+  if (mediaContent && claudeMessages.length > 0) {
+    const last = claudeMessages[claudeMessages.length - 1];
+    const t = typeof last.content === "string" ? last.content : "";
+    claudeMessages[claudeMessages.length - 1] = {
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: mediaContent.mediaType, data: mediaContent.data } },
+        { type: "text", text: t || "Analizza questa immagine e suggerisci un itinerario." },
+      ],
     };
+  }
 
-    const req = https.request(options, (res) => {
-      let data = "";
-      res.setEncoding("utf8");
-      res.on("data", c => { data += c; });
-      res.on("end", () => {
-        console.log(`[callClaude] HTTP status: ${res.statusCode}, bytes: ${data.length}`);
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.error) {
-            console.error("[callClaude] Anthropic error:", JSON.stringify(parsed.error));
-            reject(new Error(parsed.error.message));
-            return;
-          }
-          let text = parsed.content?.[0]?.text || "";
-          text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
-          const stopReason = parsed.stop_reason || "end_turn";
-          console.log(`[callClaude] OK — stopReason=${stopReason}, outputLen=${text.length}`);
-          if (stopReason === "max_tokens") {
-            console.warn(`[callClaude] Troncato a max_tokens=${maxTokens}. Inizio:`, text.substring(0, 200));
-          }
-          resolve({ text, stopReason });
-        } catch (e) {
-          console.error("[callClaude] Parse error:", e.message, "| raw:", data.substring(0, 300));
-          reject(e);
-        }
-      });
-    });
-    req.on("error", (e) => {
-      console.error("[callClaude] Network error:", e.code, e.message);
-      reject(e);
-    });
-    req.setTimeout(55000, () => { req.destroy(); reject(new Error("Claude API timeout")); });
-    req.end(body); // scrive il body e chiude la richiesta in un solo step
+  console.log(`[callClaude] Calling claude-sonnet-4-6, maxTokens=${maxTokens}, msgs=${claudeMessages.length}`);
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: claudeMessages,
   });
+
+  let text = response.content?.[0]?.text || "";
+  text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+  const stopReason = response.stop_reason || "end_turn";
+  console.log(`[callClaude] OK — stopReason=${stopReason}, outputLen=${text.length}`);
+  if (stopReason === "max_tokens") {
+    console.warn(`[callClaude] Troncato a max_tokens=${maxTokens}. Inizio:`, text.substring(0, 200));
+  }
+  return { text, stopReason };
 }
 
 // ── Google Places ─────────────────────────────────────────────────────────
