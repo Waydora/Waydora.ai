@@ -220,7 +220,8 @@ function callClaude(messages, existingItinerary, mediaContent, userTier = "guest
         "Content-Type": "application/json",
         "x-api-key": process.env.ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01",
-        "Content-Length": Buffer.byteLength(body),
+        // Content-Length omesso: Node.js usa Transfer-Encoding chunked
+        // (evita mismatch con emoji/caratteri multi-byte nel system prompt)
       },
     };
 
@@ -251,10 +252,12 @@ function callClaude(messages, existingItinerary, mediaContent, userTier = "guest
         }
       });
     });
-    req.on("error", reject);
+    req.on("error", (e) => {
+      console.error("[callClaude] Network error:", e.code, e.message);
+      reject(e);
+    });
     req.setTimeout(55000, () => { req.destroy(); reject(new Error("Claude API timeout")); });
-    req.write(body);
-    req.end();
+    req.end(body); // scrive il body e chiude la richiesta in un solo step
   });
 }
 
