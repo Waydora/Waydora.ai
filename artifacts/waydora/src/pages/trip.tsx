@@ -37,8 +37,13 @@ const TOOLS = [
   { id: "expenses",  label: "Spese",      icon: DollarSign },
 ];
 
-// ── CSS-only Drawer — nessun framer-motion ────────────────────────────────
-// Soluzione al bug Safari iOS: background nero durante translateY animation
+// Genera ID canale univoco — evita conflitti quando React StrictMode
+// monta/smonta due volte lo stesso componente
+function chanId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// ── CSS-only Drawer ───────────────────────────────────────────────────────
 function Drawer({ open, onClose, children }: {
   open: boolean; onClose: () => void; children: React.ReactNode;
 }) {
@@ -49,7 +54,6 @@ function Drawer({ open, onClose, children }: {
 
   return (
     <>
-      {/* Overlay */}
       <div onClick={onClose} style={{
         position: "fixed", inset: 0, zIndex: 40,
         background: "rgba(0,0,0,0.7)",
@@ -57,33 +61,21 @@ function Drawer({ open, onClose, children }: {
         pointerEvents: open ? "auto" : "none",
         transition: "opacity 0.28s ease",
       }} />
-
-      {/* Panel — background solido dichiarato PRIMA dell'animazione */}
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
         height: "82vh",
-        // Background opaco applicato sempre, non solo dopo l'animazione
         backgroundColor: "#0d0a18",
         borderTop: "1px solid rgba(255,255,255,0.15)",
         borderRadius: "20px 20px 0 0",
         display: "flex", flexDirection: "column",
         overflow: "hidden",
-        // CSS transition — Safari gestisce questo correttamente
         transform: open ? "translateY(0%)" : "translateY(100%)",
         transition: "transform 0.32s cubic-bezier(0.32,0.72,0,1)",
-        WebkitTransform: open ? "translateY(0%)" : "translateY(100%)",
-        // Crea layer GPU prima dell'animazione
         willChange: "transform",
       }}>
-        {/* Handle */}
-        <div style={{
-          display: "flex", justifyContent: "center",
-          padding: "10px 0 4px", flexShrink: 0,
-          backgroundColor: "#0d0a18",
-        }}>
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px", flexShrink: 0, backgroundColor: "#0d0a18" }}>
           <div style={{ width: "40px", height: "4px", borderRadius: "2px", background: "rgba(255,255,255,0.3)" }} />
         </div>
-        {/* Contenuto */}
         <div style={{ flex: 1, minHeight: 0, backgroundColor: "#0d0a18" }}>
           {children}
         </div>
@@ -92,7 +84,6 @@ function Drawer({ open, onClose, children }: {
   );
 }
 
-// ── WaydoraLogo ───────────────────────────────────────────────────────────
 function WaydoraLogo() {
   return (
     <Link href="/">
@@ -121,15 +112,19 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
   const rateKey   = `trip_ai_calls_${slug}`;
   const rateLimit = user ? RATE_LIMIT_USER : RATE_LIMIT_GUEST;
 
+  // Rate limit
   useEffect(() => {
     const s = localStorage.getItem(rateKey);
     if (s) {
-      const { count, resetAt } = JSON.parse(s);
-      if (Date.now() > resetAt) { localStorage.removeItem(rateKey); setAiCallsLeft(rateLimit); }
-      else setAiCallsLeft(rateLimit - count);
-    } else setAiCallsLeft(rateLimit);
+      try {
+        const { count, resetAt } = JSON.parse(s);
+        if (Date.now() > resetAt) { localStorage.removeItem(rateKey); setAiCallsLeft(rateLimit); }
+        else setAiCallsLeft(rateLimit - count);
+      } catch { setAiCallsLeft(rateLimit); }
+    } else { setAiCallsLeft(rateLimit); }
   }, [rateKey, rateLimit]);
 
+  // Carica messaggi iniziali
   useEffect(() => {
     supabase.from("trip_messages").select("*")
       .eq("share_slug", slug)
@@ -138,21 +133,35 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
       .then(({ data }) => { if (data) setMessages(data as TripMessage[]); });
   }, [slug]);
 
+  // Realtime messaggi chat — UN SOLO canale con ID univoco
   useEffect(() => {
-    const ch = supabase.channel(`tc_${slug}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "trip_messages", filter: `share_slug=eq.${slug}` },
-        p => {
-          const m = p.new as TripMessage;
-          if (["message","ai_request","ai_update"].includes(m.type))
-            setMessages(prev => prev.find(x => x.id === m.id) ? prev : [...prev, m]);
-        }).subscribe();
+    const id = chanId("chat");
+    const ch = supabase.channel(id)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public",
+        table: "trip_messages", filter: `share_slug=eq.${slug}`,
+      }, payload => {
+        const m = payload.new as TripMessage;
+        if (["message","ai_request","ai_update"].includes(m.type))
+          setMessages(prev => prev.find(x => x.id === m.id) ? prev : [...prev, m]);
+      })
+      .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [slug]);
 
+  // Realtime aggiornamenti itinerario — canale separato con ID univoco
   useEffect(() => {
-    const ch = supabase.channel(`ti_${slug}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "saved_trips", filter: `share_slug=eq.${slug}` },
-        p => { if (p.new?.itinerary) { onItineraryUpdate(p.new.itinerary); toast({ title: "✨ Itinerario aggiornato!" }); } })
+    const id = chanId("itin");
+    const ch = supabase.channel(id)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public",
+        table: "saved_trips", filter: `share_slug=eq.${slug}`,
+      }, p => {
+        if (p.new?.itinerary) {
+          onItineraryUpdate(p.new.itinerary);
+          toast({ title: "✨ Itinerario aggiornato!" });
+        }
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [slug, onItineraryUpdate, toast]);
@@ -162,7 +171,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
   const incAi = () => {
     const s = localStorage.getItem(rateKey);
     let count = 1; const resetAt = Date.now() + 3600000;
-    if (s) { const d = JSON.parse(s); if (Date.now() < d.resetAt) count = d.count + 1; }
+    if (s) { try { const d = JSON.parse(s); if (Date.now() < d.resetAt) count = d.count + 1; } catch {} }
     localStorage.setItem(rateKey, JSON.stringify({ count, resetAt }));
     setAiCallsLeft(rateLimit - count);
     return count <= rateLimit;
@@ -194,7 +203,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
     setAiPending(false);
   }, [input, aiPending, itinerary, slug, user, toast]);
 
-  const bg = (t: TripMessage["type"]): React.CSSProperties => {
+  const msgBg = (t: TripMessage["type"]): React.CSSProperties => {
     if (t === "ai_request") return { background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.3)", borderRadius: "12px", padding: "10px 12px" };
     if (t === "ai_update")  return { background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: "12px", padding: "10px 12px" };
     return { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "12px", padding: "10px 12px" };
@@ -214,11 +223,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
             <button onClick={() => setIsAiMode(false)} style={{ padding: "5px 10px", borderRadius: "7px", border: "none", fontSize: "12px", fontWeight: 600, cursor: "pointer", background: !isAiMode ? "rgba(255,255,255,0.14)" : "transparent", color: !isAiMode ? "#fff" : "rgba(255,255,255,0.4)" }}>💬</button>
             <button onClick={() => setIsAiMode(true)}  style={{ padding: "5px 10px", borderRadius: "7px", border: "none", fontSize: "12px", fontWeight: 600, cursor: "pointer", background: isAiMode ? "rgba(168,85,247,0.3)" : "transparent", color: isAiMode ? "#c4b5fd" : "rgba(255,255,255,0.4)" }}>✨ AI</button>
           </div>
-          {onClose && (
-            <button onClick={onClose} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px", width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.6)" }}>
-              <X style={{ width: "14px", height: "14px" }} />
-            </button>
-          )}
+          {onClose && <button onClick={onClose} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px", width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.6)" }}><X style={{ width: "14px", height: "14px" }} /></button>}
         </div>
       </div>
 
@@ -242,11 +247,11 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
         {messages.length === 0
           ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "60px 20px" }}>
               <MessageSquare style={{ width: "36px", height: "36px", opacity: 0.25 }} />
-              <p style={{ fontSize: "14px", fontWeight: 600, color: "rgba(255,255,255,0.4)" }}>Nessun messaggio ancora</p>
+              <p style={{ fontSize: "14px", fontWeight: 600, color: "rgba(255,255,255,0.4)" }}>Nessun messaggio</p>
               <p style={{ fontSize: "12px" }}>Commenta o proponi una modifica AI!</p>
             </div>
           : messages.map(msg => (
-            <div key={msg.id} style={bg(msg.type)}>
+            <div key={msg.id} style={msgBg(msg.type)}>
               <div style={{ fontSize: "13px", color: msg.type === "ai_update" ? "#6ee7b7" : "rgba(255,255,255,0.88)", marginBottom: "4px", lineHeight: 1.55 }}>{msg.text}</div>
               <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>{msg.author} · {new Date(msg.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</div>
             </div>
@@ -259,12 +264,18 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
       <div style={{ padding: "10px 14px 14px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0, backgroundColor: "#0d0a18" }}>
         <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
           <textarea value={input} onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (isAiMode) sendAi(); else { if (input.trim()) { sendMsg(input.trim()); setInput(""); } } } }}
-            placeholder={isAiMode ? "Es: aggiungi una giornata, riduci il budget..." : "Scrivi un commento..."}
+            onKeyDown={e => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (isAiMode) sendAi();
+                else if (input.trim()) { sendMsg(input.trim()); setInput(""); }
+              }
+            }}
+            placeholder={isAiMode ? "Es: aggiungi una giornata..." : "Scrivi un commento..."}
             rows={1} disabled={aiPending}
             style={{ flex: 1, background: "rgba(255,255,255,0.08)", border: `1px solid ${isAiMode ? "rgba(168,85,247,0.35)" : "rgba(255,255,255,0.13)"}`, borderRadius: "14px", padding: "9px 14px", color: "#fff", fontSize: "13px", outline: "none", resize: "none", maxHeight: "120px", fontFamily: "inherit" }} />
           <button
-            onClick={() => { if (isAiMode) sendAi(); else { if (input.trim()) { sendMsg(input.trim()); setInput(""); } } }}
+            onClick={() => { if (isAiMode) sendAi(); else if (input.trim()) { sendMsg(input.trim()); setInput(""); } }}
             disabled={!input.trim() || aiPending}
             style={{ width: "40px", height: "40px", borderRadius: "50%", border: "none", flexShrink: 0, cursor: input.trim() && !aiPending ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", background: input.trim() && !aiPending ? (isAiMode ? "linear-gradient(135deg,#a855f7,#6366f1)" : "linear-gradient(135deg,#f97316,#a855f7)") : "rgba(255,255,255,0.08)", color: "#fff", transition: "all 0.15s" }}>
             {aiPending ? <Loader2 style={{ width: "15px", height: "15px", animation: "wds 0.8s linear infinite" }} /> : <Send style={{ width: "15px", height: "15px" }} />}
@@ -276,7 +287,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
   );
 }
 
-// ── IdeasPanel — Supabase realtime ────────────────────────────────────────
+// ── IdeasPanel — Supabase realtime con canale univoco ─────────────────────
 function IdeasPanel({ slug }: { slug: string }) {
   const { user } = useAuth();
   const [ideas, setIdeas] = useState<TripMessage[]>([]);
@@ -290,10 +301,17 @@ function IdeasPanel({ slug }: { slug: string }) {
       .then(({ data }) => { if (data) setIdeas(data as TripMessage[]); });
   }, [slug]);
 
+  // Canale con ID univoco per evitare conflitti
   useEffect(() => {
-    const ch = supabase.channel(`tid_${slug}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "trip_messages", filter: `share_slug=eq.${slug}` },
-        p => { const m = p.new as TripMessage; if (m.type === "idea") setIdeas(prev => prev.find(x => x.id === m.id) ? prev : [...prev, m]); })
+    const id = chanId("ideas");
+    const ch = supabase.channel(id)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public",
+        table: "trip_messages", filter: `share_slug=eq.${slug}`,
+      }, p => {
+        const m = p.new as TripMessage;
+        if (m.type === "idea") setIdeas(prev => prev.find(x => x.id === m.id) ? prev : [...prev, m]);
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [slug]);
@@ -470,11 +488,13 @@ function BaggagePanel({ packingList, destination }: { packingList: any[]; destin
           </div>
           {cat.items.map((item: string, ii: number) => {
             const key = `${ci}-${ii}`; const ck = checked[key];
-            return <div key={ii} onClick={() => setChecked(p => ({ ...p, [key]: !p[key] }))} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", cursor: "pointer", marginBottom: "7px" }}>
-              <button style={{ flexShrink: 0, background: "none", border: "none", padding: 0 }}>{ck ? <CheckSquare style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.5)" }} /> : <Square style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.2)" }} />}</button>
-              <span style={{ flex: 1, color: ck ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.75)", textDecoration: ck ? "line-through" : "none" }}>{item}</span>
-              <a href={`https://www.amazon.it/s?k=${encodeURIComponent(item)}+viaggio&tag=${AMAZON_TAG}`} target="_blank" rel="noopener noreferrer" style={{ opacity: 0.4, color: "#ff9900", textDecoration: "none" }}><ShoppingBag style={{ width: "13px", height: "13px" }} /></a>
-            </div>;
+            return (
+              <div key={ii} onClick={() => setChecked(p => ({ ...p, [key]: !p[key] }))} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", cursor: "pointer", marginBottom: "7px" }}>
+                <button style={{ flexShrink: 0, background: "none", border: "none", padding: 0 }}>{ck ? <CheckSquare style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.5)" }} /> : <Square style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.2)" }} />}</button>
+                <span style={{ flex: 1, color: ck ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.75)", textDecoration: ck ? "line-through" : "none" }}>{item}</span>
+                <a href={`https://www.amazon.it/s?k=${encodeURIComponent(item)}+viaggio&tag=${AMAZON_TAG}`} target="_blank" rel="noopener noreferrer" style={{ opacity: 0.4, color: "#ff9900", textDecoration: "none" }}><ShoppingBag style={{ width: "13px", height: "13px" }} /></a>
+              </div>
+            );
           })}
         </div>
       ))}
@@ -492,7 +512,8 @@ function MediaPanel() {
         <input ref={ref} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => { setFiles(p => [...p, ...Array.from(e.target.files ?? []).map(f => ({ name: f.name, preview: URL.createObjectURL(f) }))]); e.target.value = ""; }} />
         <button onClick={() => ref.current?.click()} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer" }}><Plus style={{ width: "13px", height: "13px" }} />Carica</button>
       </div>
-      {files.length === 0 ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center" }}><Camera style={{ width: "36px", height: "36px", opacity: 0.3 }} /><p style={{ fontSize: "13px" }}>Nessun media ancora</p></div>
+      {files.length === 0
+        ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center" }}><Camera style={{ width: "36px", height: "36px", opacity: 0.3 }} /><p style={{ fontSize: "13px" }}>Nessun media ancora</p></div>
         : <div style={{ flex: 1, overflowY: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>{files.map((f, i) => <div key={i} style={{ position: "relative", borderRadius: "10px", overflow: "hidden", aspectRatio: "1" }}><img src={f.preview} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /><button onClick={() => setFiles(p => p.filter((_, idx) => idx !== i))} style={{ position: "absolute", top: "4px", right: "4px", width: "20px", height: "20px", borderRadius: "50%", background: "rgba(0,0,0,0.7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}><X style={{ width: "11px", height: "11px" }} /></button></div>)}</div>
       }
     </div>
@@ -504,12 +525,14 @@ function ToolbarDesktop({ active, onChange }: { active: string; onChange: (id: s
     <div style={{ display: "flex", flexDirection: "column", width: "56px", borderRight: "1px solid rgba(255,255,255,0.07)", gap: "4px", padding: "12px 6px", flexShrink: 0, background: "rgba(10,10,18,0.95)" }}>
       {TOOLS.map(t => {
         const Icon = t.icon; const on = active === t.id;
-        return <button key={t.id} onClick={() => onChange(t.id)} title={t.label}
-          style={{ width: "44px", height: "44px", borderRadius: "12px", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s", background: on ? "rgba(255,255,255,0.12)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.38)" }}
-          onMouseEnter={e => { if (!on) e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
-          onMouseLeave={e => { if (!on) e.currentTarget.style.background = "transparent"; }}>
-          <Icon style={{ width: "18px", height: "18px" }} />
-        </button>;
+        return (
+          <button key={t.id} onClick={() => onChange(t.id)} title={t.label}
+            style={{ width: "44px", height: "44px", borderRadius: "12px", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s", background: on ? "rgba(255,255,255,0.12)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.38)" }}
+            onMouseEnter={e => { if (!on) e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+            onMouseLeave={e => { if (!on) e.currentTarget.style.background = "transparent"; }}>
+            <Icon style={{ width: "18px", height: "18px" }} />
+          </button>
+        );
       })}
     </div>
   );
@@ -523,7 +546,13 @@ function renderTool(tool: string, itinerary: any, slug: string, isMobile = false
   if (tool === "ideas")     return <IdeasPanel slug={slug} />;
   if (tool === "bagaglio")  return <BaggagePanel packingList={itinerary.packingList ?? []} destination={itinerary.destination} />;
   if (tool === "media")     return <MediaPanel />;
-  if (tool === "expenses")  return <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", textAlign: "center", padding: "32px" }}><div style={{ fontSize: "2.8rem" }}>💰</div><div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Gestione spese</div><div style={{ fontSize: "12px", padding: "6px 16px", borderRadius: "9999px", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.12)" }}>Prossimamente</div></div>;
+  if (tool === "expenses")  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", textAlign: "center", padding: "32px" }}>
+      <div style={{ fontSize: "2.8rem" }}>💰</div>
+      <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Gestione spese</div>
+      <div style={{ fontSize: "12px", padding: "6px 16px", borderRadius: "9999px", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.12)" }}>Prossimamente</div>
+    </div>
+  );
   return null;
 }
 
@@ -541,30 +570,41 @@ export default function Trip() {
   const [chatOpen,   setChatOpen]   = useState(false);
   const [msgCount,   setMsgCount]   = useState(0);
 
+  // Carica dati viaggio
   useEffect(() => {
     if (!slug) { setError(true); setLoading(false); return; }
     supabase.from("saved_trips").select("*").eq("share_slug", slug).single()
       .then(({ data, error: err }) => {
-        if (err || !data?.itinerary) { setError(true); }
-        else { setItinerary(data.itinerary); }
-        setLoading(false);
+        if (err || !data?.itinerary) setError(true);
+        else setItinerary(data.itinerary);
       })
-      .catch(() => { setError(true); setLoading(false); });
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
   }, [slug]);
 
+  // Conteggio messaggi — canale univoco
   useEffect(() => {
     if (!slug) return;
     supabase.from("trip_messages").select("id", { count: "exact", head: true })
       .eq("share_slug", slug).in("type", ["message","ai_request","ai_update"])
       .then(({ count }) => { if (count) setMsgCount(count); });
-    const ch = supabase.channel(`tcnt_${slug}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "trip_messages", filter: `share_slug=eq.${slug}` },
-        p => { if (["message","ai_request","ai_update"].includes((p.new as TripMessage).type)) setMsgCount(v => v + 1); })
+
+    const id = chanId("cnt");
+    const ch = supabase.channel(id)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public",
+        table: "trip_messages", filter: `share_slug=eq.${slug}`,
+      }, p => {
+        if (["message","ai_request","ai_update"].includes((p.new as TripMessage).type))
+          setMsgCount(v => v + 1);
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [slug]);
 
-  useEffect(() => { if (itinerary?.destination) document.title = `${itinerary.destination} — Waydora`; }, [itinerary]);
+  useEffect(() => {
+    if (itinerary?.destination) document.title = `${itinerary.destination} — Waydora`;
+  }, [itinerary]);
 
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/trip/${slug}` : "";
   const copy = async () => {
@@ -605,7 +645,12 @@ export default function Trip() {
           </button>
         </Link>
       </div>
-      {!mobile && <div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span>{itinerary.heroEmoji ?? "🗺️"}</span><span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{itinerary.title}</span></div>}
+      {!mobile && (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span>{itinerary.heroEmoji ?? "🗺️"}</span>
+          <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{itinerary.title}</span>
+        </div>
+      )}
       <button onClick={copy} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "9999px", background: copied ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.09)", border: copied ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(255,255,255,0.18)", color: copied ? "#34d399" : "#fff", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
         {copied ? <Check style={{ width: "12px", height: "12px" }} /> : <Copy style={{ width: "12px", height: "12px" }} />}
         {copied ? "Copiato!" : "Copia"}
@@ -645,11 +690,13 @@ export default function Trip() {
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 30, height: `${TOOLBAR_H}px`, display: "flex", alignItems: "center", overflowX: "auto", scrollbarWidth: "none", padding: "0 4px 8px", background: "rgba(10,10,18,0.96)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 -4px 24px rgba(0,0,0,0.5)" }}>
           {TOOLS.map(t => {
             const Icon = t.icon; const on = activeTool === t.id;
-            return <button key={t.id} onClick={() => setActiveTool(t.id)}
-              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "6px 10px", borderRadius: "10px", border: "none", flexShrink: 0, cursor: "pointer", transition: "all 0.15s", background: on ? "rgba(255,255,255,0.12)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "50px" }}>
-              <Icon style={{ width: "18px", height: "18px" }} />
-              <span style={{ fontSize: "9px", fontWeight: 600 }}>{t.label}</span>
-            </button>;
+            return (
+              <button key={t.id} onClick={() => setActiveTool(t.id)}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "6px 10px", borderRadius: "10px", border: "none", flexShrink: 0, cursor: "pointer", transition: "all 0.15s", background: on ? "rgba(255,255,255,0.12)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "50px" }}>
+                <Icon style={{ width: "18px", height: "18px" }} />
+                <span style={{ fontSize: "9px", fontWeight: 600 }}>{t.label}</span>
+              </button>
+            );
           })}
         </div>
 
@@ -664,7 +711,7 @@ export default function Trip() {
           )}
         </button>
 
-        {/* Drawer CSS-only — nessun framer-motion */}
+        {/* Drawer CSS-only */}
         <Drawer open={chatOpen} onClose={() => setChatOpen(false)}>
           <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onClose={() => setChatOpen(false)} />
         </Drawer>
