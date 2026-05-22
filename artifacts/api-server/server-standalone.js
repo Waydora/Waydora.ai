@@ -229,17 +229,26 @@ function callClaude(messages, existingItinerary, mediaContent, userTier = "guest
       res.setEncoding("utf8");
       res.on("data", c => { data += c; });
       res.on("end", () => {
+        console.log(`[callClaude] HTTP status: ${res.statusCode}, bytes: ${data.length}`);
         try {
           const parsed = JSON.parse(data);
-          if (parsed.error) { reject(new Error(parsed.error.message)); return; }
+          if (parsed.error) {
+            console.error("[callClaude] Anthropic error:", JSON.stringify(parsed.error));
+            reject(new Error(parsed.error.message));
+            return;
+          }
           let text = parsed.content?.[0]?.text || "";
           text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
           const stopReason = parsed.stop_reason || "end_turn";
+          console.log(`[callClaude] OK — stopReason=${stopReason}, outputLen=${text.length}`);
           if (stopReason === "max_tokens") {
-            console.warn(`[callClaude] Risposta troncata a max_tokens=${maxTokens}. Testo raw (primi 200 car.):`, text.substring(0, 200));
+            console.warn(`[callClaude] Troncato a max_tokens=${maxTokens}. Inizio:`, text.substring(0, 200));
           }
           resolve({ text, stopReason });
-        } catch (e) { reject(e); }
+        } catch (e) {
+          console.error("[callClaude] Parse error:", e.message, "| raw:", data.substring(0, 300));
+          reject(e);
+        }
       });
     });
     req.on("error", reject);
@@ -375,6 +384,7 @@ const server = http.createServer(async (req, res) => {
     req.on("end", async () => {
       try {
         const { messages, existingItinerary, mediaContent, userTier } = JSON.parse(body);
+        console.log(`[chat] msgs=${messages?.length}, tier=${userTier}, hasItinerary=${!!existingItinerary}`);
         const enrichedMessages = await enrichWithTikTok(messages);
         const { text: raw, stopReason } = await callClaude(enrichedMessages, existingItinerary, mediaContent, userTier);
 
