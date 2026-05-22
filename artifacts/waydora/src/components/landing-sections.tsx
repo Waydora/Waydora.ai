@@ -236,7 +236,7 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
             <textarea ref={textareaRef} value={input} onChange={handleChange} onKeyDown={handleKeyDown}
               placeholder="Dove vuoi andare? Descrivi il tuo viaggio..." rows={1}
               className="flex-1 bg-transparent resize-none outline-none border-none text-white placeholder:text-white/45 text-[15px] leading-relaxed"
-              style={{ minHeight: "38px", maxHeight: "140px", paddingLeft: "14px", paddingTop: "9px", paddingBottom: "9px" }} />
+              style={{ minHeight: "38px", maxHeight: "140px", paddingLeft: "14px", paddingTop: "9px", paddingBottom: "9px", minWidth: "0" }} />
             <button onClick={handleSubmit} disabled={!active}
               className="shrink-0 flex items-center gap-1.5 font-semibold text-sm text-white transition-all duration-200"
               style={{
