@@ -3,9 +3,10 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageSquare, Sparkles, PlaneTakeoff, Star,
-  ChevronDown, Mail, FileText,
+  ChevronDown, Mail, FileText, Sun, Moon, Send,
 } from "lucide-react";
 import waydoraLogo from "@assets/LOGO1.png";
+import { useTheme } from "@/lib/theme";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
@@ -66,15 +67,15 @@ const DESTINATIONS = [
  
 // ── Stili condivisi ──────────────────────────────────────────────────────
 const glassCard = {
-  background: "rgba(255,255,255,0.05)",
+  background: "var(--wd-surface-5)",
   backdropFilter: "blur(20px) saturate(140%)",
   WebkitBackdropFilter: "blur(20px) saturate(140%)",
-  border: "1px solid rgba(255,255,255,0.10)",
+  border: "1px solid var(--wd-border-10)",
   borderRadius: "20px",
 } as React.CSSProperties;
- 
+
 const gradientText = {
-  background: "linear-gradient(135deg, #ffffff 0%, #a78bfa 50%, #ec4899 100%)",
+  background: "linear-gradient(135deg, #a78bfa 0%, #ec4899 100%)",
   WebkitBackgroundClip: "text",
   WebkitTextFillColor: "transparent",
   backgroundClip: "text",
@@ -84,27 +85,23 @@ const gradientText = {
 function InfernoBackground() {
   return (
     <div className="fixed inset-0 -z-10 pointer-events-none" aria-hidden>
-      {/* Base scura */}
-      <div style={{ position: "absolute", inset: 0, background: "#0a0a12" }} />
-      {/* Blob viola in alto a destra */}
+      <div style={{ position: "absolute", inset: 0, background: "var(--wd-bg)" }} />
       <div style={{
         position: "absolute", top: "-10%", right: "-5%",
         width: "55vw", height: "55vw", borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(109,40,217,0.35) 0%, transparent 70%)",
+        background: "radial-gradient(circle, var(--wd-blob-purple) 0%, transparent 70%)",
         filter: "blur(60px)",
       }} />
-      {/* Blob rosa/rosso al centro */}
       <div style={{
         position: "absolute", top: "30%", left: "50%", transform: "translateX(-50%)",
         width: "70vw", height: "50vw", borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(219,39,119,0.18) 0%, transparent 65%)",
+        background: "radial-gradient(circle, var(--wd-blob-pink) 0%, transparent 65%)",
         filter: "blur(80px)",
       }} />
-      {/* Blob indaco in basso a sinistra */}
       <div style={{
         position: "absolute", bottom: "0", left: "-10%",
         width: "50vw", height: "50vw", borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(67,56,202,0.3) 0%, transparent 70%)",
+        background: "radial-gradient(circle, var(--wd-blob-indigo) 0%, transparent 70%)",
         filter: "blur(70px)",
       }} />
     </div>
@@ -151,6 +148,7 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
   const [input, setInput]         = useState("");
   const textareaRef               = useRef<HTMLTextAreaElement>(null);
   const [, navigate]              = useLocation();
+  const { theme, toggle: toggleTheme } = useTheme();
  
   const currentDest = DESTINATIONS[destIndex];
  
@@ -200,22 +198,28 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
           style={{ background: "linear-gradient(to bottom,rgba(0,0,0,0.52) 0%,rgba(0,0,0,0.2) 45%,rgba(0,0,0,0.68) 100%)" }} />
       </div>
  
-      {/* Logo */}
-      <div className="relative z-20 px-6 pt-5">
+      {/* Logo + theme toggle */}
+      <div className="relative z-20 px-6 pt-5 flex items-center justify-between">
         <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} aria-label="Home">
           <img src={waydoraLogo} alt="Waydora" className="h-10 w-auto object-contain"
             style={{ filter: "brightness(0) invert(1)" }} />
         </a>
+        <button onClick={toggleTheme}
+          title={theme === "dark" ? "Passa a modalità chiara" : "Passa a modalità scura"}
+          style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "7px 14px", borderRadius: "9999px", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.25)", color: "#fff", cursor: "pointer" }}>
+          {theme === "dark" ? <Sun style={{ width: "14px", height: "14px" }} /> : <Moon style={{ width: "14px", height: "14px" }} />}
+          {theme === "dark" ? "Chiara" : "Scura"}
+        </button>
       </div>
  
       {/* Contenuto */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 pb-24 pt-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}
           className="text-center mb-10 max-w-3xl">
-          <p className="text-white/55 text-xs font-semibold tracking-[0.3em] uppercase mb-6">Il tuo assistente di viaggio AI</p>
+          <p className="text-white/55 text-xs font-semibold tracking-[0.3em] uppercase mb-6">La tua assistente di viaggio AI</p>
           <h1 className="text-white font-black leading-[1.05] mb-5"
             style={{ fontSize: "clamp(1.7rem, 4vw, 2.8rem)", letterSpacing: "-0.03em" }}>
-            Ciao, sono Waydora:<br />il tuo assistente di viaggio.
+            Ciao, sono Waydora:<br />la tua assistente di viaggio.
           </h1>
           <p className="text-white/65 font-light"
             style={{ fontSize: "clamp(1.3rem, 3vw, 2rem)", letterSpacing: "-0.01em" }}>
@@ -276,13 +280,10 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
 // ── Wrapper con sfondo inferno per tutto sotto l'hero ────────────────────
 function InfernoSection({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ position: "relative", background: "#0a0a12", overflow: "hidden" }}>
-      {/* blob viola alto dx */}
-      <div style={{ position: "absolute", top: "-15%", right: "-8%", width: "60vw", height: "60vw", borderRadius: "50%", background: "radial-gradient(circle, rgba(109,40,217,0.32) 0%, transparent 68%)", filter: "blur(70px)", pointerEvents: "none" }} />
-      {/* blob rosa centro */}
-      <div style={{ position: "absolute", top: "35%", left: "40%", width: "65vw", height: "45vw", borderRadius: "50%", background: "radial-gradient(circle, rgba(219,39,119,0.16) 0%, transparent 65%)", filter: "blur(90px)", pointerEvents: "none" }} />
-      {/* blob indaco basso sx */}
-      <div style={{ position: "absolute", bottom: "-10%", left: "-8%", width: "55vw", height: "55vw", borderRadius: "50%", background: "radial-gradient(circle, rgba(67,56,202,0.28) 0%, transparent 68%)", filter: "blur(75px)", pointerEvents: "none" }} />
+    <div style={{ position: "relative", background: "var(--wd-bg)", overflow: "hidden" }}>
+      <div style={{ position: "absolute", top: "-15%", right: "-8%", width: "60vw", height: "60vw", borderRadius: "50%", background: "radial-gradient(circle, var(--wd-blob-purple) 0%, transparent 68%)", filter: "blur(70px)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", top: "35%", left: "40%", width: "65vw", height: "45vw", borderRadius: "50%", background: "radial-gradient(circle, var(--wd-blob-pink) 0%, transparent 65%)", filter: "blur(90px)", pointerEvents: "none" }} />
+      <div style={{ position: "absolute", bottom: "-10%", left: "-8%", width: "55vw", height: "55vw", borderRadius: "50%", background: "radial-gradient(circle, var(--wd-blob-indigo) 0%, transparent 68%)", filter: "blur(75px)", pointerEvents: "none" }} />
       <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
     </div>
   );
@@ -328,10 +329,10 @@ export function HowItWorks() {
                   <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.2em", color: "#a78bfa", marginBottom: "12px" }}>
                     STEP {String(i + 1).padStart(2, "0")}
                   </div>
-                  <h3 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#ffffff", marginBottom: "12px", letterSpacing: "-0.02em" }}>
+                  <h3 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--wd-text)", marginBottom: "12px", letterSpacing: "-0.02em" }}>
                     {step.title}
                   </h3>
-                  <p style={{ fontSize: "15px", color: "rgba(255,255,255,0.55)", lineHeight: 1.7 }}>{step.text}</p>
+                  <p style={{ fontSize: "15px", color: "var(--wd-text-55)", lineHeight: 1.7 }}>{step.text}</p>
                 </div>
               </motion.div>
             );
@@ -402,7 +403,7 @@ export function TripCounter() {
             {formatted}
           </div>
  
-          <p style={{ fontSize: "clamp(0.85rem, 2vw, 1.1rem)", fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)" }}>
+          <p style={{ fontSize: "clamp(0.85rem, 2vw, 1.1rem)", fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: "var(--wd-text-45)" }}>
             Viaggi pianificati con Waydora
           </p>
         </motion.div>
@@ -417,9 +418,9 @@ export function TripCounter() {
 export function Partners() {
   return (
     <InfernoSection>
-      <section className="py-14 px-4" style={{ borderTop: "1px solid rgba(255,255,255,0.07)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+      <section className="py-14 px-4" style={{ borderTop: "1px solid var(--wd-border-7)", borderBottom: "1px solid var(--wd-border-7)" }}>
         <div className="max-w-6xl mx-auto">
-          <p style={{ textAlign: "center", fontSize: "11px", fontWeight: 700, letterSpacing: "0.3em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: "32px" }}>
+          <p style={{ textAlign: "center", fontSize: "11px", fontWeight: 700, letterSpacing: "0.3em", textTransform: "uppercase", color: "var(--wd-text-35)", marginBottom: "32px" }}>
             Prenoti con i migliori partner
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
@@ -452,7 +453,7 @@ export function Reviews() {
           }}>
             ✦ Cosa dicono i viaggiatori
           </span>
-          <h2 className="font-black text-white" style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", letterSpacing: "-0.025em" }}>
+          <h2 className="font-black" style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", letterSpacing: "-0.025em", color: "var(--wd-text)" }}>
             Pianificato. Vissuto.<br />
             <span style={gradientText}>Condiviso.</span>
           </h2>
@@ -468,8 +469,8 @@ export function Reviews() {
                     <Star key={idx} style={{ width: "14px", height: "14px", fill: "#a78bfa", color: "#a78bfa" }} />
                   ))}
                 </div>
-                <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.75)", lineHeight: 1.65, flex: 1 }}>"{r.text}"</p>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", paddingTop: "12px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                <p style={{ fontSize: "14px", color: "var(--wd-text-75)", lineHeight: 1.65, flex: 1 }}>"{r.text}"</p>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", paddingTop: "12px", borderTop: "1px solid var(--wd-border-8)" }}>
                   <div style={{
                     width: "38px", height: "38px", borderRadius: "50%", flexShrink: 0,
                     background: "rgba(167,139,250,0.15)", border: "1px solid rgba(167,139,250,0.25)",
@@ -477,8 +478,8 @@ export function Reviews() {
                     color: "#a78bfa", fontWeight: 700, fontSize: "13px",
                   }}>{r.initials}</div>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: "13px", color: "#fff" }}>{r.name}</div>
-                    <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.4)" }}>{r.city}</div>
+                    <div style={{ fontWeight: 600, fontSize: "13px", color: "var(--wd-text)" }}>{r.name}</div>
+                    <div style={{ fontSize: "12px", color: "var(--wd-text-40)" }}>{r.city}</div>
                   </div>
                 </div>
               </div>
@@ -504,7 +505,7 @@ export function Faq() {
           }}>
             ✦ FAQ
           </span>
-          <h2 className="font-black text-white" style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", letterSpacing: "-0.025em" }}>
+          <h2 className="font-black" style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", letterSpacing: "-0.025em", color: "var(--wd-text)" }}>
             Domande <span style={gradientText}>frequenti.</span>
           </h2>
         </motion.div>
@@ -517,11 +518,11 @@ export function Faq() {
                 <AccordionItem value={`item-${i}`} style={{ ...glassCard, border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}
                   className="transition-all data-[state=open]:border-[rgba(167,139,250,0.35)]">
                   <AccordionTrigger
-                    style={{ padding: "20px 24px", fontWeight: 600, fontSize: "15px", color: "#ffffff", textAlign: "left" }}
+                    style={{ padding: "20px 24px", fontWeight: 600, fontSize: "15px", color: "var(--wd-text)", textAlign: "left" }}
                     className="hover:no-underline [&>svg]:text-[#a78bfa]">
                     {item.q}
                   </AccordionTrigger>
-                  <AccordionContent style={{ padding: "0 24px 20px", fontSize: "14px", color: "rgba(255,255,255,0.55)", lineHeight: 1.7 }}>
+                  <AccordionContent style={{ padding: "0 24px 20px", fontSize: "14px", color: "var(--wd-text-55)", lineHeight: 1.7 }}>
                     {item.a}
                   </AccordionContent>
                 </AccordionItem>
@@ -536,40 +537,53 @@ export function Faq() {
  
 // ── SiteFooter ───────────────────────────────────────────────────────────
 export function SiteFooter() {
+  const { theme, toggle: toggleTheme } = useTheme();
   return (
     <InfernoSection>
-      <footer style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+      <footer style={{ borderTop: "1px solid var(--wd-border-7)" }}>
         <div className="max-w-6xl mx-auto px-4 py-14 grid grid-cols-2 md:grid-cols-4 gap-8">
           <div className="col-span-2 space-y-4">
             <a href="/">
-              <img src={waydoraLogo} alt="Waydora" style={{ height: "36px", width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)" }} />
+              <img src={waydoraLogo} alt="Waydora" style={{ height: "36px", width: "auto", objectFit: "contain", filter: theme === "dark" ? "brightness(0) invert(1)" : "none" }} />
             </a>
-            <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.4)", maxWidth: "300px", lineHeight: 1.65 }}>
+            <p style={{ fontSize: "14px", color: "var(--wd-text-40)", maxWidth: "300px", lineHeight: 1.65 }}>
               Il tuo concierge di viaggio AI. Pianifica, prenota, parti — tutto in italiano.
             </p>
+            {/* Toggle tema */}
+            <button onClick={toggleTheme}
+              style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: 600, padding: "7px 14px", borderRadius: "9999px", background: "var(--wd-surface-8)", border: "1px solid var(--wd-border-10)", color: "var(--wd-text-55)", cursor: "pointer" }}>
+              {theme === "dark" ? <Sun style={{ width: "14px", height: "14px" }} /> : <Moon style={{ width: "14px", height: "14px" }} />}
+              {theme === "dark" ? "Modalità chiara" : "Modalità scura"}
+            </button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Legale</div>
+            <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--wd-text-45)" }}>Legale</div>
             {[["privacy", "Privacy Policy"], ["termini", "Termini e Condizioni"], ["cookie", "Cookie Policy"]].map(([slug, label]) => (
               <a key={slug} href={`/legale/${slug}`}
-                style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "rgba(255,255,255,0.4)", textDecoration: "none", transition: "color 0.2s" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "var(--wd-text-40)", textDecoration: "none", transition: "color 0.2s" }}
                 onMouseEnter={(e) => (e.currentTarget.style.color = "#a78bfa")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}>
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--wd-text-40)")}>
                 <FileText style={{ width: "13px", height: "13px" }} />{label}
               </a>
             ))}
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "rgba(255,255,255,0.5)" }}>Contatti</div>
+            <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--wd-text-45)" }}>Contatti & Community</div>
             <a href="mailto:waydora.ai@gmail.com"
-              style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "rgba(255,255,255,0.4)", textDecoration: "none", transition: "color 0.2s" }}
+              style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "var(--wd-text-40)", textDecoration: "none", transition: "color 0.2s" }}
               onMouseEnter={(e) => (e.currentTarget.style.color = "#a78bfa")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.4)")}>
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--wd-text-40)")}>
               <Mail style={{ width: "13px", height: "13px" }} />waydora.ai@gmail.com
+            </a>
+            <a href="https://t.me/waydora" target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "var(--wd-text-40)", textDecoration: "none", transition: "color 0.2s" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "#2AABEE")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--wd-text-40)")}>
+              <Send style={{ width: "13px", height: "13px" }} />Telegram
             </a>
           </div>
         </div>
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "20px", textAlign: "center", fontSize: "12px", color: "rgba(255,255,255,0.25)" }}>
+        <div style={{ borderTop: "1px solid var(--wd-border-7)", padding: "20px", textAlign: "center", fontSize: "12px", color: "var(--wd-text-25)" }}>
           © {new Date().getFullYear()} Waydora — Travel simple, everywhere!
         </div>
       </footer>

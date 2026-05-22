@@ -2,10 +2,11 @@ const http = require("http");
 const https = require("https");
 
 // ── Rate limiting per IP ──────────────────────────────────────────────────
-// Ogni IP può fare max MAX_REQUESTS richieste ogni WINDOW_MS millisecondi
-const WINDOW_MS   = 60 * 60 * 1000; // 1 ora
-const MAX_REQUESTS = 20;             // max 20 chiamate AI per ora per IP
-const MAX_TOKENS_PER_DAY = 500;      // max token giornalieri per IP (stima)
+const WINDOW_MS    = 60 * 60 * 1000;
+const MAX_REQUESTS = 20;
+
+// Token massimi per piano (il frontend invia userTier: "guest"|"free"|"paid")
+const TIER_TOKENS = { guest: 3000, free: 5000, paid: 10000 };
 
 const ipRequests = new Map(); // { ip: { count, resetAt, tokensUsed } }
 
@@ -97,12 +98,29 @@ Rispondi in modo conciso e conversazionale. Max 150 parole. Usa emoji con modera
   }
 }
 
-REGOLE:
+━━━ HOTEL E ALLOGGI — chiedi SEMPRE prima ━━━
+Se l'utente chiede dove dormire, hotel, b&b, airbnb o sistemazioni:
+1. NON aggiungere alloggi nell'itinerario automaticamente.
+2. CHIEDI SEMPRE con una domanda amichevole:
+   "Per trovare l'alloggio perfetto, dimmi: che tipo preferisci? (hotel, B&B, Airbnb, hostel, resort) E la fascia di prezzo per notte? (budget <€60, medio €60–130, comfort €130–220, lusso >€220)"
+3. Solo dopo aver ricevuto tipo + budget, rispondi in MODALITÀ TESTO con 3–4 opzioni specifiche e link affiliati Booking.com/Airbnb per quella destinazione.
+   Formato link Booking: https://www.booking.com/searchresults.it.html?ss=DESTINAZIONE&checkin=DATA&checkout=DATA
+   Formato link Airbnb: https://www.airbnb.it/s/DESTINAZIONE/homes
+
+━━━ VOLI — chiedi SEMPRE prima ━━━
+Se l'utente chiede voli, come arrivare, biglietti aerei:
+1. CHIEDI SEMPRE:
+   "Per trovare i voli migliori, ho bisogno di sapere: da quale città (o aeroporto) parti? Le date esatte o il periodo preferito? Quante persone volano?"
+2. Solo dopo aver ricevuto queste info, rispondi in MODALITÀ TESTO con link Skyscanner:
+   Formato: https://www.skyscanner.it/trasporti/voli/IATA_PARTENZA/IATA_ARRIVO/DATA_ANDATA/DATA_RITORNO/?adults=N
+
+REGOLE GENERALI:
 - Genera TUTTI i giorni richiesti in una sola risposta.
 - 3-4 attività per giorno. Orari come fasce: "09:00-11:00", "Pranzo 12:30-14:00".
 - NON includere indirizzi nelle descrizioni attività.
 - destination: usa SEMPRE il nome inglese internazionale seguito dal paese (es. "Milan, Italy", "Prague, Czech Republic", "Paris, France"). Mai il nome italiano.
 - tripPhotos: 3-4 query Unsplash per il viaggio intero.
+- Per luoghi piccoli o poco conosciuti usa coordinate precise e il nome esatto del posto.
 - Se ricevi info estratte da un video TikTok, analizzale e crea un itinerario ispirato.
 - Se l'utente fa domande conversazionali rispondi SOLO con reply e itinerary: null. MAX 150 parole.
 - Sii amichevole e naturale.`;
@@ -161,7 +179,7 @@ async function enrichWithTikTok(messages) {
 }
 
 // ── Claude API ────────────────────────────────────────────────────────────
-function callClaude(messages, existingItinerary, mediaContent) {
+function callClaude(messages, existingItinerary, mediaContent, userTier = "guest") {
   return new Promise((resolve, reject) => {
     const systemPrompt = existingItinerary
       ? `${SYSTEM_PROMPT}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`
@@ -171,7 +189,8 @@ function callClaude(messages, existingItinerary, mediaContent) {
     const textContent = typeof lastMsg === "string" ? lastMsg : "";
     const daysMatch = textContent.match(/(\d+)\s*(giorni|day|notti|notte)/i);
     const days = daysMatch ? parseInt(daysMatch[1]) : 3;
-    const maxTokens = Math.min(10000, Math.max(2000, days * 600 + 2000));
+    const tierLimit = TIER_TOKENS[userTier] ?? TIER_TOKENS.guest;
+    const maxTokens = Math.min(tierLimit, Math.max(1500, days * 600 + 1500));
 
     let claudeMessages = [...messages];
     if (mediaContent && claudeMessages.length > 0) {
@@ -226,21 +245,50 @@ function callClaude(messages, existingItinerary, mediaContent) {
 }
 
 // ── Google Places ─────────────────────────────────────────────────────────
+
+// Geocodifica la destinazione per ottenere coordinate da usare come bias
+function geocodeDestination(destination, apiKey) {
+  return new Promise((resolve) => {
+    const q = encodeURIComponent(destination);
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${apiKey}`;
+    const req = https.get(url, (r) => {
+      let d = "";
+      r.on("data", c => { d += c; });
+      r.on("end", () => {
+        try { resolve(JSON.parse(d).results?.[0]?.geometry?.location ?? null); }
+        catch { resolve(null); }
+      });
+    });
+    req.on("error", () => resolve(null));
+    req.setTimeout(5000, () => { req.destroy(); resolve(null); });
+  });
+}
+
 function enrichWithGooglePlaces(itinerary) {
   return new Promise(async (resolve) => {
     const apiKey = process.env.GOOGLE_MAPS_KEY;
     if (!apiKey) { resolve(itinerary); return; }
+
+    // Geocodifica la destinazione una sola volta per il bias di posizione
+    const destCoords = await geocodeDestination(itinerary.destination, apiKey);
+    const locParam = destCoords
+      ? `&location=${destCoords.lat},${destCoords.lng}&radius=50000`
+      : "";
+
     for (const day of itinerary.days) {
       for (const activity of day.activities) {
         try {
-          const q = encodeURIComponent(`${activity.title} ${itinerary.destination}`);
-          const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}&key=${apiKey}`;
+          // Query solo sul titolo dell'attività + bias posizione: più preciso per luoghi piccoli
+          const q = encodeURIComponent(activity.title);
+          const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}${locParam}&key=${apiKey}`;
           const data = await new Promise((res, rej) => {
-            https.get(url, (r) => {
+            const req = https.get(url, (r) => {
               let d = "";
               r.on("data", c => { d += c; });
               r.on("end", () => { try { res(JSON.parse(d)); } catch (e) { rej(e); } });
-            }).on("error", rej);
+            });
+            req.on("error", rej);
+            req.setTimeout(6000, () => { req.destroy(); rej(new Error("timeout")); });
           });
           if (data.results?.[0]) {
             const place = data.results[0];
@@ -302,9 +350,9 @@ const server = http.createServer(async (req, res) => {
     req.on("data", c => { body += c; });
     req.on("end", async () => {
       try {
-        const { messages, existingItinerary, mediaContent } = JSON.parse(body);
+        const { messages, existingItinerary, mediaContent, userTier } = JSON.parse(body);
         const enrichedMessages = await enrichWithTikTok(messages);
-        const raw = await callClaude(enrichedMessages, existingItinerary, mediaContent);
+        const raw = await callClaude(enrichedMessages, existingItinerary, mediaContent, userTier);
 
         let payload;
         try {

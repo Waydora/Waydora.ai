@@ -176,15 +176,68 @@
   --shadow-2xl: 0px 24px 64px -12px hsl(0 0% 0% / 0.5);
 }
 
+/* ── Waydora custom CSS vars — used in inline-style components ────────── */
+:root {
+  /* light mode */
+  --wd-bg:            #f5f4ff;
+  --wd-bg2:           #ede9ff;
+  --wd-text:          #1a1030;
+  --wd-text-75:       rgba(20,5,40,0.75);
+  --wd-text-65:       rgba(20,5,40,0.65);
+  --wd-text-55:       rgba(20,5,40,0.55);
+  --wd-text-45:       rgba(20,5,40,0.45);
+  --wd-text-40:       rgba(20,5,40,0.40);
+  --wd-text-35:       rgba(20,5,40,0.35);
+  --wd-text-30:       rgba(20,5,40,0.30);
+  --wd-text-25:       rgba(20,5,40,0.25);
+  --wd-surface-5:     rgba(0,0,0,0.04);
+  --wd-surface-8:     rgba(0,0,0,0.06);
+  --wd-surface-12:    rgba(0,0,0,0.08);
+  --wd-border-7:      rgba(0,0,0,0.07);
+  --wd-border-8:      rgba(0,0,0,0.08);
+  --wd-border-10:     rgba(0,0,0,0.10);
+  --wd-border-13:     rgba(0,0,0,0.12);
+  --wd-glass:         rgba(245,244,255,0.92);
+  --wd-blob-purple:   rgba(139,92,246,0.10);
+  --wd-blob-pink:     rgba(219,39,119,0.07);
+  --wd-blob-indigo:   rgba(79,70,229,0.09);
+}
+
+.dark {
+  --wd-bg:            #0a0a12;
+  --wd-bg2:           #0d0a18;
+  --wd-text:          #ffffff;
+  --wd-text-75:       rgba(255,255,255,0.75);
+  --wd-text-65:       rgba(255,255,255,0.65);
+  --wd-text-55:       rgba(255,255,255,0.55);
+  --wd-text-45:       rgba(255,255,255,0.45);
+  --wd-text-40:       rgba(255,255,255,0.40);
+  --wd-text-35:       rgba(255,255,255,0.35);
+  --wd-text-30:       rgba(255,255,255,0.30);
+  --wd-text-25:       rgba(255,255,255,0.25);
+  --wd-surface-5:     rgba(255,255,255,0.05);
+  --wd-surface-8:     rgba(255,255,255,0.08);
+  --wd-surface-12:    rgba(255,255,255,0.12);
+  --wd-border-7:      rgba(255,255,255,0.07);
+  --wd-border-8:      rgba(255,255,255,0.08);
+  --wd-border-10:     rgba(255,255,255,0.10);
+  --wd-border-13:     rgba(255,255,255,0.13);
+  --wd-glass:         rgba(10,10,18,0.92);
+  --wd-blob-purple:   rgba(109,40,217,0.35);
+  --wd-blob-pink:     rgba(219,39,119,0.18);
+  --wd-blob-indigo:   rgba(67,56,202,0.30);
+}
+
 @layer base {
   * {
     @apply border-border;
   }
   body {
     font-family: 'Inter', sans-serif;
-    background: #0f1115;
-    color: white;
+    background: var(--wd-bg);
+    color: var(--wd-text);
     overflow-x: hidden;
+    overscroll-behavior: none;
   }
 }
 

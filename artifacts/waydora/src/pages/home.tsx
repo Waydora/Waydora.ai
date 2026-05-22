@@ -18,7 +18,7 @@ import {
   Lightbulb, CheckSquare, LogOut, LogIn, User,
   Mic, MicOff, ImagePlus, X, Link, ExternalLink,
   Navigation, Download, Plus, MessageSquare, Edit3, ArrowLeft,
-  Sparkles, Bell,
+  Sparkles, Bell, Sun, Moon,
 } from "lucide-react";
 import { Layout, Logo } from "@/components/layout";
 import { ItineraryResults, PackingList } from "@/components/itinerary-results";
@@ -28,6 +28,7 @@ import {
 } from "@/components/landing-sections";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "@/lib/theme";
 
 type ChatTurn = { id: number; userMessage: string; assistantReply: string; itinerary?: ItineraryData; mediaPreview?: string; };
 type MediaContent = { mediaType: string; data: string; preview: string; name: string; };
@@ -44,7 +45,8 @@ const QUICK_SUGGESTIONS = [
   { label: "🍽️ Ristoranti",      prompt: "Suggeriscimi altri ristoranti locali da non perdere" },
   { label: "📸 Spot Instagram",  prompt: "Dammi i migliori spot per foto Instagram in questa destinazione" },
   { label: "💰 Più economico",   prompt: "Rendi l'itinerario più economico mantenendo le esperienze migliori" },
-  { label: "🏨 Hotel",           prompt: "Dove mi consigli di dormire? Sia lusso che budget" },
+  { label: "🏨 Hotel",           prompt: "Cerco dove dormire in questa destinazione, puoi aiutarmi?" },
+  { label: "✈️ Voli",            prompt: "Vorrei trovare i voli per questa destinazione" },
   { label: "🚗 Trasporti",       prompt: "Come mi sposto tra le varie tappe? Mezzi pubblici o noleggio auto?" },
 ];
 
@@ -526,6 +528,7 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
   const chatScrollRef = useRef<HTMLDivElement>(null);
   // refs per swipe — solo dal bordo sinistro
   const swipeStartX = useRef<number>(-1);
@@ -737,6 +740,11 @@ export default function Home() {
             <Map style={{ width: "14px", height: "14px" }} />Mappa
           </button>
         )}
+        <button onClick={toggleTheme}
+          title={theme === "dark" ? "Passa a modalità chiara" : "Passa a modalità scura"}
+          style={{ width: "34px", height: "34px", borderRadius: "50%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          {theme === "dark" ? <Sun style={{ width: "16px", height: "16px" }} /> : <Moon style={{ width: "16px", height: "16px" }} />}
+        </button>
         <button onClick={handleNewTrip}
           style={{ width: "34px", height: "34px", borderRadius: "50%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <Plus style={{ width: "18px", height: "18px" }} />
@@ -755,6 +763,9 @@ export default function Home() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {currentItinerary && <button onClick={handleSave} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)", cursor: "pointer" }}><Save style={{ width: "12px", height: "12px" }} />Salva</button>}
+          <button onClick={toggleTheme} title={theme === "dark" ? "Modalità chiara" : "Modalità scura"} style={{ width: "30px", height: "30px", borderRadius: "8px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.55)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+            {theme === "dark" ? <Sun style={{ width: "14px", height: "14px" }} /> : <Moon style={{ width: "14px", height: "14px" }} />}
+          </button>
           <button onClick={handleNewTrip} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", background: "transparent" }}><PlusCircle style={{ width: "12px", height: "12px" }} />Nuovo</button>
         </div>
       </div>

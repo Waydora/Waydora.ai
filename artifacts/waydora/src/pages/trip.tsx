@@ -191,15 +191,44 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
     try {
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [{ role: "user", content: prompt }], existingItinerary: itinerary }),
+        body: JSON.stringify({
+          messages: [{ role: "user", content: prompt }],
+          existingItinerary: itinerary,
+          userTier: user ? "free" : "guest",
+        }),
       });
-      const data = await res.json();
-      if (res.status === 429) { toast({ title: data.error ?? "Troppe richieste", variant: "destructive" }); setAiPending(false); return; }
+      let data: any;
+      try { data = await res.json(); } catch { throw new Error("Risposta non valida dal server"); }
+
+      if (res.status === 429) {
+        toast({ title: data?.error ?? "Troppe richieste. Riprova più tardi.", variant: "destructive" });
+        setAiPending(false); return;
+      }
+      if (!res.ok || data?.error) {
+        toast({ title: data?.error ?? `Errore ${res.status}. Riprova.`, variant: "destructive" });
+        setAiPending(false); return;
+      }
+      if (!data?.reply) {
+        toast({ title: "Risposta incompleta. Riprova.", variant: "destructive" });
+        setAiPending(false); return;
+      }
+
       if (data.itinerary) {
-        await supabase.from("saved_trips").update({ itinerary: data.itinerary, updated_at: new Date().toISOString() }).eq("share_slug", slug);
+        const { error: dbErr } = await supabase
+          .from("saved_trips")
+          .update({ itinerary: data.itinerary, updated_at: new Date().toISOString() })
+          .eq("share_slug", slug);
+        if (dbErr) {
+          toast({ title: "Errore nel salvare l'aggiornamento: " + dbErr.message, variant: "destructive" });
+          setAiPending(false); return;
+        }
         await sendMsg(`✅ ${data.reply}`, "ai_update");
-      } else { await sendMsg(`🤖 ${data.reply}`, "ai_update"); }
-    } catch { toast({ title: "Errore. Riprova.", variant: "destructive" }); }
+      } else {
+        await sendMsg(`🤖 ${data.reply}`, "ai_update");
+      }
+    } catch (e: any) {
+      toast({ title: e?.message ?? "Connessione persa. Riprova.", variant: "destructive" });
+    }
     setAiPending(false);
   }, [input, aiPending, itinerary, slug, user, toast]);
 
