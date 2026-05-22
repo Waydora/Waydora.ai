@@ -6,7 +6,7 @@ const WINDOW_MS    = 60 * 60 * 1000;
 const MAX_REQUESTS = 20;
 
 // Token massimi per piano (il frontend invia userTier: "guest"|"free"|"paid")
-const TIER_TOKENS = { guest: 3000, free: 5000, paid: 10000 };
+const TIER_TOKENS = { guest: 5000, free: 8000, paid: 12000 };
 
 const ipRequests = new Map(); // { ip: { count, resetAt, tokensUsed } }
 
@@ -190,7 +190,7 @@ function callClaude(messages, existingItinerary, mediaContent, userTier = "guest
     const daysMatch = textContent.match(/(\d+)\s*(giorni|day|notti|notte)/i);
     const days = daysMatch ? parseInt(daysMatch[1]) : 3;
     const tierLimit = TIER_TOKENS[userTier] ?? TIER_TOKENS.guest;
-    const maxTokens = Math.min(tierLimit, Math.max(1500, days * 600 + 1500));
+    const maxTokens = Math.min(tierLimit, Math.max(2000, days * 800 + 2000));
 
     let claudeMessages = [...messages];
     if (mediaContent && claudeMessages.length > 0) {
@@ -234,7 +234,11 @@ function callClaude(messages, existingItinerary, mediaContent, userTier = "guest
           if (parsed.error) { reject(new Error(parsed.error.message)); return; }
           let text = parsed.content?.[0]?.text || "";
           text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
-          resolve(text);
+          const stopReason = parsed.stop_reason || "end_turn";
+          if (stopReason === "max_tokens") {
+            console.warn(`[callClaude] Risposta troncata a max_tokens=${maxTokens}. Testo raw (primi 200 car.):`, text.substring(0, 200));
+          }
+          resolve({ text, stopReason });
         } catch (e) { reject(e); }
       });
     });
@@ -372,23 +376,39 @@ const server = http.createServer(async (req, res) => {
       try {
         const { messages, existingItinerary, mediaContent, userTier } = JSON.parse(body);
         const enrichedMessages = await enrichWithTikTok(messages);
-        const raw = await callClaude(enrichedMessages, existingItinerary, mediaContent, userTier);
+        const { text: raw, stopReason } = await callClaude(enrichedMessages, existingItinerary, mediaContent, userTier);
 
-        let payload;
-        try {
-          payload = JSON.parse(raw);
-        } catch {
-          try {
-            let fixed = raw;
-            const opens  = (fixed.match(/{/g) || []).length;
-            const closes = (fixed.match(/}/g) || []).length;
-            for (let i = 0; i < opens - closes; i++) fixed += "}";
-            payload = JSON.parse(fixed);
-          } catch {
+        // Estrae il JSON in modo robusto: trova il blocco {...} più esterno
+        function extractJsonPayload(str) {
+          try { return JSON.parse(str); } catch {}
+          const start = str.indexOf("{");
+          if (start === -1) return null;
+          let depth = 0, inStr = false, esc = false;
+          for (let i = start; i < str.length; i++) {
+            const c = str[i];
+            if (esc) { esc = false; continue; }
+            if (c === "\\" && inStr) { esc = true; continue; }
+            if (c === '"') { inStr = !inStr; continue; }
+            if (inStr) continue;
+            if (c === "{") depth++;
+            if (c === "}") { depth--; if (depth === 0) { try { return JSON.parse(str.substring(start, i + 1)); } catch {} break; } }
+          }
+          // Ultimo tentativo: estrai solo il campo reply
+          const m = str.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+          return m ? { reply: m[1], itinerary: null } : null;
+        }
+
+        const payload = extractJsonPayload(raw);
+        if (!payload) {
+          console.error("[chat] JSON non estraibile. stopReason:", stopReason, "raw:", raw.substring(0, 300));
+          if (stopReason === "max_tokens") {
+            res.writeHead(502, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Itinerario troppo lungo: prova con meno giorni o sii più specifico." }));
+          } else {
             res.writeHead(502, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Risposta non valida. Riprova." }));
-            return;
           }
+          return;
         }
 
         if (!payload.reply) {

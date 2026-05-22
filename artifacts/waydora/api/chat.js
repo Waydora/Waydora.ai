@@ -170,7 +170,7 @@ ${JSON.stringify(existingItinerary).substring(0, 2000)}`
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 2500,
+      max_tokens: 8000,
       system: systemPrompt,
       messages: messages.map((m) => ({
         role: m.role,
