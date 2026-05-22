@@ -71,7 +71,7 @@ export type SavedItinerary = {
   itinerary: ItineraryData;
 };
 
-const API_BASE = (import.meta.env.VITE_API_URL ?? "https://waydora-api-production.up.railway.app") + "/api";
+const API_BASE = (import.meta.env.VITE_API_URL ?? "https://waydoraai-production.up.railway.app") + "/api";
 
 export function useListSuggestions() {
   return useQuery({

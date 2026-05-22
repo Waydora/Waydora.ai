@@ -318,6 +318,17 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") { res.writeHead(200); res.end(); return; }
 
+  // ── Health check ─────────────────────────────────────────────────────
+  if (req.url === "/api/health" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      status: "ok",
+      anthropicKey: !!process.env.ANTHROPIC_API_KEY,
+      googleMapsKey: !!process.env.GOOGLE_MAPS_KEY,
+    }));
+    return;
+  }
+
   // ── Suggestions ──────────────────────────────────────────────────────
   if (req.url === "/api/suggestions" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json" });

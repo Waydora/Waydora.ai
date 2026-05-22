@@ -15,7 +15,7 @@ import { fetchWeather, type WeatherData } from "@/lib/weather";
 import { useAuth } from "@/hooks/auth";
 
 const AMAZON_TAG = "waydora-21";
-const API_BASE   = import.meta.env.VITE_API_URL ?? "https://waydora-api-production.up.railway.app";
+const API_BASE   = import.meta.env.VITE_API_URL ?? "https://waydoraai-production.up.railway.app";
 const RATE_LIMIT_GUEST = 10;
 const RATE_LIMIT_USER  = 50;
 const TOOLBAR_H = 72;

@@ -169,7 +169,7 @@ ${JSON.stringify(existingItinerary).substring(0, 2000)}`
       : ITINERARY_SYSTEM_PROMPT;
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 2500,
       system: systemPrompt,
       messages: messages.map((m) => ({
@@ -203,11 +203,15 @@ ${JSON.stringify(existingItinerary).substring(0, 2000)}`
     }
 
     // ENRICH GOOGLE PLACES
-    payload.itinerary = await enrichWithGooglePlaces(
-      payload.itinerary
-    );
+    if (payload.itinerary) {
+      try {
+        payload.itinerary = await enrichWithGooglePlaces(payload.itinerary);
+      } catch (e) {
+        console.error("Places enrich error:", e.message);
+      }
+    }
 
-    if (!payload.reply || !payload.itinerary) {
+    if (!payload.reply) {
       return res.status(502).json({
         error: "Risposta incompleta",
       });
