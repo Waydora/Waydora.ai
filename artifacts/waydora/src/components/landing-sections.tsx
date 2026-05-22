@@ -148,8 +148,7 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
   const [input, setInput]         = useState("");
   const textareaRef               = useRef<HTMLTextAreaElement>(null);
   const [, navigate]              = useLocation();
-  const { theme, toggle: toggleTheme } = useTheme();
- 
+
   const currentDest = DESTINATIONS[destIndex];
  
   useEffect(() => {
@@ -198,18 +197,12 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
           style={{ background: "linear-gradient(to bottom,rgba(0,0,0,0.52) 0%,rgba(0,0,0,0.2) 45%,rgba(0,0,0,0.68) 100%)" }} />
       </div>
  
-      {/* Logo + theme toggle */}
-      <div className="relative z-20 px-6 pt-5 flex items-center justify-between">
+      {/* Logo */}
+      <div className="relative z-20 px-6 pt-5 flex items-center">
         <a href="/" onClick={(e) => { e.preventDefault(); navigate("/"); }} aria-label="Home">
           <img src={waydoraLogo} alt="Waydora" className="h-10 w-auto object-contain"
             style={{ filter: "brightness(0) invert(1)" }} />
         </a>
-        <button onClick={toggleTheme}
-          title={theme === "dark" ? "Passa a modalità chiara" : "Passa a modalità scura"}
-          style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "7px 14px", borderRadius: "9999px", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.25)", color: "#fff", cursor: "pointer" }}>
-          {theme === "dark" ? <Sun style={{ width: "14px", height: "14px" }} /> : <Moon style={{ width: "14px", height: "14px" }} />}
-          {theme === "dark" ? "Chiara" : "Scura"}
-        </button>
       </div>
  
       {/* Contenuto */}

@@ -206,7 +206,7 @@ function callClaude(messages, existingItinerary, mediaContent, userTier = "guest
     }
 
     const body = JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: claudeMessages,
@@ -239,6 +239,7 @@ function callClaude(messages, existingItinerary, mediaContent, userTier = "guest
       });
     });
     req.on("error", reject);
+    req.setTimeout(55000, () => { req.destroy(); reject(new Error("Claude API timeout")); });
     req.write(body);
     req.end();
   });
@@ -269,35 +270,43 @@ function enrichWithGooglePlaces(itinerary) {
     const apiKey = process.env.GOOGLE_MAPS_KEY;
     if (!apiKey) { resolve(itinerary); return; }
 
-    // Geocodifica la destinazione una sola volta per il bias di posizione
     const destCoords = await geocodeDestination(itinerary.destination, apiKey);
     const locParam = destCoords
       ? `&location=${destCoords.lat},${destCoords.lng}&radius=50000`
       : "";
 
-    for (const day of itinerary.days) {
-      for (const activity of day.activities) {
-        try {
-          // Query solo sul titolo dell'attività + bias posizione: più preciso per luoghi piccoli
-          const q = encodeURIComponent(activity.title);
-          const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}${locParam}&key=${apiKey}`;
-          const data = await new Promise((res, rej) => {
-            const req = https.get(url, (r) => {
-              let d = "";
-              r.on("data", c => { d += c; });
-              r.on("end", () => { try { res(JSON.parse(d)); } catch (e) { rej(e); } });
-            });
-            req.on("error", rej);
-            req.setTimeout(6000, () => { req.destroy(); rej(new Error("timeout")); });
+    const activities = (itinerary.days ?? []).flatMap(d => d.activities ?? []);
+
+    const enrichOne = (activity) => new Promise((res) => {
+      try {
+        const q = encodeURIComponent(activity.title);
+        const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}${locParam}&key=${apiKey}`;
+        const req = https.get(url, (r) => {
+          let d = "";
+          r.on("data", c => { d += c; });
+          r.on("end", () => {
+            try {
+              const data = JSON.parse(d);
+              if (data.results?.[0]) {
+                const place = data.results[0];
+                if (place.geometry?.location) activity.coordinates = { lat: place.geometry.location.lat, lng: place.geometry.location.lng };
+                if (place.name) activity.title = place.name;
+              }
+            } catch {}
+            res();
           });
-          if (data.results?.[0]) {
-            const place = data.results[0];
-            if (place.geometry?.location) activity.coordinates = { lat: place.geometry.location.lat, lng: place.geometry.location.lng };
-            if (place.name) activity.title = place.name;
-          }
-        } catch (e) { console.error("Places err:", e.message); }
-      }
-    }
+        });
+        req.on("error", () => res());
+        req.setTimeout(5000, () => { req.destroy(); res(); });
+      } catch { res(); }
+    });
+
+    // Tutte le attività in parallelo, con timeout globale di 12 secondi
+    await Promise.race([
+      Promise.allSettled(activities.map(enrichOne)),
+      new Promise(res => setTimeout(res, 12000)),
+    ]);
+
     resolve(itinerary);
   });
 }

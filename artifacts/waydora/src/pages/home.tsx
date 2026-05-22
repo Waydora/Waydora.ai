@@ -483,10 +483,17 @@ function ChatTurnView({ turn }: { turn: ChatTurn }) {
 
 function LandingNav({ onLoginClick, onEnterChat }: { onLoginClick: () => void; onEnterChat: () => void }) {
   const { user, logout } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
   return (
-    <div style={{ position: "absolute", top: 0, right: 0, zIndex: 30, padding: "20px 24px", display: "flex", alignItems: "center", gap: "12px" }}>
+    <div style={{ position: "absolute", top: 0, right: 0, zIndex: 30, padding: "20px 24px", display: "flex", alignItems: "center", gap: "10px" }}>
+      <button onClick={toggleTheme}
+        title={theme === "dark" ? "Passa a modalità chiara" : "Passa a modalità scura"}
+        style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "7px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.25)", color: "#fff", cursor: "pointer", flexShrink: 0 }}>
+        {theme === "dark" ? <Sun style={{ width: "13px", height: "13px" }} /> : <Moon style={{ width: "13px", height: "13px" }} />}
+        {theme === "dark" ? "Chiara" : "Scura"}
+      </button>
       {user ? (
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <button onClick={onEnterChat} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: "9999px", padding: "7px 14px 7px 8px", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
             {user.avatar ? <img src={user.avatar} alt={user.name} style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "11px" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>}
             {user.name?.split(" ")[0]}
@@ -633,7 +640,9 @@ export default function Home() {
 
     const turnId = Date.now(); const mediaPreview = mediaContent?.preview;
     setTurns(prev => [...prev, { id: turnId, userMessage: promptText || "📎 Media allegato", assistantReply: "", mediaPreview }]);
-    const newMsgs: ChatMessage[] = [...apiMessages, { role: "user", content: promptText || "Analizza questo contenuto" }];
+    // Limita il contesto alle ultime 8 entrate (4 turni) per ridurre token su sessioni lunghe
+    const recentMsgs = apiMessages.slice(-8);
+    const newMsgs: ChatMessage[] = [...recentMsgs, { role: "user", content: promptText || "Analizza questo contenuto" }];
     setApiMessages(newMsgs);
     const mediaForBackend = mediaContent ? { mediaType: mediaContent.mediaType, data: mediaContent.data } : undefined;
     setMediaContent(null);
