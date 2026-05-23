@@ -9,8 +9,10 @@ const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 const WINDOW_MS    = 60 * 60 * 1000;
 const MAX_REQUESTS = 20;
 
-// Token massimi per piano (aumentati: free non ha upgrade attualmente)
-const TIER_TOKENS = { guest: 12000, free: 24000, paid: 32000 };
+// Token massimi per piano (calibrati per stare nel timeout di rete con Haiku ~150 tok/s)
+const TIER_TOKENS = { guest: 8000, free: 12000, paid: 16000 };
+const SONNET_MAX_TOKENS = 4000;     // hard cap per fallback Sonnet (più lento)
+const FETCH_TIMEOUT_MS = 50000;     // abort prima del cut Vercel/Railway
 
 // Modelli via OpenRouter
 const M = {
@@ -218,13 +220,10 @@ function routeRequest({ lastUserMsg, existingItinerary, hasMedia, tier }) {
     return { model: M.HAIKU, maxTokens: Math.min(cap, 3000), kind: "consult", days };
   }
 
-  if (days <= 3) {
-    const tokens = Math.min(cap, Math.max(9000, days * 2200 + 4500));
-    return { model: M.HAIKU, maxTokens: tokens, kind: "create-small", days };
-  }
-
-  const tokens = Math.min(cap, Math.max(12000, days * 2400 + 5000));
-  return { model: M.SONNET, maxTokens: tokens, kind: "create-large", days };
+  // Sempre Haiku per nuovi itinerari: 3x più veloce di Sonnet, qualità equivalente su JSON
+  const tokens = Math.min(cap, Math.max(7000, days * 1100 + 3500));
+  const kind = days <= 3 ? "create-small" : "create-large";
+  return { model: M.HAIKU, maxTokens: tokens, kind, days };
 }
 
 function buildORMessages(messages, mediaContent) {
@@ -252,16 +251,27 @@ async function callOpenRouter({ model, system, messages, maxTokens }) {
     temperature: 0.7,
     messages: [{ role: "system", content: system }, ...messages],
   };
-  const resp = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://www.waydora.com",
-      "X-Title": "Waydora Travel Planner",
-    },
-    body: JSON.stringify(body),
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  let resp;
+  try {
+    resp = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENROUTER_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://www.waydora.com",
+        "X-Title": "Waydora Travel Planner",
+      },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error(`OpenRouter timeout >${FETCH_TIMEOUT_MS}ms su ${model}`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
     throw new Error(`OpenRouter ${resp.status}: ${errText.substring(0, 200)}`);
@@ -298,7 +308,7 @@ async function callAI(messages, existingItinerary, mediaContent, userTier = "gue
       model: M.SONNET,
       system: systemPrompt,
       messages: orMessages,
-      maxTokens: Math.min(TIER_TOKENS[userTier] ?? TIER_TOKENS.guest, 16000),
+      maxTokens: SONNET_MAX_TOKENS,
     });
     return { ...result, model: M.SONNET, fallback: true };
   }
@@ -363,7 +373,7 @@ function enrichWithGooglePlaces(itinerary) {
     // Tutte le attività in parallelo, con timeout globale di 12 secondi
     await Promise.race([
       Promise.allSettled(activities.map(enrichOne)),
-      new Promise(res => setTimeout(res, 12000)),
+      new Promise(res => setTimeout(res, 5000)),
     ]);
 
     resolve(itinerary);
@@ -470,7 +480,7 @@ const server = http.createServer(async (req, res) => {
               model: M.SONNET,
               system: systemPrompt,
               messages: buildORMessages(enrichedMessages, mediaContent),
-              maxTokens: Math.min(TIER_TOKENS[userTier] ?? TIER_TOKENS.guest, 16000),
+              maxTokens: SONNET_MAX_TOKENS,
             });
             raw = retry.text;
             stopReason = retry.stopReason;

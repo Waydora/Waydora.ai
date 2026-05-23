@@ -4,8 +4,17 @@ import https from "https";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
-// Cap massimi per piano (output tokens). Aumentati: free non ha upgrade.
-const TIER_TOKENS = { guest: 12000, free: 24000, paid: 32000 };
+// Cap massimi per piano (output tokens). Calibrati per stare nei 60s di Vercel
+// con Haiku (~150 tok/s). Sonnet ha cap separato più stretto (vedi SONNET_MAX_TOKENS).
+const TIER_TOKENS = { guest: 8000, free: 12000, paid: 16000 };
+
+// Hard cap per Sonnet (fallback JSON-recovery). A ~50 tok/s, 4000 token = ~80s
+// che sfora Vercel Hobby (60s) ma è il massimo gestibile con qualche margine.
+const SONNET_MAX_TOKENS = 4000;
+
+// Budget di tempo totale per la chiamata a OpenRouter: 50s lascia 10s per
+// Places + serializzazione prima del taglio Vercel a 60s.
+const FETCH_TIMEOUT_MS = 50000;
 
 // Modelli
 const M = {
@@ -124,15 +133,12 @@ function routeRequest({ lastUserMsg, existingItinerary, hasMedia, tier }) {
     return { model: M.HAIKU, maxTokens: Math.min(cap, 3000), kind: "consult", days };
   }
 
-  // Nuovo itinerario corto (≤3 giorni) → Haiku
-  if (days <= 3) {
-    const tokens = Math.min(cap, Math.max(9000, days * 2200 + 4500));
-    return { model: M.HAIKU, maxTokens: tokens, kind: "create-small", days };
-  }
-
-  // Nuovo itinerario medio/lungo → Sonnet per qualità
-  const tokens = Math.min(cap, Math.max(12000, days * 2400 + 5000));
-  return { model: M.SONNET, maxTokens: tokens, kind: "create-large", days };
+  // Nuovo itinerario: SEMPRE Haiku 4.5. Sonnet sforerebbe i 60s di Vercel.
+  // Haiku 4.5 produce JSON di qualità equivalente a Sonnet su questo task,
+  // a una velocità 3x maggiore (~150 tok/s).
+  const tokens = Math.min(cap, Math.max(7000, days * 1100 + 3500));
+  const kind = days <= 3 ? "create-small" : "create-large";
+  return { model: M.HAIKU, maxTokens: tokens, kind, days };
 }
 
 // ── OpenRouter call (OpenAI-compatible) ───────────────────────────────────
@@ -146,16 +152,30 @@ async function callOpenRouter({ model, system, messages, maxTokens }) {
     messages: [{ role: "system", content: system }, ...messages],
   };
 
-  const resp = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENROUTER_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": "https://www.waydora.com",
-      "X-Title": "Waydora Travel Planner",
-    },
-    body: JSON.stringify(body),
-  });
+  // Abort prima del taglio Vercel: chiude la TCP a OpenRouter, che cancella
+  // la generazione e fattura solo i token già emessi (non i futuri).
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+
+  let resp;
+  try {
+    resp = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENROUTER_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://www.waydora.com",
+        "X-Title": "Waydora Travel Planner",
+      },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error(`OpenRouter timeout >${FETCH_TIMEOUT_MS}ms su ${model}`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => "");
@@ -312,7 +332,7 @@ function enrichWithGooglePlaces(itinerary) {
 
     await Promise.race([
       Promise.allSettled(activities.map(enrichOne)),
-      new Promise(res => setTimeout(res, 12000)),
+      new Promise(res => setTimeout(res, 5000)),
     ]);
     resolve(itinerary);
   });
@@ -374,7 +394,7 @@ export default async function handler(req, res) {
           model: M.SONNET,
           system: systemPrompt,
           messages: orMessages,
-          maxTokens: Math.min(TIER_TOKENS[userTier] ?? TIER_TOKENS.guest, 16000),
+          maxTokens: SONNET_MAX_TOKENS,
         });
       } else {
         throw e;
@@ -394,7 +414,7 @@ export default async function handler(req, res) {
           model: M.SONNET,
           system: systemPrompt,
           messages: orMessages,
-          maxTokens: Math.min(TIER_TOKENS[userTier] ?? TIER_TOKENS.guest, 16000),
+          maxTokens: SONNET_MAX_TOKENS,
         });
         payload = extractJsonPayload(retry.text);
         console.log(`[chat] retry usage: in=${retry.usage?.prompt_tokens || "?"} out=${retry.usage?.completion_tokens || "?"}`);
