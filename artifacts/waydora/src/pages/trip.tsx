@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/auth";
 
 const AMAZON_TAG = "waydora-21";
 const API_BASE   = import.meta.env.VITE_API_URL ?? "https://waydoraai-production.up.railway.app";
+const CHAT_BASE  = import.meta.env.VITE_CHAT_URL ?? "";
 const RATE_LIMIT_GUEST = 10;
 const RATE_LIMIT_USER  = 50;
 const TOOLBAR_H = 72;
@@ -189,7 +190,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
     const prompt = input.trim(); setInput(""); setAiPending(true);
     await sendMsg(`✨ ${prompt}`, "ai_request");
     try {
-      const res = await fetch(`${API_BASE}/api/chat`, {
+      const res = await fetch(`${CHAT_BASE}/api/chat`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [{ role: "user", content: prompt }],

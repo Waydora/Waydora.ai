@@ -1,15 +1,23 @@
 const http = require("http");
 const https = require("https");
-const AnthropicLib = require("@anthropic-ai/sdk");
-const Anthropic = AnthropicLib.default ?? AnthropicLib;
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 55000, maxRetries: 0 });
+
+// ── OpenRouter config ─────────────────────────────────────────────────────
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
 // ── Rate limiting per IP ──────────────────────────────────────────────────
 const WINDOW_MS    = 60 * 60 * 1000;
 const MAX_REQUESTS = 20;
 
-// Token massimi per piano (il frontend invia userTier: "guest"|"free"|"paid")
-const TIER_TOKENS = { guest: 5000, free: 8000, paid: 12000 };
+// Token massimi per piano (aumentati: free non ha upgrade attualmente)
+const TIER_TOKENS = { guest: 12000, free: 24000, paid: 32000 };
+
+// Modelli via OpenRouter
+const M = {
+  CHEAP_CHAT: "deepseek/deepseek-chat-v3.1",
+  HAIKU:      "anthropic/claude-haiku-4-5",
+  SONNET:     "anthropic/claude-sonnet-4-6",
+};
 
 const ipRequests = new Map(); // { ip: { count, resetAt, tokensUsed } }
 
@@ -181,48 +189,119 @@ async function enrichWithTikTok(messages) {
   return enriched;
 }
 
-// ── Claude API (via SDK ufficiale) ────────────────────────────────────────
-async function callClaude(messages, existingItinerary, mediaContent, userTier = "guest") {
+// ── Router: classifica richiesta → modello + maxTokens ───────────────────
+function routeRequest({ lastUserMsg, existingItinerary, hasMedia, tier }) {
+  const cap = TIER_TOKENS[tier] ?? TIER_TOKENS.guest;
+  const text = (lastUserMsg || "").toString().toLowerCase().trim();
+  const daysMatch = text.match(/(\d+)\s*(giorni|day|notti|notte|gg)/i);
+  const days = daysMatch ? Math.min(parseInt(daysMatch[1]), 21) : 3;
+
+  if (hasMedia) {
+    return { model: M.HAIKU, maxTokens: Math.min(cap, 10000), kind: "vision", days };
+  }
+
+  const itineraryRx = /itinerar|viagg|pianifica|organizza|programm|crea.+(gior|gg)|gior(no|ni)\s|vacanz|weekend|trip|tour|visit|cosa\s+(fare|vedere)|dove\s+(andare|visitare)/i;
+  const editRx = /aggiungi|togli|sposta|rimuov|sostitu|cambia|modifica|elimina|metti|aggiorna/i;
+  const greetRx = /^(ciao|salve|hey|ehi|grazie|prego|ok|sì|si|no|wow|bene|perfetto|fantastico|chi sei|come stai|che fai)\b/i;
+  const hasItineraryIntent = itineraryRx.test(text);
+
+  if (!hasItineraryIntent && (greetRx.test(text) || text.length < 60)) {
+    return { model: M.CHEAP_CHAT, maxTokens: Math.min(cap, 1200), kind: "chat-cheap", days };
+  }
+
+  if (existingItinerary && (hasItineraryIntent || editRx.test(text))) {
+    const tokens = Math.min(cap, Math.max(8000, days * 1500 + 5000));
+    return { model: M.HAIKU, maxTokens: tokens, kind: "edit", days };
+  }
+
+  if (existingItinerary && !hasItineraryIntent) {
+    return { model: M.HAIKU, maxTokens: Math.min(cap, 3000), kind: "consult", days };
+  }
+
+  if (days <= 3) {
+    const tokens = Math.min(cap, Math.max(9000, days * 2200 + 4500));
+    return { model: M.HAIKU, maxTokens: tokens, kind: "create-small", days };
+  }
+
+  const tokens = Math.min(cap, Math.max(12000, days * 2400 + 5000));
+  return { model: M.SONNET, maxTokens: tokens, kind: "create-large", days };
+}
+
+function buildORMessages(messages, mediaContent) {
+  const out = (messages ?? []).map(m => ({ role: m.role, content: m.content }));
+  if (mediaContent && out.length > 0) {
+    const last = out[out.length - 1];
+    const t = typeof last.content === "string" ? last.content : "";
+    const dataUrl = `data:${mediaContent.mediaType};base64,${mediaContent.data}`;
+    out[out.length - 1] = {
+      role: "user",
+      content: [
+        { type: "text", text: t || "Analizza questa immagine e suggerisci un itinerario." },
+        { type: "image_url", image_url: { url: dataUrl } },
+      ],
+    };
+  }
+  return out;
+}
+
+async function callOpenRouter({ model, system, messages, maxTokens }) {
+  if (!OPENROUTER_KEY) throw new Error("OPENROUTER_API_KEY non configurata");
+  const body = {
+    model,
+    max_tokens: maxTokens,
+    temperature: 0.7,
+    messages: [{ role: "system", content: system }, ...messages],
+  };
+  const resp = await fetch(OPENROUTER_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${OPENROUTER_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://www.waydora.com",
+      "X-Title": "Waydora Travel Planner",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => "");
+    throw new Error(`OpenRouter ${resp.status}: ${errText.substring(0, 200)}`);
+  }
+  const data = await resp.json();
+  let text = data.choices?.[0]?.message?.content || "";
+  text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+  const finish = data.choices?.[0]?.finish_reason || "stop";
+  return { text, stopReason: finish === "length" ? "max_tokens" : "end_turn", usage: data.usage || {} };
+}
+
+// Wrapper compat: gestisce routing + fallback automatico su Sonnet
+async function callAI(messages, existingItinerary, mediaContent, userTier = "guest") {
   const systemPrompt = existingItinerary
     ? `${SYSTEM_PROMPT}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`
     : SYSTEM_PROMPT;
 
-  const lastMsg     = messages[messages.length - 1]?.content || "";
-  const textContent = typeof lastMsg === "string" ? lastMsg : "";
-  const daysMatch   = textContent.match(/(\d+)\s*(giorni|day|notti|notte)/i);
-  const days        = daysMatch ? parseInt(daysMatch[1]) : 3;
-  const tierLimit   = TIER_TOKENS[userTier] ?? TIER_TOKENS.guest;
-  const maxTokens   = Math.min(tierLimit, Math.max(2000, days * 800 + 2000));
+  const lastMsg = messages[messages.length - 1]?.content || "";
+  const lastText = typeof lastMsg === "string" ? lastMsg : (Array.isArray(lastMsg) ? (lastMsg.find(c => c.type === "text")?.text || "") : "");
+  const route = routeRequest({ lastUserMsg: lastText, existingItinerary, hasMedia: !!mediaContent, tier: userTier });
+  const orMessages = buildORMessages(messages, mediaContent);
 
-  let claudeMessages = [...messages];
-  if (mediaContent && claudeMessages.length > 0) {
-    const last = claudeMessages[claudeMessages.length - 1];
-    const t = typeof last.content === "string" ? last.content : "";
-    claudeMessages[claudeMessages.length - 1] = {
-      role: "user",
-      content: [
-        { type: "image", source: { type: "base64", media_type: mediaContent.mediaType, data: mediaContent.data } },
-        { type: "text", text: t || "Analizza questa immagine e suggerisci un itinerario." },
-      ],
-    };
+  console.log(`[callAI] kind=${route.kind} model=${route.model} days=${route.days} maxTokens=${route.maxTokens}`);
+
+  try {
+    const result = await callOpenRouter({ model: route.model, system: systemPrompt, messages: orMessages, maxTokens: route.maxTokens });
+    console.log(`[callAI] OK in=${result.usage.prompt_tokens || "?"} out=${result.usage.completion_tokens || "?"} stop=${result.stopReason}`);
+    return { ...result, model: route.model };
+  } catch (e) {
+    console.error(`[callAI] primo tentativo fallito (${route.model}):`, e.message);
+    if (route.model === M.SONNET) throw e;
+    console.log(`[callAI] fallback → ${M.SONNET}`);
+    const result = await callOpenRouter({
+      model: M.SONNET,
+      system: systemPrompt,
+      messages: orMessages,
+      maxTokens: Math.min(TIER_TOKENS[userTier] ?? TIER_TOKENS.guest, 16000),
+    });
+    return { ...result, model: M.SONNET, fallback: true };
   }
-
-  console.log(`[callClaude] Calling claude-sonnet-4-6, maxTokens=${maxTokens}, msgs=${claudeMessages.length}`);
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: maxTokens,
-    system: systemPrompt,
-    messages: claudeMessages,
-  });
-
-  let text = response.content?.[0]?.text || "";
-  text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
-  const stopReason = response.stop_reason || "end_turn";
-  console.log(`[callClaude] OK — stopReason=${stopReason}, outputLen=${text.length}`);
-  if (stopReason === "max_tokens") {
-    console.warn(`[callClaude] Troncato a max_tokens=${maxTokens}. Inizio:`, text.substring(0, 200));
-  }
-  return { text, stopReason };
 }
 
 // ── Google Places ─────────────────────────────────────────────────────────
@@ -303,6 +382,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       status: "ok",
+      openrouterKey: !!process.env.OPENROUTER_API_KEY,
       anthropicKey: !!process.env.ANTHROPIC_API_KEY,
       googleMapsKey: !!process.env.GOOGLE_MAPS_KEY,
     }));
@@ -353,7 +433,9 @@ const server = http.createServer(async (req, res) => {
         const { messages, existingItinerary, mediaContent, userTier } = JSON.parse(body);
         console.log(`[chat] msgs=${messages?.length}, tier=${userTier}, hasItinerary=${!!existingItinerary}`);
         const enrichedMessages = await enrichWithTikTok(messages);
-        const { text: raw, stopReason } = await callClaude(enrichedMessages, existingItinerary, mediaContent, userTier);
+        let aiResult = await callAI(enrichedMessages, existingItinerary, mediaContent, userTier);
+        let raw = aiResult.text;
+        let stopReason = aiResult.stopReason;
 
         // Estrae il JSON in modo robusto: trova il blocco {...} più esterno
         function extractJsonPayload(str) {
@@ -375,7 +457,29 @@ const server = http.createServer(async (req, res) => {
           return m ? { reply: m[1], itinerary: null } : null;
         }
 
-        const payload = extractJsonPayload(raw);
+        let payload = extractJsonPayload(raw);
+
+        // Fallback su JSON invalido: retry con Sonnet se non già usato
+        if ((!payload || !payload.reply) && aiResult.model !== M.SONNET) {
+          console.warn(`[chat] JSON invalido da ${aiResult.model}, retry con Sonnet`);
+          try {
+            const systemPrompt = existingItinerary
+              ? `${SYSTEM_PROMPT}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`
+              : SYSTEM_PROMPT;
+            const retry = await callOpenRouter({
+              model: M.SONNET,
+              system: systemPrompt,
+              messages: buildORMessages(enrichedMessages, mediaContent),
+              maxTokens: Math.min(TIER_TOKENS[userTier] ?? TIER_TOKENS.guest, 16000),
+            });
+            raw = retry.text;
+            stopReason = retry.stopReason;
+            payload = extractJsonPayload(raw);
+          } catch (e) {
+            console.error("[chat] retry Sonnet fallito:", e.message);
+          }
+        }
+
         if (!payload) {
           console.error("[chat] JSON non estraibile. stopReason:", stopReason, "raw:", raw.substring(0, 300));
           if (stopReason === "max_tokens") {

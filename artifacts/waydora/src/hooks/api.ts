@@ -72,6 +72,7 @@ export type SavedItinerary = {
 };
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? "https://waydoraai-production.up.railway.app") + "/api";
+const CHAT_BASE = import.meta.env.VITE_CHAT_URL ?? "";
 
 export function useListSuggestions() {
   return useQuery({
@@ -137,7 +138,7 @@ export function getGetSharedItineraryQueryKey(slug: string) {
 export function useChat() {
   return useMutation({
     mutationFn: async ({ data }: { data: { messages: ChatMessage[]; existingItinerary?: ItineraryData } }) => {
-      const response = await fetch(`${API_BASE}/chat`, {
+      const response = await fetch(`${CHAT_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
