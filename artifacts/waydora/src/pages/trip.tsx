@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { fetchWeather, type WeatherData } from "@/lib/weather";
 import { useAuth } from "@/hooks/auth";
+import { shouldUseRailway, AFFILIATES } from "@/lib/affiliates";
 
 const AMAZON_TAG = "waydora-21";
 const API_BASE   = import.meta.env.VITE_API_URL ?? "https://waydoraai-production.up.railway.app";
@@ -190,7 +191,11 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
     const prompt = input.trim(); setInput(""); setAiPending(true);
     await sendMsg(`✨ ${prompt}`, "ai_request");
     try {
-      const res = await fetch(`${CHAT_BASE}/api/chat`, {
+      // Modifica pesante (aggiungi giorno, rigenera, cambia destinazione) → Railway+Sonnet
+      // Modifica leggera/chat → Vercel+Haiku
+      const useRailway = shouldUseRailway(prompt, !!itinerary);
+      const url = useRailway ? `${API_BASE}/api/chat` : `${CHAT_BASE}/api/chat`;
+      const res = await fetch(url, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [{ role: "user", content: prompt }],
@@ -504,12 +509,33 @@ function WeatherPanel({ destination, durationDays }: { destination: string; dura
   );
 }
 
+function YesimCard() {
+  return (
+    <a href={AFFILIATES.YESIM_URL} target="_blank" rel="noopener noreferrer sponsored"
+       style={{ display: "block", textDecoration: "none", marginBottom: "16px" }}>
+      <div style={{
+        background: "linear-gradient(135deg,#10b981 0%,#06b6d4 100%)",
+        borderRadius: "12px", padding: "12px 14px",
+        display: "flex", alignItems: "center", gap: "10px",
+      }}>
+        <span style={{ fontSize: "1.6rem", flexShrink: 0 }}>📶</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "12px", fontWeight: 800, color: "#fff", marginBottom: "1px" }}>eSIM Yesim — internet senza roaming</div>
+          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.85)" }}>Attivazione in 2 minuti, paga solo quello che usi</div>
+        </div>
+        <ExternalLink style={{ width: "14px", height: "14px", color: "#fff", flexShrink: 0 }} />
+      </div>
+    </a>
+  );
+}
+
 function BaggagePanel({ packingList, destination }: { packingList: any[]; destination: string }) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   if (!packingList?.length) return <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", color: "rgba(255,255,255,0.3)", padding: "32px", textAlign: "center" }}><CheckSquare style={{ width: "32px", height: "32px", opacity: 0.3 }} /><p>Nessun bagaglio</p></div>;
   return (
     <div style={{ padding: "20px", overflowY: "auto", height: "100%" }}>
-      <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#fff", marginBottom: "18px" }}>Lista Bagaglio</h3>
+      <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#fff", marginBottom: "12px" }}>Lista Bagaglio</h3>
+      <YesimCard />
       {packingList.map((cat: any, ci: number) => (
         <div key={cat.category} style={{ marginBottom: "18px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>

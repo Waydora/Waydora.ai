@@ -21,6 +21,43 @@ const M = {
   SONNET:     "anthropic/claude-sonnet-4-6",
 };
 
+// ── Affiliate config ──────────────────────────────────────────────────────
+const AFF = {
+  GYG_PARTNER_ID: "EPBPR3R",
+  STAY22_URL:  "https://booking.stay22.com/waydora/5DPoKS60Cy",
+  KIWI_URL:    "https://kiwi.tpm.li/HdS8gBCi",
+};
+
+function buildAffiliate(category, title, destination) {
+  const q = encodeURIComponent(`${title || ""} ${destination || ""}`.trim());
+  switch ((category || "").toLowerCase()) {
+    case "stay":
+      return { provider: "Stay22", label: "Cerca alloggi", url: AFF.STAY22_URL };
+    case "food":
+      return { provider: "Google Maps", label: "Vedi su Maps", url: `https://www.google.com/maps/search/?api=1&query=${q}` };
+    case "transport":
+      return { provider: "Kiwi", label: "Cerca voli", url: AFF.KIWI_URL };
+    case "sightseeing":
+    case "experience":
+    case "nightlife":
+    default:
+      return { provider: "GetYourGuide", label: "Prenota ora", url: `https://www.getyourguide.com/s/?q=${q}&partner_id=${AFF.GYG_PARTNER_ID}` };
+  }
+}
+
+function ensureAffiliateOnItinerary(itinerary) {
+  if (!itinerary || !Array.isArray(itinerary.days)) return itinerary;
+  const dest = itinerary.destination || "";
+  for (const day of itinerary.days) {
+    if (!Array.isArray(day.activities)) continue;
+    for (const a of day.activities) {
+      const hasValid = a.affiliate && typeof a.affiliate.url === "string" && a.affiliate.url.startsWith("http");
+      if (!hasValid) a.affiliate = buildAffiliate(a.category, a.title, dest);
+    }
+  }
+  return itinerary;
+}
+
 const ipRequests = new Map(); // { ip: { count, resetAt, tokensUsed } }
 
 // Pulizia periodica della mappa (ogni ora)
@@ -133,10 +170,43 @@ REGOLE GENERALI:
 - NON includere indirizzi nelle descrizioni attività.
 - destination: usa SEMPRE il nome inglese internazionale seguito dal paese (es. "Milan, Italy", "Prague, Czech Republic", "Paris, France"). Mai il nome italiano.
 - tripPhotos: 3-4 query Unsplash per il viaggio intero.
-- Per luoghi piccoli o poco conosciuti usa coordinate precise e il nome esatto del posto.
 - Se ricevi info estratte da un video TikTok, analizzale e crea un itinerario ispirato.
 - Se l'utente fa domande conversazionali rispondi SOLO con reply e itinerary: null. MAX 150 parole.
-- Sii amichevole e naturale.`;
+- Sii amichevole e naturale.
+
+━━━ POI E COORDINATE — OBBLIGATORI ━━━
+- title: SEMPRE il nome REALE e SPECIFICO del posto.
+  ✅ "Trattoria Da Enzo al 29", "Colosseo", "Teatro alla Scala", "Mercato Centrale Firenze"
+  ❌ "Ristorante locale", "Museo del centro", "Caffè caratteristico"
+- coordinates: lat/lng GPS REALI del posto specifico (non del centro città).
+- description: 1-2 frasi vivaci, perché l'utente dovrebbe andarci. NON ripetere il nome.
+- estimatedCost: realistico in euro, formato "€15" o "€20-30 a persona".
+
+━━━ AFFILIATE — UN LINK PER OGNI ATTIVITÀ, OBBLIGATORIO ━━━
+Per OGNI activity compila il campo "affiliate" usando ESATTAMENTE questi formati in base a "category":
+
+- category "stay" → {
+    "provider": "Stay22",
+    "label": "Cerca alloggi",
+    "url": "https://booking.stay22.com/waydora/5DPoKS60Cy"
+  }
+- category "food" → {
+    "provider": "Google Maps",
+    "label": "Vedi su Maps",
+    "url": "https://www.google.com/maps/search/?api=1&query=<NOME+POSTO>+<DESTINAZIONE>"
+  }
+- category "transport" → {
+    "provider": "Kiwi",
+    "label": "Cerca voli",
+    "url": "https://kiwi.tpm.li/HdS8gBCi"
+  }
+- category "sightseeing" | "experience" | "nightlife" → {
+    "provider": "GetYourGuide",
+    "label": "Prenota ora",
+    "url": "https://www.getyourguide.com/s/?q=<NOME+POSTO>+<DESTINAZIONE>&partner_id=EPBPR3R"
+  }
+
+Sostituisci <NOME+POSTO> con il title (spazi → +) e <DESTINAZIONE> con la città principale. NON omettere mai il campo affiliate.`;
 
 // ── TikTok Scraper ────────────────────────────────────────────────────────
 function fetchTikTokData(videoUrl) {
@@ -211,19 +281,30 @@ function routeRequest({ lastUserMsg, existingItinerary, hasMedia, tier }) {
     return { model: M.CHEAP_CHAT, maxTokens: Math.min(cap, 1200), kind: "chat-cheap", days };
   }
 
-  if (existingItinerary && (hasItineraryIntent || editRx.test(text))) {
-    const tokens = Math.min(cap, Math.max(8000, days * 1500 + 5000));
-    return { model: M.HAIKU, maxTokens: tokens, kind: "edit", days };
+  // Su Railway non c'è il limite 60s di Vercel: usiamo Sonnet dove la qualità conta.
+
+  // Modifica leggera (sposta orario, cambia un nome, togli un'attività) → Haiku
+  const heavyEditRx = /aggiungi.+(gior|gg|tappa)|nuov[oi]\s+gior|rigenera|ricr|rifare|cambia\s+(destinazion|citt[aà]|posto|paese)|sposta.+(gior|tutto)/i;
+  if (existingItinerary && editRx.test(text) && !heavyEditRx.test(text)) {
+    const tokens = Math.min(cap, Math.max(6000, days * 1200 + 4000));
+    return { model: M.HAIKU, maxTokens: tokens, kind: "edit-small", days };
   }
 
-  if (existingItinerary && !hasItineraryIntent) {
+  // Consulto su itinerario esistente (no itinerary intent, no edit intent) → Haiku
+  if (existingItinerary && !hasItineraryIntent && !editRx.test(text)) {
     return { model: M.HAIKU, maxTokens: Math.min(cap, 3000), kind: "consult", days };
   }
 
-  // Sempre Haiku per nuovi itinerari: 3x più veloce di Sonnet, qualità equivalente su JSON
-  const tokens = Math.min(cap, Math.max(7000, days * 1100 + 3500));
+  // Modifica pesante (aggiungi giorno, rigenera, cambia destinazione) → Sonnet
+  if (existingItinerary) {
+    const tokens = Math.min(cap, Math.max(10000, days * 2000 + 5000));
+    return { model: M.SONNET, maxTokens: tokens, kind: "edit-large", days };
+  }
+
+  // Creazione nuovo itinerario → SEMPRE Sonnet (qualità POI/coords/affiliate)
+  const tokens = Math.min(cap, Math.max(10000, days * 2200 + 5000));
   const kind = days <= 3 ? "create-small" : "create-large";
-  return { model: M.HAIKU, maxTokens: tokens, kind, days };
+  return { model: M.SONNET, maxTokens: tokens, kind, days };
 }
 
 function buildORMessages(messages, mediaContent) {
@@ -511,6 +592,8 @@ const server = http.createServer(async (req, res) => {
         if (payload.itinerary) {
           try { payload.itinerary = await enrichWithGooglePlaces(payload.itinerary); }
           catch (e) { console.error("Places err:", e.message); }
+          // Safety-net: garantisce affiliate su OGNI activity anche se Sonnet dimentica
+          ensureAffiliateOnItinerary(payload.itinerary);
         }
 
         // Aggiunge header con richieste rimanenti

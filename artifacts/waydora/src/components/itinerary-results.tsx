@@ -9,9 +9,70 @@ type ItineraryData = any;
 type ItineraryActivity = any;
 type PackingCategory = any;
 import { fetchPhoto } from "@/lib/photos";
+import { AFFILIATES, isGoCityDestination, isOutsideEU } from "@/lib/affiliates";
 
 const FALLBACK = "https://images.pexels.com/photos/346885/pexels-photo-346885.jpeg";
 const AMAZON_TAG = "waydora-21";
+
+// ── Banner Go City (mostrato solo per destinazioni coperte) ───────────────
+function GoCityBanner({ destination }: { destination: string }) {
+  if (!isGoCityDestination(destination)) return null;
+  return (
+    <a href={AFFILIATES.GOCITY_URL} target="_blank" rel="noopener noreferrer sponsored"
+       style={{ display: "block", textDecoration: "none", marginBottom: "16px" }}>
+      <div style={{
+        background: "linear-gradient(135deg,#0ea5e9 0%,#6366f1 100%)",
+        borderRadius: "14px", padding: "14px 16px",
+        display: "flex", alignItems: "center", gap: "12px",
+        boxShadow: "0 4px 18px rgba(14,165,233,0.3)",
+      }}>
+        <span style={{ fontSize: "1.8rem", flexShrink: 0 }}>🎟️</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "13px", fontWeight: 800, color: "#fff", marginBottom: "2px" }}>
+            Risparmia con Go City Pass
+          </div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.85)" }}>
+            Un solo pass per le attrazioni top di {destination.split(",")[0]} — fino a -50% sui biglietti
+          </div>
+        </div>
+        <span style={{ fontSize: "10px", fontWeight: 700, color: "#fff",
+          background: "rgba(255,255,255,0.18)", padding: "5px 10px", borderRadius: "9999px", flexShrink: 0 }}>
+          Scopri →
+        </span>
+      </div>
+    </a>
+  );
+}
+
+// ── Banner Yesim eSIM (per destinazioni extra-UE) ─────────────────────────
+function YesimBanner({ destination }: { destination: string }) {
+  if (!isOutsideEU(destination)) return null;
+  return (
+    <a href={AFFILIATES.YESIM_URL} target="_blank" rel="noopener noreferrer sponsored"
+       style={{ display: "block", textDecoration: "none", marginBottom: "16px" }}>
+      <div style={{
+        background: "linear-gradient(135deg,#10b981 0%,#06b6d4 100%)",
+        borderRadius: "14px", padding: "14px 16px",
+        display: "flex", alignItems: "center", gap: "12px",
+        boxShadow: "0 4px 18px rgba(16,185,129,0.25)",
+      }}>
+        <span style={{ fontSize: "1.8rem", flexShrink: 0 }}>📶</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "13px", fontWeight: 800, color: "#fff", marginBottom: "2px" }}>
+            Resta connesso in {destination.split(",")[0]}
+          </div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.9)" }}>
+            eSIM Yesim — dati internet senza roaming, attivazione istantanea
+          </div>
+        </div>
+        <span style={{ fontSize: "10px", fontWeight: 700, color: "#fff",
+          background: "rgba(255,255,255,0.18)", padding: "5px 10px", borderRadius: "9999px", flexShrink: 0 }}>
+          Attiva →
+        </span>
+      </div>
+    </a>
+  );
+}
 
 function amazonLink(query: string): string {
   const encoded = encodeURIComponent(query.toLowerCase().replace(/\s+/g, "+"));
@@ -163,6 +224,8 @@ export function ItineraryResults({ itinerary }: { itinerary: ItineraryData }) {
             ))}
         </div>
       </div>
+      <GoCityBanner destination={itinerary.destination ?? ""} />
+      <YesimBanner destination={itinerary.destination ?? ""} />
       {itinerary.days?.map((day: any, dayIndex: number) => (
         <div key={day.day}>
           <DayHeader dayIndex={dayIndex} title={day.title} weather={day.weather} summary={day.summary} />

@@ -12,6 +12,7 @@ import { InspirePage } from "@/components/inspire-page";
 import { CreateTripPage } from "@/components/create-trip-page";
 import { SavedTripsPage } from "@/components/saved-trips-page";
 import { useChatSessions, useUserTrips, useSavedTrips, useLocalSessions } from "@/hooks/trips";
+import { shouldUseRailway } from "@/lib/affiliates";
 import {
   Send, Loader2, Save, PlusCircle, Map, ChevronLeft, ChevronRight,
   Compass, BookMarked, Calendar, DollarSign, Cloud, Camera,
@@ -648,7 +649,10 @@ export default function Home() {
     setMediaContent(null);
 
     chatMutation.mutate(
-      { data: { messages: newMsgs, existingItinerary: currentItinerary, mediaContent: mediaForBackend } as any },
+      {
+        data: { messages: newMsgs, existingItinerary: currentItinerary, mediaContent: mediaForBackend, userTier: user ? "free" : "guest" } as any,
+        useRailway: shouldUseRailway(promptText, !!currentItinerary),
+      },
       {
         onSuccess: async (data) => {
           setApiMessages(prev => [...prev, { role: "assistant", content: data.reply }]);

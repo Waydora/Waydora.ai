@@ -23,6 +23,45 @@ const M = {
   SONNET:       "anthropic/claude-sonnet-4-6",
 };
 
+// ── Affiliate config ──────────────────────────────────────────────────────
+const AFF = {
+  GYG_PARTNER_ID: "EPBPR3R",
+  STAY22_URL:  "https://booking.stay22.com/waydora/5DPoKS60Cy",
+  KIWI_URL:    "https://kiwi.tpm.li/HdS8gBCi",
+  TIQETS_URL:  "https://tiqets.tpm.li/5f5kLwe7",
+};
+
+function buildAffiliate(category, title, destination) {
+  const q = encodeURIComponent(`${title || ""} ${destination || ""}`.trim());
+  switch ((category || "").toLowerCase()) {
+    case "stay":
+      return { provider: "Stay22", label: "Cerca alloggi", url: AFF.STAY22_URL };
+    case "food":
+      return { provider: "Google Maps", label: "Vedi su Maps", url: `https://www.google.com/maps/search/?api=1&query=${q}` };
+    case "transport":
+      return { provider: "Kiwi", label: "Cerca voli", url: AFF.KIWI_URL };
+    case "sightseeing":
+    case "experience":
+    case "nightlife":
+    default:
+      return { provider: "GetYourGuide", label: "Prenota ora", url: `https://www.getyourguide.com/s/?q=${q}&partner_id=${AFF.GYG_PARTNER_ID}` };
+  }
+}
+
+// Safety-net: garantisce che ogni activity abbia un link affiliate valido
+function ensureAffiliateOnItinerary(itinerary) {
+  if (!itinerary || !Array.isArray(itinerary.days)) return itinerary;
+  const dest = itinerary.destination || "";
+  for (const day of itinerary.days) {
+    if (!Array.isArray(day.activities)) continue;
+    for (const a of day.activities) {
+      const hasValid = a.affiliate && typeof a.affiliate.url === "string" && a.affiliate.url.startsWith("http");
+      if (!hasValid) a.affiliate = buildAffiliate(a.category, a.title, dest);
+    }
+  }
+  return itinerary;
+}
+
 const SYSTEM_PROMPT = `Sei Waydora, un'assistente di viaggio AI amichevole e conversazionale. Parli in italiano, come un'amica esperta di viaggi.
 
 Rispondi SEMPRE e SOLO con JSON valido, zero testo fuori dal JSON.
@@ -94,7 +133,41 @@ REGOLE GENERALI:
 - destination: usa SEMPRE il nome inglese internazionale (es. "Milan, Italy"). Mai il nome italiano.
 - tripPhotos: 3-4 query Unsplash per il viaggio intero.
 - Se l'utente fa domande conversazionali rispondi SOLO con reply e itinerary: null. MAX 150 parole.
-- Sii amichevole e naturale.`;
+- Sii amichevole e naturale.
+
+━━━ POI E COORDINATE — OBBLIGATORI ━━━
+- title: usa SEMPRE il nome REALE e SPECIFICO del posto.
+  ✅ "Trattoria Da Enzo al 29", "Colosseo", "Teatro alla Scala", "Mercato Centrale Firenze"
+  ❌ "Ristorante locale", "Museo del centro", "Caffè caratteristico"
+- coordinates: lat/lng GPS REALI del posto specifico. Verifica mentalmente che siano nella città giusta.
+- description: 1-2 frasi vivaci, perché l'utente dovrebbe andarci (NON ripetere il nome).
+- estimatedCost: realistico in euro, formato "€15" o "€20-30 a persona".
+
+━━━ AFFILIATE — UN LINK PER OGNI ATTIVITÀ, OBBLIGATORIO ━━━
+Per OGNI activity compila il campo "affiliate" usando ESATTAMENTE questi formati in base alla "category":
+
+- category "stay" → {
+    "provider": "Stay22",
+    "label": "Cerca alloggi",
+    "url": "https://booking.stay22.com/waydora/5DPoKS60Cy"
+  }
+- category "food" → {
+    "provider": "Google Maps",
+    "label": "Vedi su Maps",
+    "url": "https://www.google.com/maps/search/?api=1&query=<NOME+POSTO>+<DESTINAZIONE>"
+  }
+- category "transport" → {
+    "provider": "Kiwi",
+    "label": "Cerca voli",
+    "url": "https://kiwi.tpm.li/HdS8gBCi"
+  }
+- category "sightseeing" | "experience" | "nightlife" → {
+    "provider": "GetYourGuide",
+    "label": "Prenota ora",
+    "url": "https://www.getyourguide.com/s/?q=<NOME+POSTO>+<DESTINAZIONE>&partner_id=EPBPR3R"
+  }
+
+Sostituisci <NOME+POSTO> con il title dell'activity (spazi → +) e <DESTINAZIONE> con la città principale. NON omettere mai il campo affiliate.`;
 
 // ── Router: classifica la richiesta e sceglie modello + maxTokens ─────────
 function routeRequest({ lastUserMsg, existingItinerary, hasMedia, tier }) {
@@ -434,6 +507,8 @@ export default async function handler(req, res) {
     if (payload.itinerary) {
       try { payload.itinerary = await enrichWithGooglePlaces(payload.itinerary); }
       catch (e) { console.error("Places err:", e.message); }
+      // Safety-net: garantisce affiliate su OGNI activity (anche se il modello l'ha dimenticato)
+      ensureAffiliateOnItinerary(payload.itinerary);
     }
 
     return res.status(200).json(payload);

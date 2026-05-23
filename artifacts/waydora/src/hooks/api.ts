@@ -137,8 +137,17 @@ export function getGetSharedItineraryQueryKey(slug: string) {
 
 export function useChat() {
   return useMutation({
-    mutationFn: async ({ data }: { data: { messages: ChatMessage[]; existingItinerary?: ItineraryData } }) => {
-      const response = await fetch(`${CHAT_BASE}/api/chat`, {
+    mutationFn: async ({ data, useRailway }: {
+      data: { messages: ChatMessage[]; existingItinerary?: ItineraryData; mediaContent?: any; userTier?: string };
+      useRailway?: boolean;
+    }) => {
+      // useRailway=true → endpoint Railway (Sonnet, no timeout 60s, max qualità)
+      // useRailway=false/undefined → endpoint Vercel (Haiku, veloce, economico)
+      const url = useRailway
+        ? `${API_BASE}/chat`               // es. https://waydoraai-production.up.railway.app/api/chat
+        : `${CHAT_BASE}/api/chat`;          // relativo → Vercel serverless
+
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
