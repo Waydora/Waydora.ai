@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, Fragment, type ReactNode } from "react";
 import { useParams, Link } from "wouter";
 import {
   Loader2, MessageSquare, Copy, Navigation, ExternalLink,
@@ -14,6 +14,13 @@ import { supabase } from "@/lib/supabase";
 import { fetchWeather, type WeatherData } from "@/lib/weather";
 import { useAuth } from "@/hooks/auth";
 import { shouldUseRailway, AFFILIATES } from "@/lib/affiliates";
+
+const URL_RX = /(https?:\/\/[^\s)]+[^\s).,;:!?])/g;
+function renderWithLinks(text: string): ReactNode {
+  return text.split(URL_RX).map((p, i) => /^https?:\/\//.test(p)
+    ? <a key={i} href={p} target="_blank" rel="noopener noreferrer sponsored" style={{ color: "#fb923c", textDecoration: "underline", wordBreak: "break-all" }}>{p}</a>
+    : <Fragment key={i}>{p}</Fragment>);
+}
 
 const AMAZON_TAG = "waydora-21";
 const API_BASE   = import.meta.env.VITE_API_URL ?? "https://waydoraai-production.up.railway.app";
@@ -287,7 +294,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
             </div>
           : messages.map(msg => (
             <div key={msg.id} style={msgBg(msg.type)}>
-              <div style={{ fontSize: "13px", color: msg.type === "ai_update" ? "#6ee7b7" : "rgba(255,255,255,0.88)", marginBottom: "4px", lineHeight: 1.55 }}>{msg.text}</div>
+              <div style={{ fontSize: "13px", color: msg.type === "ai_update" ? "#6ee7b7" : "rgba(255,255,255,0.88)", marginBottom: "4px", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{renderWithLinks(msg.text)}</div>
               <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>{msg.author} · {new Date(msg.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</div>
             </div>
           ))

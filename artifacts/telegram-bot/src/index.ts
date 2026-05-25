@@ -1,0 +1,86 @@
+import express from "express";
+import { webhookCallback } from "grammy";
+import { env } from "./lib/env.js";
+import { bot, setupBotMenu } from "./bot.js";
+import { issueBindToken } from "./lib/bind-tokens.js";
+import { userIdFromJwt, assertCanUseBot } from "./lib/auth-gate.js";
+import { startRealtimeBridge } from "./realtime.js";
+
+const app = express();
+app.use(express.json({ limit: "1mb" }));
+
+// ── CORS minimo per il frontend ───────────────────────────────────────────
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", env.WEB_ORIGIN);
+  res.header("Access-Control-Allow-Headers", "authorization,content-type");
+  res.header("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
+app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// ── Webhook Telegram ──────────────────────────────────────────────────────
+// Path con secret + header check (anti-spoofing)
+const webhookPath = `/telegram/webhook/${env.TELEGRAM_WEBHOOK_SECRET}`;
+const handleUpdate = webhookCallback(bot, "express");
+app.post(webhookPath, async (req, res) => {
+  const headerSecret = req.header("X-Telegram-Bot-Api-Secret-Token");
+  if (headerSecret !== env.TELEGRAM_WEBHOOK_SECRET) {
+    return res.sendStatus(401);
+  }
+  return handleUpdate(req, res);
+});
+
+// ── Bind token endpoint ──────────────────────────────────────────────────
+// Frontend chiama POST /api/telegram/bind-token con Authorization: Bearer <supabase_jwt>
+// Risposta: { url: "https://t.me/<bot>?start=<token>", expiresIn: 600 }
+app.post("/api/telegram/bind-token", async (req, res) => {
+  try {
+    const auth = req.header("authorization") ?? "";
+    const jwt = auth.replace(/^Bearer\s+/i, "");
+    if (!jwt) return res.status(401).json({ error: "missing token" });
+
+    const userId = await userIdFromJwt(jwt);
+    await assertCanUseBot(userId); // gate paid centralizzato
+
+    const token = issueBindToken(userId);
+    res.json({
+      url: `https://t.me/${env.PUBLIC_BOT_USERNAME}?start=${token}`,
+      expiresIn: 600,
+    });
+  } catch (e: any) {
+    const msg = String(e?.message ?? e);
+    if (msg.includes("paid plan required")) {
+      return res.status(402).json({ error: "paid_required" });
+    }
+    if (msg.includes("unauthorized") || msg.includes("forbidden")) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+    console.error("[bind-token]", e);
+    res.status(500).json({ error: "internal" });
+  }
+});
+
+// ── Boot ─────────────────────────────────────────────────────────────────
+async function main() {
+  await setupBotMenu();
+
+  const webhookUrl = `${env.PUBLIC_BOT_URL}${webhookPath}`;
+  await bot.api.setWebhook(webhookUrl, {
+    secret_token: env.TELEGRAM_WEBHOOK_SECRET,
+    allowed_updates: ["message", "callback_query"],
+  });
+  console.log(`[bot] webhook set: ${webhookUrl}`);
+
+  startRealtimeBridge();
+
+  app.listen(env.PORT, () => {
+    console.log(`[bot] listening on :${env.PORT}`);
+  });
+}
+
+main().catch((e) => {
+  console.error("[boot] fatal", e);
+  process.exit(1);
+});

@@ -9,7 +9,7 @@ type ItineraryData = any;
 type ItineraryActivity = any;
 type PackingCategory = any;
 import { fetchPhoto } from "@/lib/photos";
-import { AFFILIATES, isGoCityDestination, isOutsideEU } from "@/lib/affiliates";
+import { AFFILIATES, isGoCityDestination, isOutsideEU, goCityUrlFor, stay22UrlFor } from "@/lib/affiliates";
 
 const FALLBACK = "https://images.pexels.com/photos/346885/pexels-photo-346885.jpeg";
 const AMAZON_TAG = "waydora-21";
@@ -18,7 +18,7 @@ const AMAZON_TAG = "waydora-21";
 function GoCityBanner({ destination }: { destination: string }) {
   if (!isGoCityDestination(destination)) return null;
   return (
-    <a href={AFFILIATES.GOCITY_URL} target="_blank" rel="noopener noreferrer sponsored"
+    <a href={goCityUrlFor(destination)} target="_blank" rel="noopener noreferrer sponsored"
        style={{ display: "block", textDecoration: "none", marginBottom: "16px" }}>
       <div style={{
         background: "linear-gradient(135deg,#0ea5e9 0%,#6366f1 100%)",
@@ -38,6 +38,36 @@ function GoCityBanner({ destination }: { destination: string }) {
         <span style={{ fontSize: "10px", fontWeight: 700, color: "#fff",
           background: "rgba(255,255,255,0.18)", padding: "5px 10px", borderRadius: "9999px", flexShrink: 0 }}>
           Scopri →
+        </span>
+      </div>
+    </a>
+  );
+}
+
+// ── Banner Stay22 (cerca alloggio per la città dell'itinerario) ───────────
+function Stay22Banner({ destination }: { destination: string }) {
+  if (!destination) return null;
+  return (
+    <a href={stay22UrlFor(destination)} target="_blank" rel="noopener noreferrer sponsored"
+       style={{ display: "block", textDecoration: "none", marginBottom: "16px" }}>
+      <div style={{
+        background: "linear-gradient(135deg,#f97316 0%,#ef4444 100%)",
+        borderRadius: "14px", padding: "14px 16px",
+        display: "flex", alignItems: "center", gap: "12px",
+        boxShadow: "0 4px 18px rgba(249,115,22,0.28)",
+      }}>
+        <span style={{ fontSize: "1.8rem", flexShrink: 0 }}>🏨</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "13px", fontWeight: 800, color: "#fff", marginBottom: "2px" }}>
+            Trova alloggio a {destination.split(",")[0]}
+          </div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.9)" }}>
+            Confronta hotel, B&B e appartamenti su una sola mappa — powered by Stay22
+          </div>
+        </div>
+        <span style={{ fontSize: "10px", fontWeight: 700, color: "#fff",
+          background: "rgba(255,255,255,0.18)", padding: "5px 10px", borderRadius: "9999px", flexShrink: 0 }}>
+          Cerca →
         </span>
       </div>
     </a>
@@ -224,6 +254,7 @@ export function ItineraryResults({ itinerary }: { itinerary: ItineraryData }) {
             ))}
         </div>
       </div>
+      <Stay22Banner destination={itinerary.destination ?? ""} />
       <GoCityBanner destination={itinerary.destination ?? ""} />
       <YesimBanner destination={itinerary.destination ?? ""} />
       {itinerary.days?.map((day: any, dayIndex: number) => (

@@ -31,11 +31,17 @@ const AFF = {
   TIQETS_URL:  "https://tiqets.tpm.li/5f5kLwe7",
 };
 
+function stay22For(destination) {
+  if (!destination) return AFF.STAY22_URL;
+  const p = new URLSearchParams({ address: destination, adults: "2" });
+  return `${AFF.STAY22_URL}?${p.toString()}`;
+}
+
 function buildAffiliate(category, title, destination) {
   const q = encodeURIComponent(`${title || ""} ${destination || ""}`.trim());
   switch ((category || "").toLowerCase()) {
     case "stay":
-      return { provider: "Stay22", label: "Cerca alloggi", url: AFF.STAY22_URL };
+      return { provider: "Stay22", label: "Cerca alloggi", url: stay22For(destination) };
     case "food":
       return { provider: "Google Maps", label: "Vedi su Maps", url: `https://www.google.com/maps/search/?api=1&query=${q}` };
     case "transport":
@@ -57,6 +63,7 @@ function ensureAffiliateOnItinerary(itinerary) {
     for (const a of day.activities) {
       const hasValid = a.affiliate && typeof a.affiliate.url === "string" && a.affiliate.url.startsWith("http");
       if (!hasValid) a.affiliate = buildAffiliate(a.category, a.title, dest);
+      else if ((a.category || "").toLowerCase() === "stay") a.affiliate = buildAffiliate("stay", a.title, dest);
     }
   }
   return itinerary;

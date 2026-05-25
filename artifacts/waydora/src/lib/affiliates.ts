@@ -30,6 +30,44 @@ export function isGoCityDestination(destination?: string): boolean {
   return GO_CITY_SUPPORTED.some(city => d.includes(city));
 }
 
+// Mapping città → slug usato dagli URL gocity.com (/en/{slug})
+const GO_CITY_SLUGS: Record<string, string> = {
+  "new york": "new-york", "nyc": "new-york",
+  "las vegas": "las-vegas", "boston": "boston", "san francisco": "san-francisco",
+  "los angeles": "los-angeles", "miami": "miami", "san diego": "san-diego",
+  "washington": "washington-dc", "chicago": "chicago", "philadelphia": "philadelphia",
+  "orlando": "orlando", "cancun": "cancun", "toronto": "toronto", "vancouver": "vancouver",
+  "london": "london", "paris": "paris", "rome": "rome", "roma": "rome",
+  "berlin": "berlin", "amsterdam": "amsterdam", "barcelona": "barcelona",
+  "madrid": "madrid", "vienna": "vienna", "prague": "prague", "praga": "prague",
+  "dublin": "dublin", "edinburgh": "edinburgh", "lisbon": "lisbon", "lisbona": "lisbon",
+  "istanbul": "istanbul", "dubai": "dubai",
+  "sydney": "sydney", "melbourne": "melbourne", "auckland": "auckland",
+  "bangkok": "bangkok", "singapore": "singapore", "hong kong": "hong-kong", "tokyo": "tokyo",
+};
+
+// Deeplink Travelpayouts: wrappa qualsiasi URL gocity.com mantenendo marker/trs/campaign per il tracking.
+const GOCITY_TP_BASE = "https://tp.media/r?marker=729072&trs=529687&p=1942&campaign_id=62&u=";
+
+// Stay22 "allez" link — accetta query params address/checkin/checkout/adults per pre-filtrare la mappa.
+export function stay22UrlFor(destination?: string, checkin?: string, checkout?: string, adults = 2): string {
+  if (!destination) return AFFILIATES.STAY22_URL;
+  const params = new URLSearchParams({ address: destination, adults: String(adults) });
+  if (checkin)  params.set("checkin",  checkin);
+  if (checkout) params.set("checkout", checkout);
+  return `${AFFILIATES.STAY22_URL}?${params.toString()}`;
+}
+
+// Ritorna deeplink TP verso la città specifica se coperta, altrimenti redirect affiliate generico.
+export function goCityUrlFor(destination?: string): string {
+  if (!destination) return AFFILIATES.GOCITY_URL;
+  const d = destination.toLowerCase();
+  for (const [key, slug] of Object.entries(GO_CITY_SLUGS)) {
+    if (d.includes(key)) return GOCITY_TP_BASE + encodeURIComponent(`https://gocity.com/en/${slug}`);
+  }
+  return AFFILIATES.GOCITY_URL;
+}
+
 // ── Paesi UE (per decidere se mostrare banner Yesim eSIM) ─────────────────
 const EU_KEYWORDS = [
   "italy", "italia", "france", "francia", "germany", "germania", "spain", "spagna",

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, Fragment, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -7,6 +7,7 @@ import {
 } from "@/hooks/api";
 import { useAuth } from "@/hooks/auth";
 import { AuthModal } from "@/components/auth-modal";
+import { ConnectTelegramButton } from "@/components/connect-telegram-button";
 import { fetchWeather, type WeatherData } from "@/lib/weather";
 import { InspirePage } from "@/components/inspire-page";
 import { CreateTripPage } from "@/components/create-trip-page";
@@ -370,8 +371,15 @@ function UserBubble({ text, mediaPreview }: { text: string; mediaPreview?: strin
     </div>
   );
 }
+const URL_RX = /(https?:\/\/[^\s)]+[^\s).,;:!?])/g;
+function renderWithLinks(text: string): ReactNode {
+  const parts = text.split(URL_RX);
+  return parts.map((p, i) => /^https?:\/\//.test(p)
+    ? <a key={i} href={p} target="_blank" rel="noopener noreferrer sponsored" style={{ color: "#fb923c", textDecoration: "underline", wordBreak: "break-all" }}>{p}</a>
+    : <Fragment key={i}>{p}</Fragment>);
+}
 function AssistantBubble({ text }: { text: string }) {
-  return <div className="flex justify-start"><div style={{ maxWidth: "85%", padding: "10px 14px", borderRadius: "18px 18px 18px 4px", background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.11)", color: "rgba(255,255,255,0.88)", fontSize: "14px", lineHeight: 1.65 }}>{text}</div></div>;
+  return <div className="flex justify-start"><div style={{ maxWidth: "85%", padding: "10px 14px", borderRadius: "18px 18px 18px 4px", background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.11)", color: "rgba(255,255,255,0.88)", fontSize: "14px", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{renderWithLinks(text)}</div></div>;
 }
 function TypingIndicator() {
   return (
@@ -499,6 +507,7 @@ function LandingNav({ onLoginClick, onEnterChat }: { onLoginClick: () => void; o
             {user.avatar ? <img src={user.avatar} alt={user.name} style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "11px" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>}
             {user.name?.split(" ")[0]}
           </button>
+          <ConnectTelegramButton />
           <button onClick={logout} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "9999px", padding: "7px 14px", color: "rgba(255,255,255,0.6)", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Esci</button>
         </div>
       ) : (
