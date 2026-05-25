@@ -160,6 +160,16 @@ telegram-bot/
 
 Deploy Railway: nuovo service con `npm start` = `tsx src/index.ts`, healthcheck `/health`.
 
+## 8.bis Architettura AI (M4 implementato)
+
+Il bot NON duplica la logica di prompt/routing. Tutti i messaggi free-text del bot vanno in `POST {API_SERVER_URL}/api/chat` del server-standalone, riusando:
+- System prompt completo (italiano, due modalita' testo/itinerario, regole hotel/voli, formato affiliate)
+- Routing modelli (Haiku/Sonnet/DeepSeek)
+- Enrichment Google Places
+- Fallback su JSON invalido
+
+La storia conversazionale per Telegram vive in `chat_sessions` (stessa tabella della webapp), con `title = "tg:<telegram_user_id>"`. Cosi' la webapp e Telegram restano separati senza schema changes.
+
 ## 9. Roadmap implementativa
 
 1. **M1 — Skeleton + bind** (questa fase)

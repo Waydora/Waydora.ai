@@ -11,13 +11,17 @@ import {
 import { assertCanUseBot } from "./lib/auth-gate.js";
 import { checkRate } from "./lib/rate-limit.js";
 import { registerTripCommands } from "./commands/trips.js";
+import { registerChatAI } from "./commands/chat-ai.js";
+import { registerWeather } from "./commands/weather.js";
+import { registerIdeas } from "./commands/ideas.js";
+import { registerCalendar } from "./commands/calendar.js";
+import { registerReminders } from "./commands/reminders.js";
 
-// Context arricchito con il binding risolto (presente in tutti gli handler post-middleware tranne /start).
 export type BoundContext = Context & { binding: Binding };
 
 export const bot = new Bot<BoundContext>(env.TELEGRAM_BOT_TOKEN);
 
-// ── /start: bind oppure saluto ────────────────────────────────────────────
+// ── /start: bind oppure saluto (PRIMA del middleware di binding) ──────────
 bot.command("start", async (ctx) => {
   const tgId = ctx.from?.id;
   if (!tgId) return;
@@ -39,13 +43,16 @@ bot.command("start", async (ctx) => {
         tier,
       });
       await ctx.reply(
-        `✅ Collegato a Waydora (piano: ${tier}).\n\nProva /viaggi per vedere i tuoi viaggi.`,
+        `✅ Collegato a Waydora (piano: ${tier}).\n\n` +
+          `Scrivimi dove vuoi andare e ti aiuto a costruire l'itinerario.\n` +
+          `Comandi: /viaggi /idea /idee /meteo /calendario /reminder /help`,
       );
     } catch (e: any) {
       const msg = String(e?.message ?? e);
       if (msg.includes("paid plan required")) {
         await ctx.reply("Il bot Telegram e' riservato al piano Waydora Pro. Aggiorna su waydora.com.");
       } else {
+        console.error("[start bind]", e);
         await ctx.reply("Errore durante il collegamento. Riprova.");
       }
     }
@@ -54,22 +61,20 @@ bot.command("start", async (ctx) => {
 
   const existing = await getBindingByTelegramId(tgId);
   if (existing) {
-    await ctx.reply("Bentornato 👋\nProva /viaggi per i tuoi viaggi.");
+    await ctx.reply("Bentornato 👋\nScrivimi dove vuoi andare oppure usa /help.");
   } else {
     await ctx.reply(
       "Ciao! Per usare Waydora su Telegram collega il tuo account:\n" +
         "1) apri https://www.waydora.com\n" +
-        "2) accedi e clicca \"Collega Telegram\"",
+        "2) accedi e clicca \"Continua su Telegram\" nella sidebar",
     );
   }
 });
 
-// ── Middleware: richiedi binding per tutto il resto ──────────────────────
+// ── Middleware: richiede binding per tutto il resto ──────────────────────
 bot.use(async (ctx, next) => {
-  // /start passa sopra (registrato prima, sopra il middleware → ctx.command gia' processato? no: i middleware
-  // registrati DOPO bot.command sono comunque invocati. Distinguiamo con il testo.)
   const text = ctx.message?.text ?? ctx.callbackQuery?.data ?? "";
-  if (text.startsWith("/start")) return;
+  if (text.startsWith("/start")) return; // gia' gestito sopra
 
   const tgId = ctx.from?.id;
   if (!tgId) return;
@@ -81,11 +86,10 @@ bot.use(async (ctx, next) => {
 
   const binding = await getBindingByTelegramId(tgId);
   if (!binding) {
-    await ctx.reply("Account non collegato. Apri waydora.com → \"Collega Telegram\".");
+    await ctx.reply("Account non collegato. Apri waydora.com → \"Continua su Telegram\".");
     return;
   }
 
-  // Gate paid ad ogni messaggio (in caso il piano sia decaduto)
   try {
     await assertCanUseBot(binding.user_id);
   } catch (e: any) {
@@ -101,8 +105,12 @@ bot.use(async (ctx, next) => {
   await next();
 });
 
-// ── Comandi business ─────────────────────────────────────────────────────
+// ── Comandi business (ordine conta: AI catch-all per ultimo) ─────────────
 registerTripCommands(bot as any);
+registerWeather(bot as any);
+registerIdeas(bot as any);
+registerCalendar(bot as any);
+registerReminders(bot as any);
 
 bot.command("scollega", async (ctx) => {
   await deleteBindingByTelegramId(ctx.from!.id);
@@ -112,28 +120,45 @@ bot.command("scollega", async (ctx) => {
 bot.command("help", async (ctx) => {
   await ctx.reply(
     [
-      "Comandi:",
-      "/viaggi — lista dei tuoi viaggi",
-      "/viaggio — dettagli del viaggio selezionato",
-      "/oggi — itinerario di oggi",
-      "/giorno N — itinerario giorno N",
+      "🗺 *Waydora bot*",
+      "",
+      "Scrivimi liberamente: capisco le tue richieste e costruisco l'itinerario.",
+      "_Es. \"3 giorni a Lisbona con cibo locale\"_",
+      "",
+      "*Comandi*:",
+      "/viaggi — i tuoi viaggi salvati",
+      "/viaggio — viaggio selezionato",
+      "/oggi /giorno N — itinerario per giorno",
+      "/meteo [citta'] — previsioni",
+      "/idea <testo> — salva idea",
+      "/idee — lista idee",
+      "/calendario — esporta .ics",
+      "/reminder <quando> | <testo> — promemoria",
+      "/reminders — lista reminder",
+      "/nuovo — reset chat",
       "/scollega — rimuovi collegamento",
     ].join("\n"),
+    { parse_mode: "Markdown" },
   );
 });
 
-bot.on("message:text", async (ctx) => {
-  // Placeholder M4 (AI free-text). Per ora rispondiamo con guida.
-  await ctx.reply("Capito! Per ora usa /help per la lista comandi. La chat AI arriva presto.");
-});
+// IMPORTANTE: chat-ai registra l'handler "message:text" catch-all → per ultimo
+registerChatAI(bot as any);
 
 export async function setupBotMenu() {
   await bot.api.setMyCommands([
-    { command: "viaggi", description: "Lista dei tuoi viaggi" },
-    { command: "viaggio", description: "Dettagli viaggio selezionato" },
+    { command: "viaggi", description: "I tuoi viaggi" },
+    { command: "viaggio", description: "Viaggio selezionato" },
     { command: "oggi", description: "Itinerario di oggi" },
-    { command: "giorno", description: "Itinerario di un giorno specifico" },
+    { command: "giorno", description: "Itinerario di un giorno" },
+    { command: "meteo", description: "Previsioni meteo" },
+    { command: "idea", description: "Salva un'idea" },
+    { command: "idee", description: "Le tue idee" },
+    { command: "calendario", description: "Esporta .ics" },
+    { command: "reminder", description: "Crea reminder" },
+    { command: "reminders", description: "Lista reminder" },
+    { command: "nuovo", description: "Nuova conversazione" },
     { command: "help", description: "Aiuto" },
-    { command: "scollega", description: "Scollega account Waydora" },
+    { command: "scollega", description: "Scollega account" },
   ]);
 }

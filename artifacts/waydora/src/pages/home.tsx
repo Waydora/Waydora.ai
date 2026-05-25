@@ -507,7 +507,6 @@ function LandingNav({ onLoginClick, onEnterChat }: { onLoginClick: () => void; o
             {user.avatar ? <img src={user.avatar} alt={user.name} style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "11px" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>}
             {user.name?.split(" ")[0]}
           </button>
-          <ConnectTelegramButton />
           <button onClick={logout} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "9999px", padding: "7px 14px", color: "rgba(255,255,255,0.6)", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Esci</button>
         </div>
       ) : (
@@ -794,6 +793,11 @@ export default function Home() {
       <div className="lg:hidden">{mobileHeader}</div>
       <div ref={chatScrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "20px" }}>
         {turns.length === 0 ? <WelcomeMessage userName={user?.name} /> : turns.map(turn => <ChatTurnView key={turn.id} turn={turn} />)}
+        {user && hasItinerary && (
+          <div style={{ display: "flex", justifyContent: "center", padding: "4px 0 8px" }}>
+            <ConnectTelegramButton variant="chat-chip" />
+          </div>
+        )}
       </div>
       <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
         <QuickSuggestions onSelect={p => handleSubmit(p)} visible={hasItinerary && !chatMutation.isPending} />

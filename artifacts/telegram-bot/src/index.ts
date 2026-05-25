@@ -5,6 +5,7 @@ import { bot, setupBotMenu } from "./bot.js";
 import { issueBindToken } from "./lib/bind-tokens.js";
 import { userIdFromJwt, assertCanUseBot } from "./lib/auth-gate.js";
 import { startRealtimeBridge } from "./realtime.js";
+import { startReminderLoop } from "./lib/reminders.js";
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -74,6 +75,7 @@ async function main() {
   console.log(`[bot] webhook set: ${webhookUrl}`);
 
   startRealtimeBridge();
+  startReminderLoop();
 
   app.listen(env.PORT, () => {
     console.log(`[bot] listening on :${env.PORT}`);

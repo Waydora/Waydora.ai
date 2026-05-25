@@ -53,6 +53,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import waydoraLogo from "@assets/LOGO1.png";
+import { ConnectTelegramButton } from "@/components/connect-telegram-button";
+import { useAuth } from "@/hooks/auth";
 
 type SavedTrip = {
   id: string | number;
@@ -77,6 +79,7 @@ export function GlobalSidebar({
 }) {
   const [location, setLocation] = useLocation();
   const [expanded, setExpanded] = useState(false);
+  const { user } = useAuth();
 
   return (
     <aside
@@ -101,6 +104,13 @@ export function GlobalSidebar({
           </Link>
         )}
       </div>
+
+      {/* Telegram quick link (sotto al logo, solo se loggato) */}
+      {user && (
+        <div className="px-1.5 pt-2">
+          <ConnectTelegramButton variant="sidebar" expanded={expanded} />
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-2 px-1.5 space-y-0.5 min-h-0">

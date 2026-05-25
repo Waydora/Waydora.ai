@@ -13,5 +13,7 @@ export const env = {
   SUPABASE_URL: req("SUPABASE_URL"),
   SUPABASE_SERVICE_ROLE_KEY: req("SUPABASE_SERVICE_ROLE_KEY"),
   WEB_ORIGIN: process.env.WEB_ORIGIN ?? "https://www.waydora.com",
+  API_SERVER_URL: req("API_SERVER_URL"),
+  WEATHER_API_KEY: process.env.WEATHER_API_KEY ?? "",
   PORT: Number(process.env.PORT ?? 3000),
 };

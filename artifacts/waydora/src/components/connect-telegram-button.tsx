@@ -5,51 +5,88 @@ import { supabase } from "@/lib/supabase";
 // URL del servizio bot (Railway). Override con VITE_TELEGRAM_BOT_URL.
 const BOT_API = (import.meta.env.VITE_TELEGRAM_BOT_URL as string) || "";
 
-type Props = { className?: string; style?: React.CSSProperties };
+type Variant = "default" | "sidebar" | "chat-chip";
+type Props = { variant?: Variant; expanded?: boolean; className?: string; style?: React.CSSProperties };
 
-export function ConnectTelegramButton({ className, style }: Props) {
+async function openTelegram(): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { ok: false, error: "Devi accedere prima." };
+  if (!BOT_API) return { ok: false, error: "Servizio Telegram non configurato." };
+  const res = await fetch(`${BOT_API}/api/telegram/bind-token`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${session.access_token}` },
+  });
+  if (res.status === 402) return { ok: false, error: "Disponibile col piano Waydora Pro." };
+  if (!res.ok) return { ok: false, error: "Impossibile generare il link." };
+  const { url } = (await res.json()) as { url: string };
+  window.open(url, "_blank", "noopener,noreferrer");
+  return { ok: true };
+}
+
+export function ConnectTelegramButton({ variant = "default", expanded = true, className, style }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleConnect() {
+  async function handle() {
     setError(null);
     setLoading(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError("Devi accedere prima di collegare Telegram.");
-        return;
-      }
-      if (!BOT_API) {
-        setError("Servizio Telegram non configurato.");
-        return;
-      }
-      const res = await fetch(`${BOT_API}/api/telegram/bind-token`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${session.access_token}` },
-      });
-      if (res.status === 402) {
-        setError("Disponibile col piano Waydora Pro.");
-        return;
-      }
-      if (!res.ok) {
-        setError("Impossibile generare il link. Riprova.");
-        return;
-      }
-      const { url } = (await res.json()) as { url: string };
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch {
-      setError("Errore di rete.");
-    } finally {
-      setLoading(false);
-    }
+    const r = await openTelegram();
+    if (!r.ok) setError(r.error);
+    setLoading(false);
+  }
+
+  if (variant === "sidebar") {
+    return (
+      <button
+        type="button"
+        onClick={handle}
+        disabled={loading}
+        title={!expanded ? "Continua su Telegram" : undefined}
+        className={className}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", gap: 10,
+          padding: expanded ? "8px 10px" : "8px", borderRadius: 10,
+          background: "rgba(34,158,217,0.12)", border: "1px solid rgba(34,158,217,0.35)",
+          color: "#5ec0e9", fontSize: 12, fontWeight: 600,
+          cursor: loading ? "wait" : "pointer", justifyContent: expanded ? "flex-start" : "center",
+          ...style,
+        }}
+      >
+        {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+        {expanded && <span>Continua su Telegram</span>}
+      </button>
+    );
+  }
+
+  if (variant === "chat-chip") {
+    return (
+      <div className={className} style={style}>
+        <button
+          type="button"
+          onClick={handle}
+          disabled={loading}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            padding: "8px 14px", borderRadius: 9999,
+            background: "linear-gradient(135deg,#229ED9,#1a7fb0)", color: "#fff",
+            border: "none", fontWeight: 600, fontSize: 13,
+            cursor: loading ? "wait" : "pointer", opacity: loading ? 0.7 : 1,
+            boxShadow: "0 4px 12px rgba(34,158,217,0.35)",
+          }}
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+          Continua su Telegram
+        </button>
+        {error && <div style={{ marginTop: 6, fontSize: 12, color: "#ff6b6b" }}>{error}</div>}
+      </div>
+    );
   }
 
   return (
     <div className={className} style={style}>
       <button
         type="button"
-        onClick={handleConnect}
+        onClick={handle}
         disabled={loading}
         style={{
           display: "inline-flex", alignItems: "center", gap: 8,
@@ -62,9 +99,7 @@ export function ConnectTelegramButton({ className, style }: Props) {
         {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
         Collega Telegram
       </button>
-      {error && (
-        <div style={{ marginTop: 8, fontSize: 13, color: "#ff6b6b" }}>{error}</div>
-      )}
+      {error && <div style={{ marginTop: 8, fontSize: 13, color: "#ff6b6b" }}>{error}</div>}
     </div>
   );
 }
