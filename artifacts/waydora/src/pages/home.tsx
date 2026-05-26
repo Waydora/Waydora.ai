@@ -299,6 +299,11 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
         })}
       </div>
       <div style={{ flex: 1 }} />
+      {user && (
+        <div style={{ padding: isMobile ? "0 16px 12px" : "0 12px 10px" }}>
+          <ConnectTelegramButton variant="sidebar" expanded={true} />
+        </div>
+      )}
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: isMobile ? "16px" : "12px" }}>
         {user ? (
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -793,11 +798,6 @@ export default function Home() {
       <div className="lg:hidden">{mobileHeader}</div>
       <div ref={chatScrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "20px" }}>
         {turns.length === 0 ? <WelcomeMessage userName={user?.name} /> : turns.map(turn => <ChatTurnView key={turn.id} turn={turn} />)}
-        {user && hasItinerary && (
-          <div style={{ display: "flex", justifyContent: "center", padding: "4px 0 8px" }}>
-            <ConnectTelegramButton variant="chat-chip" />
-          </div>
-        )}
       </div>
       <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
         <QuickSuggestions onSelect={p => handleSubmit(p)} visible={hasItinerary && !chatMutation.isPending} />

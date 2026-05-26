@@ -11,13 +11,27 @@ type Props = { variant?: Variant; expanded?: boolean; className?: string; style?
 async function openTelegram(): Promise<{ ok: true } | { ok: false; error: string }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return { ok: false, error: "Devi accedere prima." };
-  if (!BOT_API) return { ok: false, error: "Servizio Telegram non configurato." };
-  const res = await fetch(`${BOT_API}/api/telegram/bind-token`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${session.access_token}` },
-  });
+  if (!BOT_API) {
+    console.warn("[telegram] VITE_TELEGRAM_BOT_URL non configurata in Vercel/env");
+    return { ok: false, error: "Bot non ancora attivo (config mancante). Riprova piu' tardi." };
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${BOT_API}/api/telegram/bind-token`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${session.access_token}` },
+    });
+  } catch (e) {
+    console.error("[telegram] fetch err", e);
+    return { ok: false, error: "Servizio non raggiungibile." };
+  }
   if (res.status === 402) return { ok: false, error: "Disponibile col piano Waydora Pro." };
-  if (!res.ok) return { ok: false, error: "Impossibile generare il link." };
+  if (res.status === 401) return { ok: false, error: "Sessione scaduta, rieffettua il login." };
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[telegram] bind-token error", res.status, body);
+    return { ok: false, error: `Errore ${res.status}. Riprova.` };
+  }
   const { url } = (await res.json()) as { url: string };
   window.open(url, "_blank", "noopener,noreferrer");
   return { ok: true };
@@ -37,24 +51,27 @@ export function ConnectTelegramButton({ variant = "default", expanded = true, cl
 
   if (variant === "sidebar") {
     return (
-      <button
-        type="button"
-        onClick={handle}
-        disabled={loading}
-        title={!expanded ? "Continua su Telegram" : undefined}
-        className={className}
-        style={{
-          width: "100%", display: "flex", alignItems: "center", gap: 10,
-          padding: expanded ? "8px 10px" : "8px", borderRadius: 10,
-          background: "rgba(34,158,217,0.12)", border: "1px solid rgba(34,158,217,0.35)",
-          color: "#5ec0e9", fontSize: 12, fontWeight: 600,
-          cursor: loading ? "wait" : "pointer", justifyContent: expanded ? "flex-start" : "center",
-          ...style,
-        }}
-      >
-        {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-        {expanded && <span>Continua su Telegram</span>}
-      </button>
+      <div className={className} style={style}>
+        <button
+          type="button"
+          onClick={handle}
+          disabled={loading}
+          title={!expanded ? "Continua su Telegram" : error ?? undefined}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 10,
+            padding: expanded ? "8px 10px" : "8px", borderRadius: 10,
+            background: "rgba(34,158,217,0.12)", border: "1px solid rgba(34,158,217,0.35)",
+            color: "#5ec0e9", fontSize: 12, fontWeight: 600,
+            cursor: loading ? "wait" : "pointer", justifyContent: expanded ? "flex-start" : "center",
+          }}
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+          {expanded && <span>Continua su Telegram</span>}
+        </button>
+        {expanded && error && (
+          <div style={{ marginTop: 6, fontSize: 11, color: "#ff8585", lineHeight: 1.3 }}>{error}</div>
+        )}
+      </div>
     );
   }
 
