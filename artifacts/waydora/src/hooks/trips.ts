@@ -339,5 +339,13 @@ export function useLocalSessions() {
 
   const clear = () => { try { localStorage.removeItem(STORAGE_KEY); } catch {} };
 
-  return { load, add, clear };
+  const remove = (id: string | number) => {
+    try {
+      const sessions = load();
+      const updated = sessions.filter((s: any) => String(s.id) !== String(id));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch {}
+  };
+
+  return { load, add, clear, remove };
 }

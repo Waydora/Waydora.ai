@@ -176,56 +176,137 @@
   --shadow-2xl: 0px 24px 64px -12px hsl(0 0% 0% / 0.5);
 }
 
-/* ── Waydora custom CSS vars — used in inline-style components ────────── */
+/* ── Waydora — Palette "Gradient Travel" ──────────────────────────────────
+   Travel mood: sole/terracotta caldo → corallo → cielo/mare freddo.
+   I gradient si muovono dolcemente nel landing per dare senso di viaggio.
+   Light = default. Dark = stessa palette ma "esplosa" tipo aurora notturna. */
 :root {
-  /* light mode */
-  --wd-bg:            #f5f4ff;
-  --wd-bg2:           #ede9ff;
-  --wd-text:          #1a1030;
-  --wd-text-75:       rgba(20,5,40,0.75);
-  --wd-text-65:       rgba(20,5,40,0.65);
-  --wd-text-55:       rgba(20,5,40,0.55);
-  --wd-text-45:       rgba(20,5,40,0.45);
-  --wd-text-40:       rgba(20,5,40,0.40);
-  --wd-text-35:       rgba(20,5,40,0.35);
-  --wd-text-30:       rgba(20,5,40,0.30);
-  --wd-text-25:       rgba(20,5,40,0.25);
-  --wd-surface-5:     rgba(0,0,0,0.04);
-  --wd-surface-8:     rgba(0,0,0,0.06);
-  --wd-surface-12:    rgba(0,0,0,0.08);
-  --wd-border-7:      rgba(0,0,0,0.07);
-  --wd-border-8:      rgba(0,0,0,0.08);
-  --wd-border-10:     rgba(0,0,0,0.10);
-  --wd-border-13:     rgba(0,0,0,0.12);
-  --wd-glass:         rgba(245,244,255,0.92);
-  --wd-blob-purple:   rgba(139,92,246,0.10);
-  --wd-blob-pink:     rgba(219,39,119,0.07);
-  --wd-blob-indigo:   rgba(79,70,229,0.09);
+  /* LIGHT — sabbia calda, cielo, mare */
+  --wd-bg:            #fff8f1;            /* sabbia chiara */
+  --wd-bg2:           #ffeede;            /* tramonto pallido */
+  --wd-text:          #15263d;            /* blu notte mare */
+  --wd-text-75:       rgba(21,38,61,0.78);
+  --wd-text-65:       rgba(21,38,61,0.68);
+  --wd-text-55:       rgba(21,38,61,0.58);
+  --wd-text-45:       rgba(21,38,61,0.48);
+  --wd-text-40:       rgba(21,38,61,0.42);
+  --wd-text-35:       rgba(21,38,61,0.36);
+  --wd-text-30:       rgba(21,38,61,0.30);
+  --wd-text-25:       rgba(21,38,61,0.24);
+  --wd-surface-5:     rgba(21,38,61,0.04);
+  --wd-surface-8:     rgba(21,38,61,0.07);
+  --wd-surface-12:    rgba(21,38,61,0.10);
+  --wd-border-7:      rgba(21,38,61,0.08);
+  --wd-border-8:      rgba(21,38,61,0.10);
+  --wd-border-10:     rgba(21,38,61,0.13);
+  --wd-border-13:     rgba(21,38,61,0.16);
+  --wd-glass:         rgba(255,248,241,0.78);
+  /* Palette viaggio: 4 colori che si combinano in gradient */
+  --wd-coral:         #ff7e5f;            /* corallo / tramonto */
+  --wd-coral-rgb:     255,126,95;
+  --wd-terracotta:    #ff5f6d;            /* terracotta */
+  --wd-terracotta-rgb:255,95,109;
+  --wd-sun:           #ffb84d;            /* sole / dorato */
+  --wd-sun-rgb:       255,184,77;
+  --wd-sky:           #4ea8de;            /* cielo */
+  --wd-sky-rgb:       78,168,222;
+  --wd-sea:           #2a9d8f;            /* mare turchese */
+  --wd-sea-rgb:       42,157,143;
+  --wd-pink:          #ff8fab;            /* fucsia gentile */
+  --wd-pink-rgb:      255,143,171;
+  /* blob shapes per sfondi animati */
+  --wd-blob-purple:   rgba(255,184,77,0.22);
+  --wd-blob-pink:     rgba(255,95,109,0.18);
+  --wd-blob-indigo:   rgba(78,168,222,0.22);
+  /* Gradient travel: tramonto → cielo */
+  --wd-grad-warm:     linear-gradient(135deg, #ff5f6d 0%, #ff7e5f 45%, #ffb84d 100%);
+  --wd-grad-cool:     linear-gradient(135deg, #4ea8de 0%, #2a9d8f 100%);
+  --wd-grad-travel:   linear-gradient(135deg, #ff5f6d 0%, #ff7e5f 30%, #ffb84d 55%, #4ea8de 85%, #2a9d8f 100%);
+  --wd-shadow-card:   0 6px 24px rgba(21,38,61,0.06), 0 2px 8px rgba(21,38,61,0.04);
+  --wd-shadow-strong: 0 12px 40px rgba(255,95,109,0.18), 0 4px 16px rgba(78,168,222,0.10);
 }
 
 .dark {
-  --wd-bg:            #0a0a12;
-  --wd-bg2:           #0d0a18;
-  --wd-text:          #ffffff;
-  --wd-text-75:       rgba(255,255,255,0.75);
-  --wd-text-65:       rgba(255,255,255,0.65);
-  --wd-text-55:       rgba(255,255,255,0.55);
-  --wd-text-45:       rgba(255,255,255,0.45);
-  --wd-text-40:       rgba(255,255,255,0.40);
-  --wd-text-35:       rgba(255,255,255,0.35);
-  --wd-text-30:       rgba(255,255,255,0.30);
-  --wd-text-25:       rgba(255,255,255,0.25);
+  /* DARK — aurora esplosa: blu notte profondo + neon */
+  --wd-bg:            #06091a;            /* notte di mare profondo */
+  --wd-bg2:           #0a1230;
+  --wd-text:          #f5faff;
+  --wd-text-75:       rgba(245,250,255,0.78);
+  --wd-text-65:       rgba(245,250,255,0.68);
+  --wd-text-55:       rgba(245,250,255,0.55);
+  --wd-text-45:       rgba(245,250,255,0.45);
+  --wd-text-40:       rgba(245,250,255,0.40);
+  --wd-text-35:       rgba(245,250,255,0.35);
+  --wd-text-30:       rgba(245,250,255,0.30);
+  --wd-text-25:       rgba(245,250,255,0.22);
   --wd-surface-5:     rgba(255,255,255,0.05);
   --wd-surface-8:     rgba(255,255,255,0.08);
   --wd-surface-12:    rgba(255,255,255,0.12);
   --wd-border-7:      rgba(255,255,255,0.07);
-  --wd-border-8:      rgba(255,255,255,0.08);
-  --wd-border-10:     rgba(255,255,255,0.10);
-  --wd-border-13:     rgba(255,255,255,0.13);
-  --wd-glass:         rgba(10,10,18,0.92);
-  --wd-blob-purple:   rgba(109,40,217,0.35);
-  --wd-blob-pink:     rgba(219,39,119,0.18);
-  --wd-blob-indigo:   rgba(67,56,202,0.30);
+  --wd-border-8:      rgba(255,255,255,0.09);
+  --wd-border-10:     rgba(255,255,255,0.12);
+  --wd-border-13:     rgba(255,255,255,0.16);
+  --wd-glass:         rgba(8,12,32,0.82);
+  /* palette neon aurora */
+  --wd-coral:         #ff7e5f;
+  --wd-coral-rgb:     255,126,95;
+  --wd-terracotta:    #ff5f8d;
+  --wd-terracotta-rgb:255,95,141;
+  --wd-sun:           #ffc857;
+  --wd-sun-rgb:       255,200,87;
+  --wd-sky:           #4dd0e1;            /* cyan aurora */
+  --wd-sky-rgb:       77,208,225;
+  --wd-sea:           #43e8a8;            /* verde aurora */
+  --wd-sea-rgb:       67,232,168;
+  --wd-pink:          #ff5cad;
+  --wd-pink-rgb:      255,92,173;
+  --wd-blob-purple:   rgba(255,200,87,0.30);
+  --wd-blob-pink:     rgba(255,95,141,0.32);
+  --wd-blob-indigo:   rgba(77,208,225,0.30);
+  --wd-grad-warm:     linear-gradient(135deg, #ff5f8d 0%, #ff7e5f 50%, #ffc857 100%);
+  --wd-grad-cool:     linear-gradient(135deg, #4dd0e1 0%, #43e8a8 100%);
+  --wd-grad-travel:   linear-gradient(135deg, #ff5cad 0%, #ff7e5f 30%, #ffc857 55%, #4dd0e1 85%, #43e8a8 100%);
+  --wd-shadow-card:   0 6px 28px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.30);
+  --wd-shadow-strong: 0 12px 40px rgba(255,95,141,0.30), 0 4px 16px rgba(77,208,225,0.20);
+}
+
+/* Animazione gradient che si muove — usato per testi e bottoni "travel" */
+@keyframes wd-grad-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes wd-float {
+  0%,100% { transform: translateY(0px); }
+  50%     { transform: translateY(-12px); }
+}
+@keyframes wd-aurora-pan {
+  0%   { transform: translate(0%, 0%) rotate(0deg); }
+  50%  { transform: translate(4%, -3%) rotate(8deg); }
+  100% { transform: translate(0%, 0%) rotate(0deg); }
+}
+.wd-travel-text {
+  background: var(--wd-grad-travel);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: wd-grad-shift 8s ease infinite;
+}
+.wd-travel-btn {
+  background: var(--wd-grad-warm);
+  background-size: 200% 200%;
+  animation: wd-grad-shift 6s ease infinite;
+  color: #fff;
+  box-shadow: var(--wd-shadow-strong);
+}
+.wd-glass-card {
+  background: var(--wd-glass);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--wd-border-10);
+  border-radius: 22px;
+  box-shadow: var(--wd-shadow-card);
 }
 
 @layer base {

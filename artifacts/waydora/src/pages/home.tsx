@@ -26,7 +26,8 @@ import { Layout, Logo } from "@/components/layout";
 import { ItineraryResults, PackingList } from "@/components/itinerary-results";
 import { TripMap } from "@/components/trip-map";
 import {
-  HowItWorks, TripCounter, Partners, Reviews, Faq, SiteFooter, HeroLanding,
+  HowItWorks, TripCounter, Partners, Reviews, Faq, SiteFooter, HeroLanding, StickyLandingHeader,
+  SuggestedTrips, AnimatedRoadmap,
 } from "@/components/landing-sections";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
@@ -37,19 +38,21 @@ type MediaContent = { mediaType: string; data: string; preview: string; name: st
 type ActiveView = "chat" | "inspire" | "create" | "saved";
 type MobileScreen = "chat" | "map" | "inspire" | "create" | "saved";
 
-const glassDark = { background: "rgba(10,10,18,0.92)", backdropFilter: "blur(24px) saturate(160%)", WebkitBackdropFilter: "blur(24px) saturate(160%)", border: "1px solid rgba(255,255,255,0.08)" } as React.CSSProperties;
-const itineraryCard = { background: "rgba(22,14,38,0.98)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "16px", padding: "16px", marginTop: "8px" } as React.CSSProperties;
-const activeTabStyle   = { background: "rgba(255,255,255,0.10)", color: "#ffffff",               border: "1px solid rgba(255,255,255,0.18)" } as React.CSSProperties;
-const inactiveTabStyle = { background: "transparent",            color: "rgba(255,255,255,0.38)", border: "1px solid transparent"           } as React.CSSProperties;
+// Chat: contenitori che usano CSS vars così cambiano col tema globale.
+// I dettagli delle bolle/itinerary card restano scuri per ora (Phase B).
+const glassDark = { background: "var(--wd-glass)", backdropFilter: "blur(24px) saturate(160%)", WebkitBackdropFilter: "blur(24px) saturate(160%)", border: "1px solid var(--wd-border-10)" } as React.CSSProperties;
+const itineraryCard = { background: "var(--wd-bg2)", border: "1px solid var(--wd-border-10)", borderRadius: "16px", padding: "16px", marginTop: "8px" } as React.CSSProperties;
+const activeTabStyle   = { background: "var(--wd-surface-12)", color: "var(--wd-text)",       border: "1px solid var(--wd-border-13)" } as React.CSSProperties;
+const inactiveTabStyle = { background: "transparent",          color: "var(--wd-text-45)",    border: "1px solid transparent"        } as React.CSSProperties;
 
 const QUICK_SUGGESTIONS = [
   { label: "➕ Aggiungi giorno",  prompt: "Aggiungi un altro giorno all'itinerario" },
   { label: "🍽️ Ristoranti",      prompt: "Suggeriscimi altri ristoranti locali da non perdere" },
-  { label: "📸 Spot Instagram",  prompt: "Dammi i migliori spot per foto Instagram in questa destinazione" },
-  { label: "💰 Più economico",   prompt: "Rendi l'itinerario più economico mantenendo le esperienze migliori" },
   { label: "🏨 Hotel",           prompt: "Cerco dove dormire in questa destinazione, puoi aiutarmi?" },
   { label: "✈️ Voli",            prompt: "Vorrei trovare i voli per questa destinazione" },
   { label: "🚗 Trasporti",       prompt: "Come mi sposto tra le varie tappe? Mezzi pubblici o noleggio auto?" },
+  { label: "📸 Spot Instagram",  prompt: "Dammi i migliori spot per foto Instagram in questa destinazione" },
+  { label: "💰 Più economico",   prompt: "Rendi l'itinerario più economico mantenendo le esperienze migliori" },
 ];
 
 const MAP_TOOLS = [
@@ -237,10 +240,11 @@ function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFil
   return null;
 }
 
-function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView, onChangeView, onLoginClick, isMobile = false }: {
+function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSession, activeView, onChangeView, onLoginClick, isMobile = false }: {
   open: boolean; onClose: () => void; onNewTrip: () => void;
   sessions: Array<{ id: string | number; title: string; turns: any[]; itinerary?: any; apiMessages?: any[] }>;
   onLoadSession: (s: any) => void;
+  onDeleteSession: (id: string | number) => void;
   activeView: ActiveView; onChangeView: (v: ActiveView) => void;
   onLoginClick: () => void; isMobile?: boolean;
 }) {
@@ -271,13 +275,25 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
           <ScrollArea style={{ maxHeight: isMobile ? "200px" : "180px" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
               {sessions.map((s) => (
-                <button key={s.id} onClick={() => { onLoadSession(s); onChangeView("chat"); if (isMobile) onClose(); }}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: "10px", padding: isMobile ? "10px 12px" : "8px 12px", borderRadius: "12px", border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
+                <div key={s.id} className="group" style={{ display: "flex", alignItems: "stretch", borderRadius: "12px", overflow: "hidden", transition: "background 0.12s" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                  <MessageSquare style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
-                  <span style={{ fontSize: isMobile ? "13px" : "12px", fontWeight: 600, color: "rgba(255,255,255,0.75)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>
-                </button>
+                  <button onClick={() => { onLoadSession(s); onChangeView("chat"); if (isMobile) onClose(); }}
+                    style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "10px", padding: isMobile ? "10px 12px" : "8px 12px", border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}>
+                    <MessageSquare style={{ width: "14px", height: "14px", color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+                    <span style={{ fontSize: isMobile ? "13px" : "12px", fontWeight: 600, color: "rgba(255,255,255,0.75)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.title}</span>
+                  </button>
+                  <button aria-label="Elimina chat"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Eliminare "${s.title}"?`)) onDeleteSession(s.id);
+                    }}
+                    style={{ flexShrink: 0, padding: "0 10px", background: "transparent", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", display: "flex", alignItems: "center", opacity: isMobile ? 1 : 0.4, transition: "opacity 0.12s, color 0.12s" }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.color = "#f87171"; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = isMobile ? "1" : "0.4"; e.currentTarget.style.color = "rgba(255,255,255,0.3)"; }}>
+                    <X style={{ width: "13px", height: "13px" }} />
+                  </button>
+                </div>
               ))}
             </div>
           </ScrollArea>
@@ -443,7 +459,13 @@ function TypingIndicator() {
     </motion.div>
   );
 }
-function WelcomeMessage({ userName }: { userName?: string }) {
+const WELCOME_PROMPTS: Array<{ label: string; prompt: string }> = [
+  { label: "🗺️ 3 giorni a Tokyo",   prompt: "Pianificami 3 giorni a Tokyo" },
+  { label: "🏖️ Settimana al mare",  prompt: "Vorrei una settimana al mare, suggeriscimi una destinazione" },
+  { label: "🏛️ Weekend a Roma",     prompt: "Pianificami un weekend a Roma" },
+];
+
+function WelcomeMessage({ userName, onPrompt }: { userName?: string; onPrompt?: (p: string) => void }) {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="flex flex-col items-center justify-center h-full gap-4 text-center px-6">
       <div style={{ fontSize: "3rem" }}>✈️</div>
@@ -452,7 +474,14 @@ function WelcomeMessage({ userName }: { userName?: string }) {
         <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", lineHeight: 1.6, maxWidth: "280px" }}>Sono Waydora, la tua assistente di viaggio AI. Dimmi dove vuoi andare!</p>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
-        {["🗺️ 3 giorni a Tokyo", "🏖️ Settimana al mare", "🏛️ Weekend a Roma"].map(s => <span key={s} style={{ fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)" }}>{s}</span>)}
+        {WELCOME_PROMPTS.map(s => (
+          <button key={s.label} onClick={() => onPrompt?.(s.prompt)}
+            style={{ fontSize: "12px", fontWeight: 600, padding: "7px 14px", borderRadius: "9999px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)", cursor: "pointer", transition: "all 0.15s" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.14)"; e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}>
+            {s.label}
+          </button>
+        ))}
       </div>
     </motion.div>
   );
@@ -541,27 +570,40 @@ function ChatTurnView({ turn }: { turn: ChatTurn }) {
   );
 }
 
-function LandingNav({ onLoginClick, onEnterChat }: { onLoginClick: () => void; onEnterChat: () => void }) {
+function LandingNavActions({ onLoginClick, onEnterChat }: { onLoginClick: () => void; onEnterChat: () => void }) {
   const { user, logout } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  // Hero scuro → bottoni chiari. Scrolled (header glass) → bottoni adattivi al tema.
+  const bg = scrolled ? "var(--wd-surface-8)" : "rgba(255,255,255,0.18)";
+  const border = scrolled ? "1px solid var(--wd-border-10)" : "1px solid rgba(255,255,255,0.28)";
+  const fg = scrolled ? "var(--wd-text)" : "#fff";
   return (
-    <div style={{ position: "absolute", top: 0, right: 0, zIndex: 30, padding: "20px 24px", display: "flex", alignItems: "center", gap: "10px" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
       <button onClick={toggleTheme}
-        title={theme === "dark" ? "Passa a modalità chiara" : "Passa a modalità scura"}
-        style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "7px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.25)", color: "#fff", cursor: "pointer", flexShrink: 0 }}>
-        {theme === "dark" ? <Sun style={{ width: "13px", height: "13px" }} /> : <Moon style={{ width: "13px", height: "13px" }} />}
-        {theme === "dark" ? "Chiara" : "Scura"}
+        aria-label={theme === "dark" ? "Passa a modalità chiara" : "Passa a modalità scura"}
+        title={theme === "dark" ? "Modalità chiara" : "Modalità scura"}
+        style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "38px", height: "38px", borderRadius: "9999px", background: bg, backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border, color: fg, cursor: "pointer", flexShrink: 0, transition: "background 0.25s, color 0.25s, border-color 0.25s" }}>
+        {theme === "dark" ? <Sun style={{ width: "16px", height: "16px" }} /> : <Moon style={{ width: "16px", height: "16px" }} />}
       </button>
       {user ? (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <button onClick={onEnterChat} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: "9999px", padding: "7px 14px 7px 8px", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
-            {user.avatar ? <img src={user.avatar} alt={user.name} style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} /> : <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "11px" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>}
+          <button onClick={onEnterChat} style={{ display: "flex", alignItems: "center", gap: "8px", background: bg, border, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: "9999px", padding: "7px 14px 7px 8px", color: fg, fontSize: "13px", fontWeight: 600, cursor: "pointer", transition: "background 0.25s, color 0.25s, border-color 0.25s" }}>
+            {user.avatar
+              ? <img src={user.avatar} alt={user.name} style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} />
+              : <div className="wd-travel-btn" style={{ width: "24px", height: "24px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: "11px", boxShadow: "none" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>}
             {user.name?.split(" ")[0]}
           </button>
-          <button onClick={logout} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "9999px", padding: "7px 14px", color: "rgba(255,255,255,0.6)", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Esci</button>
+          <button onClick={logout} style={{ background: bg, border, borderRadius: "9999px", padding: "7px 14px", color: scrolled ? "var(--wd-text-55)" : "rgba(255,255,255,0.7)", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "background 0.25s, color 0.25s, border-color 0.25s" }}>Esci</button>
         </div>
       ) : (
-        <button onClick={onLoginClick} style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.22)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: "9999px", padding: "8px 18px", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+        <button onClick={onLoginClick} className="wd-travel-btn" style={{ display: "flex", alignItems: "center", gap: "6px", borderRadius: "9999px", padding: "8px 18px", fontSize: "13px", fontWeight: 700, cursor: "pointer", border: "none" }}>
           <User style={{ width: "14px", height: "14px" }} />Accedi
         </button>
       )}
@@ -602,7 +644,7 @@ export default function Home() {
   const swipeStartY = useRef<number>(0);
   const localSessions = useLocalSessions();
 
-  const { sessions: dbSessions, upsert: upsertSession } = useChatSessions(user?.id);
+  const { sessions: dbSessions, upsert: upsertSession, remove: removeDbSession } = useChatSessions(user?.id);
   const { trips: userTrips, upsert: upsertTrip, publish: publishTrip, remove: removeTrip } = useUserTrips(user?.id);
   const { saved: savedTrips, saveItinerary, toggleFeaturedTrip, remove: removeSaved, isFeaturedLiked } = useSavedTrips(user?.id);
 
@@ -632,46 +674,14 @@ export default function Home() {
     }
   }, [currentItinerary]);
 
-  // ── Swipe gesture corretta ────────────────────────────────────────────
-  // Solo swipe che PARTE dal bordo sinistro (x < 20px) apre la sidebar.
-  // Nessun altro swipe cambia schermata — l'utente rimane sempre dove si trova.
-  useEffect(() => {
-    const handleTouchStart = (e: TouchEvent) => {
-      const x = e.touches[0].clientX;
-      // Registra il gesto SOLO se parte dai primi 20px del bordo sinistro
-      if (x <= 20) {
-        swipeStartX.current = x;
-        swipeStartY.current = e.touches[0].clientY;
-      } else {
-        swipeStartX.current = -1; // -1 = ignora completamente questo gesto
-      }
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      // Se non era partito dal bordo, ignora
-      if (swipeStartX.current < 0) return;
-
-      const endX = e.changedTouches[0].clientX;
-      const endY = e.changedTouches[0].clientY;
-      const deltaX = endX - swipeStartX.current;
-      const deltaY = Math.abs(endY - swipeStartY.current);
-
-      // Swipe orizzontale verso destra (>80px) e non prevalentemente verticale
-      if (deltaX > 80 && deltaY < 60) {
-        setMobileSidebarOpen(true);
-      }
-
-      // Reset sempre
-      swipeStartX.current = -1;
-    };
-
-    window.addEventListener("touchstart", handleTouchStart, { passive: true });
-    window.addEventListener("touchend",   handleTouchEnd,   { passive: true });
-    return () => {
-      window.removeEventListener("touchstart", handleTouchStart);
-      window.removeEventListener("touchend",   handleTouchEnd);
-    };
-  }, []); // ← dipendenze VUOTE: il listener non dipende da mobileScreen né da altro stato
+  // ── Swipe gesture: edge-zone con touchmove preventDefault per bloccare back del browser ──
+  // L'effetto registra i listener sulla zona invisibile (left-edge) sotto, non sul window:
+  // questo evita di consumare touch globali e blocca il gesto back di iOS preventDefault().
+  // Lo stato `mobileScreen` viene letto via ref per non re-registrare i listener ad ogni cambio.
+  const mobileScreenRef = useRef<MobileScreen>(mobileScreen);
+  useEffect(() => { mobileScreenRef.current = mobileScreen; }, [mobileScreen]);
+  const sidebarOpenRef = useRef(mobileSidebarOpen);
+  useEffect(() => { sidebarOpenRef.current = mobileSidebarOpen; }, [mobileSidebarOpen]);
 
   const persistSession = useCallback(async (t: ChatTurn[], itinerary?: ItineraryData, msgs?: ChatMessage[], id?: string) => {
     const title = generateTitle(t, itinerary);
@@ -749,6 +759,18 @@ export default function Home() {
     setMapReady(false); setMapNotifShown(false);
   }, [turns, currentItinerary, apiMessages, currentSessionId, persistSession]);
 
+  const handleDeleteSession = useCallback(async (id: string | number) => {
+    if (user) {
+      await removeDbSession(String(id));
+    } else {
+      localSessions.remove(id);
+      setLocalSessionsList(localSessions.load());
+    }
+    if (currentSessionId && String(currentSessionId) === String(id)) {
+      setTurns([]); setApiMessages([]); setCurrentItinerary(undefined); setCurrentSessionId(undefined);
+    }
+  }, [user, removeDbSession, localSessions, currentSessionId]);
+
   const handleLoadSession = (s: any) => {
     setTurns(s.turns ?? []); setApiMessages(s.apiMessages ?? s.api_messages ?? []);
     setCurrentItinerary(s.itinerary); setCurrentSessionId(s.id?.toString());
@@ -774,9 +796,11 @@ export default function Home() {
   if (showLanding) {
     return (
       <Layout>
-        <div className="flex-1 overflow-y-auto" style={{ background: "#0a0a12", position: "relative" }}>
-          <LandingNav onLoginClick={() => setAuthOpen(true)} onEnterChat={() => { enterApp(); setActiveView("chat"); }} />
+        <div className="flex-1 overflow-y-auto" style={{ background: "var(--wd-bg)", position: "relative" }}>
+          <StickyLandingHeader right={<LandingNavActions onLoginClick={() => setAuthOpen(true)} onEnterChat={() => { enterApp(); setActiveView("chat"); }} />} />
           <HeroLanding onSubmit={handleSubmit} isPending={chatMutation.isPending} />
+          <SuggestedTrips onSelect={p => handleSubmit(p)} />
+          <AnimatedRoadmap />
           <HowItWorks /><TripCounter /><Partners /><Reviews /><Faq /><SiteFooter />
         </div>
         <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
@@ -843,7 +867,7 @@ export default function Home() {
       </div>
       <div className="lg:hidden">{mobileHeader}</div>
       <div ref={chatScrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "20px" }}>
-        {turns.length === 0 ? <WelcomeMessage userName={user?.name} /> : turns.map(turn => <ChatTurnView key={turn.id} turn={turn} />)}
+        {turns.length === 0 ? <WelcomeMessage userName={user?.name} onPrompt={p => handleSubmit(p)} /> : turns.map(turn => <ChatTurnView key={turn.id} turn={turn} />)}
       </div>
       <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
         <QuickSuggestions onSelect={p => handleSubmit(p)} visible={hasItinerary && !chatMutation.isPending} />
@@ -858,16 +882,16 @@ export default function Home() {
 
   return (
     <Layout>
-      <div className="fixed inset-0 -z-10" style={{ background: "#0a0a12" }}>
-        <div style={{ position: "absolute", top: "-10%", right: "-5%", width: "50vw", height: "50vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(249,115,22,0.15) 0%,transparent 65%)", filter: "blur(70px)" }} />
-        <div style={{ position: "absolute", bottom: "5%", left: "-5%", width: "45vw", height: "45vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(168,85,247,0.15) 0%,transparent 65%)", filter: "blur(70px)" }} />
+      <div className="fixed inset-0 -z-10" style={{ background: "var(--wd-bg)" }}>
+        <div style={{ position: "absolute", top: "-10%", right: "-5%", width: "50vw", height: "50vw", borderRadius: "50%", background: "radial-gradient(circle,var(--wd-blob-pink) 0%,transparent 65%)", filter: "blur(70px)" }} />
+        <div style={{ position: "absolute", bottom: "5%", left: "-5%", width: "45vw", height: "45vw", borderRadius: "50%", background: "radial-gradient(circle,var(--wd-blob-indigo) 0%,transparent 65%)", filter: "blur(70px)" }} />
       </div>
 
       {/* DESKTOP */}
       <div className="flex-1 min-h-0 hidden lg:flex">
         {!sidebarOpen && <button onClick={() => setSidebarOpen(true)} className="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 rounded-r-xl" style={{ background: "rgba(10,10,18,0.9)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}><ChevronRight style={{ width: "16px", height: "16px" }} /></button>}
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewTrip={handleNewTrip}
-          sessions={sidebarSessions} onLoadSession={handleLoadSession}
+          sessions={sidebarSessions} onLoadSession={handleLoadSession} onDeleteSession={handleDeleteSession}
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} />
         {activeView === "inspire" && <div className="flex-1 min-h-0 overflow-hidden"><InspirePage onSelectTrip={p => handleSubmit(p)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} /></div>}
         {activeView === "create"  && <div className="flex-1 min-h-0 overflow-hidden"><CreateTripPage userId={user?.id} trips={userTrips} onSaveDraft={async d => await upsertTrip(d)} onPublish={async id => await publishTrip(id)} onDelete={removeTrip} /></div>}
@@ -888,9 +912,55 @@ export default function Home() {
       </div>
 
       {/* MOBILE */}
-      <div className="flex-1 min-h-0 lg:hidden flex flex-col">
+      <div className="flex-1 min-h-0 lg:hidden flex flex-col" style={{ overscrollBehaviorX: "contain", touchAction: "pan-y" }}>
+        {/* Edge-zone invisible: cattura il swipe dal bordo sinistro per aprire la sidebar
+            o tornare in chat dalle altre sezioni, bloccando il gesto back del browser. */}
+        {!mobileSidebarOpen && (
+          <div
+            aria-hidden
+            onTouchStart={(e) => {
+              const x = e.touches[0].clientX;
+              if (x <= 24) {
+                swipeStartX.current = x;
+                swipeStartY.current = e.touches[0].clientY;
+              } else {
+                swipeStartX.current = -1;
+              }
+            }}
+            onTouchMove={(e) => {
+              if (swipeStartX.current < 0) return;
+              const dx = e.touches[0].clientX - swipeStartX.current;
+              const dy = Math.abs(e.touches[0].clientY - swipeStartY.current);
+              // Se l'utente sta tirando orizzontalmente: blocca il back gesture nativo
+              if (dx > 6 && dy < 30) {
+                try { e.preventDefault(); } catch {}
+              }
+            }}
+            onTouchEnd={(e) => {
+              if (swipeStartX.current < 0) return;
+              const endX = e.changedTouches[0].clientX;
+              const endY = e.changedTouches[0].clientY;
+              const dx = endX - swipeStartX.current;
+              const dy = Math.abs(endY - swipeStartY.current);
+              if (dx > 60 && dy < 80) {
+                if (mobileScreenRef.current !== "chat") {
+                  // Da altre schermate → torna in chat invece che back del browser
+                  setMobileScreen("chat");
+                  setActiveView("chat");
+                } else {
+                  setMobileSidebarOpen(true);
+                }
+              }
+              swipeStartX.current = -1;
+            }}
+            style={{
+              position: "fixed", top: 0, left: 0, bottom: 0, width: "20px",
+              zIndex: 35, touchAction: "none", background: "transparent",
+            }}
+          />
+        )}
         <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} onNewTrip={handleNewTrip}
-          sessions={sidebarSessions} onLoadSession={handleLoadSession}
+          sessions={sidebarSessions} onLoadSession={handleLoadSession} onDeleteSession={handleDeleteSession}
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} isMobile />
 
         {mobileScreen === "chat" && <div className="flex-1 min-h-0 flex flex-col">{chatSection}</div>}
