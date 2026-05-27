@@ -386,12 +386,9 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
 function MobilePageHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
-      <button onClick={onBack} aria-label="Torna alla chat"
-        style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 14px 8px 8px", borderRadius: "9999px", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: "pointer",
-          background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.20)",
-          backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-        }}>
-        <span style={{ width: "22px", height: "22px", borderRadius: "50%", background: "var(--wd-grad-warm)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+      <button onClick={onBack} aria-label="Torna alla chat" className="wd-soft-btn"
+        style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 14px 8px 8px", borderRadius: "9999px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+        <span style={{ width: "22px", height: "22px", borderRadius: "50%", background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.22)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
           <ArrowLeft style={{ width: "13px", height: "13px", color: "#fff" }} />
         </span>
         Chat
@@ -406,7 +403,7 @@ function UserBubble({ text, mediaPreview }: { text: string; mediaPreview?: strin
     <div className="flex justify-end">
       <div style={{ maxWidth: "80%", display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
         {mediaPreview && <div style={{ borderRadius: "12px", overflow: "hidden", maxWidth: "200px" }}><img src={mediaPreview} alt="allegato" style={{ width: "100%", objectFit: "cover", display: "block" }} /></div>}
-        {text && <div style={{ padding: "10px 14px", borderRadius: "18px 18px 4px 18px", background: "var(--wd-grad-warm)", color: "#fff", fontSize: "14px", lineHeight: 1.55, boxShadow: "0 4px 16px rgba(249,115,22,0.2)" }}>{text}</div>}
+        {text && <div className="wd-bubble-user" style={{ padding: "10px 14px", borderRadius: "18px 18px 4px 18px", fontSize: "14px", lineHeight: 1.55 }}>{text}</div>}
       </div>
     </div>
   );
@@ -614,7 +611,7 @@ function LandingNavActions({ onLoginClick, onEnterChat }: { onLoginClick: () => 
           <button onClick={logout} style={{ background: bg, border, borderRadius: "9999px", padding: "7px 14px", color: scrolled ? "var(--wd-text-55)" : "rgba(255,255,255,0.7)", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "background 0.25s, color 0.25s, border-color 0.25s" }}>Esci</button>
         </div>
       ) : (
-        <button onClick={onLoginClick} className="wd-travel-btn" style={{ display: "flex", alignItems: "center", gap: "6px", borderRadius: "9999px", padding: "8px 18px", fontSize: "13px", fontWeight: 700, cursor: "pointer", border: "none" }}>
+        <button onClick={onLoginClick} className="wd-soft-btn" style={{ display: "flex", alignItems: "center", gap: "6px", borderRadius: "9999px", padding: "8px 18px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
           <User style={{ width: "14px", height: "14px" }} />Accedi
         </button>
       )}
@@ -810,9 +807,9 @@ export default function Home() {
           <StickyLandingHeader right={<LandingNavActions onLoginClick={() => setAuthOpen(true)} onEnterChat={() => { enterApp(); setActiveView("chat"); }} />} />
           <HeroLanding onSubmit={handleSubmit} isPending={chatMutation.isPending} />
           <SuggestedTrips onSelect={p => handleSubmit(p)} />
+          <AnimatedRoadmap />
           <WorldGallery />
           <AppShowcase />
-          <AnimatedRoadmap />
           <TripCounter /><Partners /><Reviews /><Faq /><SiteFooter />
         </div>
         <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
@@ -983,13 +980,9 @@ export default function Home() {
         {mobileScreen === "map" && (
           <div className="flex-1 min-h-0 flex flex-col">
             <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark, minHeight: "60px" }}>
-              <button onClick={() => setMobileScreen("chat")}
-                style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: "8px", padding: "9px 16px 9px 12px", borderRadius: "9999px", color: "#fff", fontSize: "13.5px", fontWeight: 700, cursor: "pointer",
-                  background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.22)",
-                  backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-                  boxShadow: "0 4px 18px rgba(0,0,0,0.25)",
-                }}>
-                <span style={{ width: "22px", height: "22px", borderRadius: "50%", background: "var(--wd-grad-warm)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+              <button onClick={() => setMobileScreen("chat")} className="wd-soft-btn"
+                style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "9px 16px 9px 10px", borderRadius: "9999px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                <span style={{ width: "22px", height: "22px", borderRadius: "50%", background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.22)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                   <ArrowLeft style={{ width: "13px", height: "13px", color: "#fff" }} />
                 </span>
                 Torna alla chat

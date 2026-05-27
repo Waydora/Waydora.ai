@@ -14,93 +14,66 @@ import { AFFILIATES, isGoCityDestination, isOutsideEU, goCityUrlFor, stay22UrlFo
 const FALLBACK = "https://images.pexels.com/photos/346885/pexels-photo-346885.jpeg";
 const AMAZON_TAG = "waydora-21";
 
-// ── Banner Go City (mostrato solo per destinazioni coperte) ───────────────
+// ── Banner glass riusabile con bordo neon che pulsa cambiando colore ─────
+function NeonBanner({ href, emoji, title, description, cta, delay = "0s" }: {
+  href: string; emoji: string; title: string; description: string; cta: string; delay?: string;
+}) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer sponsored"
+       style={{ display: "block", textDecoration: "none", marginBottom: "16px" }}>
+      <div className="wd-neon-border"
+        style={{
+          background: "rgba(255,255,255,0.06)",
+          backdropFilter: "blur(16px) saturate(160%)",
+          WebkitBackdropFilter: "blur(16px) saturate(160%)",
+          borderRadius: "16px",
+          padding: "14px 16px",
+          display: "flex", alignItems: "center", gap: "12px",
+          animationDelay: delay,
+        }}>
+        <span style={{ fontSize: "1.8rem", flexShrink: 0, filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.35))" }}>{emoji}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: "13px", fontWeight: 800, color: "#fff", marginBottom: "2px" }}>{title}</div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.78)", lineHeight: 1.45 }}>{description}</div>
+        </div>
+        <span style={{ fontSize: "10px", fontWeight: 700, color: "#fff",
+          background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)",
+          padding: "5px 10px", borderRadius: "9999px", flexShrink: 0,
+          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+          {cta} →
+        </span>
+      </div>
+    </a>
+  );
+}
+
 function GoCityBanner({ destination }: { destination: string }) {
   if (!isGoCityDestination(destination)) return null;
   return (
-    <a href={goCityUrlFor(destination)} target="_blank" rel="noopener noreferrer sponsored"
-       style={{ display: "block", textDecoration: "none", marginBottom: "16px" }}>
-      <div style={{
-        background: "linear-gradient(135deg,#0ea5e9 0%,#6366f1 100%)",
-        borderRadius: "14px", padding: "14px 16px",
-        display: "flex", alignItems: "center", gap: "12px",
-        boxShadow: "0 4px 18px rgba(14,165,233,0.3)",
-      }}>
-        <span style={{ fontSize: "1.8rem", flexShrink: 0 }}>🎟️</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "13px", fontWeight: 800, color: "#fff", marginBottom: "2px" }}>
-            Risparmia con Go City Pass
-          </div>
-          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.85)" }}>
-            Un solo pass per le attrazioni top di {destination.split(",")[0]} — fino a -50% sui biglietti
-          </div>
-        </div>
-        <span style={{ fontSize: "10px", fontWeight: 700, color: "#fff",
-          background: "rgba(255,255,255,0.18)", padding: "5px 10px", borderRadius: "9999px", flexShrink: 0 }}>
-          Scopri →
-        </span>
-      </div>
-    </a>
+    <NeonBanner href={goCityUrlFor(destination)} emoji="🎟️"
+      title="Risparmia con Go City Pass"
+      description={`Un solo pass per le attrazioni top di ${destination.split(",")[0]} — fino a -50% sui biglietti`}
+      cta="Scopri" delay="0s" />
   );
 }
 
-// ── Banner Stay22 (cerca alloggio per la città dell'itinerario) ───────────
 function Stay22Banner({ destination }: { destination: string }) {
   if (!destination) return null;
   return (
-    <a href={stay22UrlFor(destination)} target="_blank" rel="noopener noreferrer sponsored"
-       style={{ display: "block", textDecoration: "none", marginBottom: "16px" }}>
-      <div style={{
-        background: "linear-gradient(135deg,#f97316 0%,#ef4444 100%)",
-        borderRadius: "14px", padding: "14px 16px",
-        display: "flex", alignItems: "center", gap: "12px",
-        boxShadow: "0 4px 18px rgba(249,115,22,0.28)",
-      }}>
-        <span style={{ fontSize: "1.8rem", flexShrink: 0 }}>🏨</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "13px", fontWeight: 800, color: "#fff", marginBottom: "2px" }}>
-            Trova alloggio a {destination.split(",")[0]}
-          </div>
-          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.9)" }}>
-            Confronta hotel, B&B e appartamenti su una sola mappa — powered by Stay22
-          </div>
-        </div>
-        <span style={{ fontSize: "10px", fontWeight: 700, color: "#fff",
-          background: "rgba(255,255,255,0.18)", padding: "5px 10px", borderRadius: "9999px", flexShrink: 0 }}>
-          Cerca →
-        </span>
-      </div>
-    </a>
+    <NeonBanner href={stay22UrlFor(destination)} emoji="🏨"
+      title={`Trova alloggio a ${destination.split(",")[0]}`}
+      description="Confronta hotel, B&B e appartamenti su una sola mappa — powered by Stay22"
+      cta="Cerca" delay="-2s" />
   );
 }
 
-// ── Banner Yesim eSIM (per destinazioni extra-UE) ─────────────────────────
 function YesimBanner({ destination }: { destination: string }) {
   if (!isOutsideEU(destination)) return null;
   return (
-    <a href={AFFILIATES.YESIM_URL} target="_blank" rel="noopener noreferrer sponsored"
-       style={{ display: "block", textDecoration: "none", marginBottom: "16px" }}>
-      <div style={{
-        background: "linear-gradient(135deg,#10b981 0%,#06b6d4 100%)",
-        borderRadius: "14px", padding: "14px 16px",
-        display: "flex", alignItems: "center", gap: "12px",
-        boxShadow: "0 4px 18px rgba(16,185,129,0.25)",
-      }}>
-        <span style={{ fontSize: "1.8rem", flexShrink: 0 }}>📶</span>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "13px", fontWeight: 800, color: "#fff", marginBottom: "2px" }}>
-            Resta connesso in {destination.split(",")[0]}
-          </div>
-          <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.9)" }}>
-            eSIM Yesim — dati internet senza roaming, attivazione istantanea
-          </div>
-        </div>
-        <span style={{ fontSize: "10px", fontWeight: 700, color: "#fff",
-          background: "rgba(255,255,255,0.18)", padding: "5px 10px", borderRadius: "9999px", flexShrink: 0 }}>
-          Attiva →
-        </span>
-      </div>
-    </a>
+    <NeonBanner href={AFFILIATES.YESIM_URL} emoji="📶"
+      title={`Resta connesso in ${destination.split(",")[0]}`}
+      description="eSIM Yesim — dati internet senza roaming, attivazione istantanea"
+      cta="Attiva" delay="-4s" />
   );
 }
 

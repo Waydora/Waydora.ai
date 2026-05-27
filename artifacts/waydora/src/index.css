@@ -309,6 +309,51 @@
   box-shadow: var(--wd-shadow-card);
 }
 
+/* Glass leggero, stesso look del bottone profilo/Esci nella header */
+.wd-glass-soft {
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 20px;
+  box-shadow: 0 6px 22px rgba(0,0,0,0.18);
+}
+
+/* Bottoni "delicati" — usati per CTA secondarie tipo "Accedi" / "Torna alla chat" */
+.wd-soft-btn {
+  background: rgba(255,255,255,0.10);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.20);
+  color: #fff;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+.wd-soft-btn:hover {
+  background: rgba(255,255,255,0.16);
+  border-color: rgba(255,255,255,0.30);
+  transform: translateY(-1px);
+}
+
+/* Bordo neon che pulsa lentamente cambiando colore — usato sui banner Stay22/GoCity */
+@keyframes wd-neon-rotate {
+  0%   { box-shadow: 0 0 0 1px rgba(var(--wd-coral-rgb), 0.55), 0 0 24px 2px rgba(var(--wd-coral-rgb), 0.45), 0 8px 30px rgba(0,0,0,0.30); }
+  33%  { box-shadow: 0 0 0 1px rgba(var(--wd-sky-rgb),   0.55), 0 0 24px 2px rgba(var(--wd-sky-rgb),   0.45), 0 8px 30px rgba(0,0,0,0.30); }
+  66%  { box-shadow: 0 0 0 1px rgba(var(--wd-sea-rgb),   0.55), 0 0 24px 2px rgba(var(--wd-sea-rgb),   0.45), 0 8px 30px rgba(0,0,0,0.30); }
+  100% { box-shadow: 0 0 0 1px rgba(var(--wd-coral-rgb), 0.55), 0 0 24px 2px rgba(var(--wd-coral-rgb), 0.45), 0 8px 30px rgba(0,0,0,0.30); }
+}
+.wd-neon-border {
+  position: relative;
+  border: 1px solid rgba(255,255,255,0.18);
+  animation: wd-neon-rotate 6s ease-in-out infinite;
+}
+
+/* Bolla utente "delicata" — sfumatura morbida pesca/corallo invece di neon esplosivo */
+.wd-bubble-user {
+  background: linear-gradient(135deg, rgba(255,184,140,0.92) 0%, rgba(255,143,171,0.92) 100%);
+  color: #2a1430;
+  box-shadow: 0 4px 18px rgba(255,143,171,0.20);
+}
+
 @layer base {
   * {
     @apply border-border;

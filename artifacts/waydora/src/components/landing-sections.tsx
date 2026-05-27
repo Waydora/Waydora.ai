@@ -21,7 +21,7 @@ const STEPS = [
 ];
 
 const PARTNERS = [
-  "Booking.com", "GetYourGuide", "TheFork", "Airbnb", "Skyscanner",
+  "Booking.com", "GetYourGuide", "Skyscanner", "Kiwi", "Stay22", "Go City", "Yesim", "Amazon",
 ];
 
 const REVIEWS = [
@@ -34,7 +34,7 @@ const REVIEWS = [
 const FAQ = [
   { q: "Waydora è gratuito?",                        a: "Sì, pianificare un itinerario con Waydora è completamente gratuito. Quando prenoti hotel o esperienze tramite i nostri link partner riceviamo una piccola commissione, senza nessun sovrapprezzo per te." },
   { q: "Posso modificare l'itinerario dopo averlo creato?", a: "Certo. Continua a chattare con Waydora per aggiungere giorni, cambiare destinazioni, ridurre il budget, aggiungere musei o ristoranti specifici. L'itinerario si aggiorna in tempo reale." },
-  { q: "I link di prenotazione sono affidabili?",    a: "Usiamo solo partner ufficiali e affidabili come Booking.com, GetYourGuide, TheFork, Airbnb e Skyscanner. Le prenotazioni avvengono direttamente sui loro siti." },
+  { q: "I link di prenotazione sono affidabili?",    a: "Usiamo solo partner ufficiali e affidabili come Booking.com, GetYourGuide, Skyscanner, Kiwi, Stay22, Go City, Yesim e Amazon. Le prenotazioni avvengono direttamente sui loro siti." },
   { q: "Posso condividere un itinerario con un amico?", a: "Sì, ogni itinerario salvato ha un link pubblico univoco che puoi condividere via WhatsApp, email o copiando l'URL. L'amico vede l'itinerario completo, mappa e lista bagaglio inclusi." },
   { q: "Funziona per viaggi di lavoro o solo per vacanze?", a: "Funziona per qualsiasi tipo di viaggio: business, weekend, luna di miele, viaggio di gruppo, viaggio con bambini. Più dettagli dai nella chat, più l'itinerario sarà su misura." },
 ];
@@ -79,13 +79,14 @@ const ROADMAP = [
 ];
 
 // ── Stili condivisi ──────────────────────────────────────────────────────
+// Glass più "delicato" — stesso look del bottone profilo nella header
 const glassCard: React.CSSProperties = {
-  background: "var(--wd-glass)",
-  backdropFilter: "blur(20px) saturate(150%)",
-  WebkitBackdropFilter: "blur(20px) saturate(150%)",
-  border: "1px solid var(--wd-border-10)",
+  background: "rgba(255,255,255,0.07)",
+  backdropFilter: "blur(16px) saturate(140%)",
+  WebkitBackdropFilter: "blur(16px) saturate(140%)",
+  border: "1px solid rgba(255,255,255,0.14)",
   borderRadius: "22px",
-  boxShadow: "var(--wd-shadow-card)",
+  boxShadow: "0 6px 22px rgba(0,0,0,0.18)",
 };
 
 // ── Sfondo "Aurora Travel": blob di palette in movimento ─────────────────
@@ -421,6 +422,7 @@ const SHOWCASE_FEATURES = [
     bg: "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=1400&q=80&auto=format&fit=crop",
     mockup: "map",
     accent: "var(--wd-sky)",
+    accent2: "var(--wd-sea)",
   },
   {
     icon: Wand2,
@@ -429,6 +431,7 @@ const SHOWCASE_FEATURES = [
     bg: "https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?w=1400&q=80&auto=format&fit=crop",
     mockup: "itinerary",
     accent: "var(--wd-coral)",
+    accent2: "var(--wd-sun)",
   },
   {
     icon: Camera,
@@ -437,14 +440,16 @@ const SHOWCASE_FEATURES = [
     bg: "https://images.unsplash.com/photo-1551632811-561732d1e306?w=1400&q=80&auto=format&fit=crop",
     mockup: "packing",
     accent: "var(--wd-sun)",
+    accent2: "var(--wd-coral)",
   },
   {
     icon: Wallet,
     title: "Prenotazioni in un clic",
-    text: "Hotel, voli, esperienze e ristoranti via Booking, Skyscanner, GetYourGuide e TheFork.",
+    text: "Hotel, voli, esperienze, pass turistici e bagaglio — link diretti per Booking, Skyscanner, GetYourGuide, Go City e Amazon dentro ogni attività dell'itinerario.",
     bg: "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1400&q=80&auto=format&fit=crop",
     mockup: "booking",
     accent: "var(--wd-pink)",
+    accent2: "var(--wd-sky)",
   },
 ];
 
@@ -490,13 +495,22 @@ function ShowcaseMockup({ kind, accent }: { kind: string; accent: string }) {
       </div>
     );
   }
-  // booking
+  // booking — mockup di una card attività reale (come appare nella chat)
+  const items = [
+    { icon: "🏨", label: "Hotel a Roma",         provider: "Booking",      cta: "Prenota" },
+    { icon: "✈️", label: "Voli Milano → Lisbona", provider: "Skyscanner",   cta: "Cerca" },
+    { icon: "🎟️", label: "Tour Colosseo skip-line", provider: "GetYourGuide", cta: "Prenota" },
+  ];
   return (
-    <div style={{ padding: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", height: "100%", background: "rgba(255,255,255,0.06)" }}>
-      {["Booking", "Skyscanner", "TheFork", "GetYourGuide"].map((name, i) => (
-        <div key={i} style={{ background: "rgba(255,255,255,0.10)", borderRadius: "8px", padding: "8px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-          <span style={{ fontSize: "10px", fontWeight: 800, color: "#fff" }}>{name}</span>
-          <span style={{ fontSize: "9px", fontWeight: 700, padding: "3px 7px", borderRadius: "9999px", background: accent, color: "#fff", alignSelf: "flex-start" }}>Prenota</span>
+    <div style={{ padding: "10px", display: "flex", flexDirection: "column", gap: "6px", height: "100%", background: "rgba(255,255,255,0.06)" }}>
+      {items.map((it, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.09)", borderRadius: "8px", padding: "7px 9px" }}>
+          <span style={{ fontSize: "14px" }}>{it.icon}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "10px", fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</div>
+            <div style={{ fontSize: "8px", color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: "0.05em" }}>via {it.provider}</div>
+          </div>
+          <span style={{ fontSize: "9px", fontWeight: 800, padding: "3px 8px", borderRadius: "9999px", background: accent, color: "#fff", flexShrink: 0 }}>{it.cta}</span>
         </div>
       ))}
     </div>
@@ -518,7 +532,7 @@ export function AppShowcase() {
             ✦ Dentro la webapp
           </span>
           <h2 className="font-black leading-tight" style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", letterSpacing: "-0.025em", color: "var(--wd-text)" }}>
-            Tutto quello che ti serve,<br /><span className="wd-travel-text">in un'unica chat.</span>
+            Tutto quello che ti serve<br /><span className="wd-travel-text">per viaggiare spensierato.</span>
           </h2>
         </motion.div>
 
@@ -548,9 +562,9 @@ export function AppShowcase() {
                   <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                     <div style={{
                       width: "44px", height: "44px", borderRadius: "14px",
-                      background: `linear-gradient(135deg, ${f.accent}, var(--wd-pink))`,
+                      background: `linear-gradient(135deg, ${f.accent}, ${f.accent2})`,
                       display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                      boxShadow: "var(--wd-shadow-strong)",
+                      boxShadow: `0 8px 24px ${f.accent}55, 0 2px 8px ${f.accent2}33`,
                     }}>
                       <Icon style={{ width: "20px", height: "20px", color: "#fff" }} />
                     </div>
