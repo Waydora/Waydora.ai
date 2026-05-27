@@ -4,6 +4,8 @@ import { env } from "./lib/env.js";
 import { bot, setupBotMenu } from "./bot.js";
 import { issueBindToken } from "./lib/bind-tokens.js";
 import { userIdFromJwt, assertCanUseBot } from "./lib/auth-gate.js";
+import { verifyTelegramAuth, type TelegramAuthData } from "./lib/widget-verify.js";
+import { upsertBinding } from "./lib/bindings.js";
 import { startRealtimeBridge } from "./realtime.js";
 import { startReminderLoop } from "./lib/reminders.js";
 
@@ -59,6 +61,52 @@ app.post("/api/telegram/bind-token", async (req, res) => {
       return res.status(401).json({ error: "unauthorized" });
     }
     console.error("[bind-token]", e);
+    res.status(500).json({ error: "internal" });
+  }
+});
+
+// ── Telegram Login Widget callback ───────────────────────────────────────
+// Frontend: dopo che il widget mostra il popup di conferma Telegram, riceve
+// i dati firmati e li manda qui. Verifichiamo la firma HMAC, controlliamo il
+// JWT Supabase, applichiamo il gate paid e creiamo il binding. Zero /start.
+app.post("/api/telegram/bind-from-widget", async (req, res) => {
+  try {
+    const auth = req.header("authorization") ?? "";
+    const jwt = auth.replace(/^Bearer\s+/i, "");
+    if (!jwt) return res.status(401).json({ error: "missing token" });
+
+    const userId = await userIdFromJwt(jwt);
+    const { tier } = await assertCanUseBot(userId);
+
+    const data = req.body as TelegramAuthData;
+    const v = verifyTelegramAuth(data);
+    if (!v.ok) {
+      console.warn("[widget-bind] verify failed:", v.reason);
+      return res.status(400).json({ error: "invalid telegram signature" });
+    }
+
+    await upsertBinding({
+      telegram_user_id: data.id,
+      user_id: userId,
+      telegram_username: data.username ?? null,
+      language_code: null,
+      tier,
+    });
+
+    // Manda saluto su Telegram (best-effort, non blocca la risposta)
+    bot.api
+      .sendMessage(
+        data.id,
+        `✅ Collegato a Waydora dal sito (piano: ${tier}).\n\nScrivimi dove vuoi andare, ti aiuto a costruire l'itinerario. /help per i comandi.`,
+      )
+      .catch((e) => console.warn("[widget-bind] greeting failed:", e?.description ?? e));
+
+    res.json({ ok: true });
+  } catch (e: any) {
+    const msg = String(e?.message ?? e);
+    if (msg.includes("paid plan required")) return res.status(402).json({ error: "paid_required" });
+    if (msg.includes("unauthorized")) return res.status(401).json({ error: "unauthorized" });
+    console.error("[widget-bind]", e);
     res.status(500).json({ error: "internal" });
   }
 });

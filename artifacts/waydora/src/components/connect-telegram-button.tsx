@@ -1,116 +1,134 @@
-import { useState } from "react";
-import { Send, Loader2, ExternalLink, Copy, CheckCircle2 } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { Send, Loader2, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const BOT_API = (import.meta.env.VITE_TELEGRAM_BOT_URL as string) || "";
+const BOT_USERNAME = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string) || "";
+const BOT_ID = (import.meta.env.VITE_TELEGRAM_BOT_ID as string) || "";
 
 type Variant = "default" | "sidebar" | "chat-chip";
 type Props = { variant?: Variant; expanded?: boolean; className?: string; style?: React.CSSProperties };
 
-type FetchResult = { ok: true; url: string } | { ok: false; error: string };
+// Telegram inietta global Telegram.Login.auth(...)
+declare global {
+  interface Window {
+    Telegram?: {
+      Login?: {
+        auth: (
+          options: { bot_id: string; request_access?: "write" | "read"; lang?: string },
+          callback: (data: TelegramAuthData | false) => void,
+        ) => void;
+      };
+    };
+  }
+}
 
-async function fetchBindUrl(): Promise<FetchResult> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return { ok: false, error: "Devi accedere prima." };
-  if (!BOT_API) {
-    console.warn("[telegram] VITE_TELEGRAM_BOT_URL non configurata");
-    return { ok: false, error: "Bot non ancora attivo (config mancante)." };
-  }
-  let res: Response;
-  try {
-    res = await fetch(`${BOT_API}/api/telegram/bind-token`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${session.access_token}` },
-    });
-  } catch (e) {
-    console.error("[telegram] fetch err", e);
-    return { ok: false, error: "Servizio non raggiungibile." };
-  }
-  if (res.status === 402) return { ok: false, error: "Disponibile col piano Waydora Pro." };
-  if (res.status === 401) return { ok: false, error: "Sessione scaduta, rieffettua il login." };
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    console.error("[telegram] bind-token error", res.status, body);
-    return { ok: false, error: `Errore ${res.status}. Riprova.` };
-  }
-  const { url } = (await res.json()) as { url: string };
-  return { ok: true, url };
+type TelegramAuthData = {
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number;
+  hash: string;
+};
+
+// Carica lo script telegram-widget.js una sola volta.
+let scriptPromise: Promise<void> | null = null;
+function loadTelegramScript(): Promise<void> {
+  if (typeof window === "undefined") return Promise.reject(new Error("no window"));
+  if (window.Telegram?.Login) return Promise.resolve();
+  if (scriptPromise) return scriptPromise;
+  scriptPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://telegram.org/js/telegram-widget.js?22";
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("telegram script load failed"));
+    document.head.appendChild(s);
+  });
+  return scriptPromise;
 }
 
 export function ConnectTelegramButton({ variant = "default", expanded = true, className, style }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [linkUrl, setLinkUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [done, setDone] = useState(false);
 
-  // PATTERN POPUP-SAFE: apri tab vuota SUBITO (sincrono, nel gesture context),
-  // poi aggiorna location.href quando arriva il token dal server.
-  // Senza questo, Safari iOS e Chrome mobile bloccano window.open dopo await fetch.
-  async function handle() {
+  // Pre-carica lo script al mount per popup istantaneo al click
+  useEffect(() => {
+    loadTelegramScript().catch(() => {});
+  }, []);
+
+  const handle = useCallback(async () => {
     setError(null);
-    setCopied(false);
-    setLoading(true);
-    const opened = window.open("about:blank", "_blank"); // sincrono al click
-    const result = await fetchBindUrl();
-    setLoading(false);
-
-    if (!result.ok) {
-      if (opened) opened.close();
-      setError(result.error);
+    setDone(false);
+    if (!BOT_ID || !BOT_API) {
+      setError("Bot non configurato.");
       return;
     }
-    if (opened && !opened.closed) {
-      opened.location.href = result.url;
-    } else {
-      // popup bloccato (alcuni in-app browser): mostra link cliccabile
-      setLinkUrl(result.url);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setError("Devi accedere prima.");
+      return;
     }
-  }
 
-  async function copyLink() {
-    if (!linkUrl) return;
+    setLoading(true);
     try {
-      await navigator.clipboard.writeText(linkUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {}
-  }
+      await loadTelegramScript();
+    } catch {
+      setLoading(false);
+      setError("Impossibile caricare Telegram. Riprova.");
+      return;
+    }
+    if (!window.Telegram?.Login) {
+      setLoading(false);
+      setError("Telegram widget non disponibile.");
+      return;
+    }
 
-  // Estrae il token dalla URL t.me/...?start=<token> per il fallback manuale.
-  const bindCmd = linkUrl ? `/bind ${new URL(linkUrl).searchParams.get("start") ?? ""}` : "";
+    window.Telegram.Login.auth(
+      { bot_id: BOT_ID, request_access: "write" },
+      async (tgData) => {
+        if (!tgData) {
+          setLoading(false);
+          setError("Autorizzazione annullata.");
+          return;
+        }
+        try {
+          const res = await fetch(`${BOT_API}/api/telegram/bind-from-widget`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify(tgData),
+          });
+          if (res.status === 402) {
+            setError("Disponibile col piano Waydora Pro.");
+          } else if (!res.ok) {
+            const body = await res.text().catch(() => "");
+            console.error("[telegram] bind-from-widget", res.status, body);
+            setError(`Errore ${res.status}.`);
+          } else {
+            setDone(true);
+            if (BOT_USERNAME) {
+              window.open(`https://t.me/${BOT_USERNAME}`, "_blank", "noopener,noreferrer");
+            }
+          }
+        } catch (e) {
+          console.error("[telegram] network", e);
+          setError("Servizio non raggiungibile.");
+        } finally {
+          setLoading(false);
+        }
+      },
+    );
+  }, []);
 
-  async function copyBindCmd() {
-    if (!bindCmd) return;
-    try {
-      await navigator.clipboard.writeText(bindCmd);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {}
-  }
-  void copyLink;
-
-  // ── Fallback UI quando il popup viene bloccato ─────────────────────────
-  const fallback = linkUrl && (
-    <div style={{ marginTop: 8, padding: 12, background: "rgba(34,158,217,0.08)", border: "1px solid rgba(34,158,217,0.3)", borderRadius: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-      <a href={linkUrl} target="_blank" rel="noopener noreferrer"
-        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px 12px", background: "#229ED9", color: "#fff", borderRadius: 8, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
-        <ExternalLink size={14} /> Apri in Telegram
-      </a>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", lineHeight: 1.4 }}>
-        Se il bot non ti collega in automatico, incolla questo comando nella chat:
-      </div>
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <code style={{ flex: 1, fontSize: 11, padding: "6px 8px", background: "rgba(0,0,0,0.35)", color: "#5ec0e9", borderRadius: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {bindCmd}
-        </code>
-        <button type="button" onClick={copyBindCmd}
-          style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", background: "transparent", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, fontSize: 11, cursor: "pointer" }}>
-          {copied ? <CheckCircle2 size={12} /> : <Copy size={12} />}
-          {copied ? "Ok" : "Copia"}
-        </button>
-      </div>
-    </div>
-  );
+  const label = done ? "Collegato a Telegram" : "Continua su Telegram";
+  const Icon = done ? CheckCircle2 : loading ? Loader2 : Send;
+  const iconClass = loading && !done ? "animate-spin" : "";
 
   if (variant === "sidebar") {
     return (
@@ -118,21 +136,22 @@ export function ConnectTelegramButton({ variant = "default", expanded = true, cl
         <button
           type="button"
           onClick={handle}
-          disabled={loading}
-          title={!expanded ? "Continua su Telegram" : undefined}
+          disabled={loading || done}
+          title={!expanded ? label : undefined}
           style={{
             width: "100%", display: "flex", alignItems: "center", gap: 10,
             padding: expanded ? "8px 10px" : "8px", borderRadius: 10,
-            background: "rgba(34,158,217,0.12)", border: "1px solid rgba(34,158,217,0.35)",
-            color: "#5ec0e9", fontSize: 12, fontWeight: 600,
-            cursor: loading ? "wait" : "pointer", justifyContent: expanded ? "flex-start" : "center",
+            background: done ? "rgba(34,197,94,0.15)" : "rgba(34,158,217,0.12)",
+            border: `1px solid ${done ? "rgba(34,197,94,0.4)" : "rgba(34,158,217,0.35)"}`,
+            color: done ? "#5eda8e" : "#5ec0e9", fontSize: 12, fontWeight: 600,
+            cursor: loading || done ? "default" : "pointer",
+            justifyContent: expanded ? "flex-start" : "center",
           }}
         >
-          {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-          {expanded && <span>Continua su Telegram</span>}
+          <Icon size={14} className={iconClass} />
+          {expanded && <span>{label}</span>}
         </button>
         {error && <div style={{ marginTop: 6, fontSize: 11, color: "#ff6b6b" }}>{error}</div>}
-        {fallback}
       </div>
     );
   }
@@ -143,21 +162,22 @@ export function ConnectTelegramButton({ variant = "default", expanded = true, cl
         <button
           type="button"
           onClick={handle}
-          disabled={loading}
+          disabled={loading || done}
           style={{
             display: "inline-flex", alignItems: "center", gap: 8,
             padding: "8px 14px", borderRadius: 9999,
-            background: "linear-gradient(135deg,#229ED9,#1a7fb0)", color: "#fff",
-            border: "none", fontWeight: 600, fontSize: 13,
-            cursor: loading ? "wait" : "pointer", opacity: loading ? 0.7 : 1,
+            background: done
+              ? "linear-gradient(135deg,#22c55e,#16a34a)"
+              : "linear-gradient(135deg,#229ED9,#1a7fb0)",
+            color: "#fff", border: "none", fontWeight: 600, fontSize: 13,
+            cursor: loading || done ? "default" : "pointer",
             boxShadow: "0 4px 12px rgba(34,158,217,0.35)",
           }}
         >
-          {loading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-          Continua su Telegram
+          <Icon size={14} className={iconClass} />
+          {label}
         </button>
         {error && <div style={{ marginTop: 6, fontSize: 12, color: "#ff6b6b" }}>{error}</div>}
-        {fallback}
       </div>
     );
   }
@@ -167,20 +187,18 @@ export function ConnectTelegramButton({ variant = "default", expanded = true, cl
       <button
         type="button"
         onClick={handle}
-        disabled={loading}
+        disabled={loading || done}
         style={{
           display: "inline-flex", alignItems: "center", gap: 8,
           padding: "10px 16px", borderRadius: 12,
-          background: "#229ED9", color: "#fff", border: "none",
-          fontWeight: 600, cursor: loading ? "wait" : "pointer",
-          opacity: loading ? 0.7 : 1,
+          background: done ? "#22c55e" : "#229ED9", color: "#fff", border: "none",
+          fontWeight: 600, cursor: loading || done ? "default" : "pointer",
         }}
       >
-        {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-        Collega Telegram
+        <Icon size={16} className={iconClass} />
+        {label}
       </button>
       {error && <div style={{ marginTop: 8, fontSize: 13, color: "#ff6b6b" }}>{error}</div>}
-      {fallback}
     </div>
   );
 }

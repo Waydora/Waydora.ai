@@ -258,6 +258,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
           <X style={{ width: isMobile ? "22px" : "18px", height: isMobile ? "22px" : "18px" }} />
         </button>
       </div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: isMobile ? "14px" : "12px" }}>
         <button onClick={() => { onNewTrip(); if (isMobile) onClose(); }}
           style={{ width: "100%", display: "flex", alignItems: "center", gap: "12px", padding: itemPadding, borderRadius: "14px", border: "none", cursor: "pointer", fontSize, fontWeight: 600, transition: "all 0.15s", ...(activeView === "chat" ? activeTabStyle : inactiveTabStyle) }}>
@@ -298,13 +299,13 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, activeView
           );
         })}
       </div>
-      <div style={{ flex: 1 }} />
       {user && (
-        <div style={{ padding: isMobile ? "0 16px 12px" : "0 12px 10px" }}>
+        <div style={{ padding: isMobile ? "8px 16px 12px" : "8px 12px 10px", marginTop: "auto" }}>
           <ConnectTelegramButton variant="sidebar" expanded={true} />
         </div>
       )}
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: isMobile ? "16px" : "12px" }}>
+      </div>
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: isMobile ? "16px" : "12px", flexShrink: 0 }}>
         {user ? (
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             {user.avatar ? <img src={user.avatar} alt={user.name} style={{ width: isMobile ? "40px" : "34px", height: isMobile ? "40px" : "34px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
