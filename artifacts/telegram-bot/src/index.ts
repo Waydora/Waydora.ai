@@ -1,5 +1,4 @@
 import express from "express";
-import { webhookCallback } from "grammy";
 import { env } from "./lib/env.js";
 import { bot, setupBotMenu } from "./bot.js";
 import { issueBindToken } from "./lib/bind-tokens.js";
@@ -24,15 +23,24 @@ app.use((req, res, next) => {
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
 // ── Webhook Telegram ──────────────────────────────────────────────────────
-// Path con secret + header check (anti-spoofing)
+// Path con secret + header check (anti-spoofing).
+//
+// CRITICO: acknowledge a Telegram IMMEDIATAMENTE (200), poi processa async.
+// Le chiamate AI possono durare 30-50s, ben oltre il timeout webhook 10s di
+// grammY (e i ~10-30s di tolleranza di Telegram). Se non rispondiamo subito,
+// Telegram ritrasmette in loop e il container crasha.
 const webhookPath = `/telegram/webhook/${env.TELEGRAM_WEBHOOK_SECRET}`;
-const handleUpdate = webhookCallback(bot, "express");
-app.post(webhookPath, async (req, res) => {
+app.post(webhookPath, (req, res) => {
   const headerSecret = req.header("X-Telegram-Bot-Api-Secret-Token");
   if (headerSecret !== env.TELEGRAM_WEBHOOK_SECRET) {
     return res.sendStatus(401);
   }
-  return handleUpdate(req, res);
+  // Ack subito a Telegram
+  res.sendStatus(200);
+  // Processa l'update in background
+  bot.handleUpdate(req.body).catch((e) => {
+    console.error("[webhook handler]", e);
+  });
 });
 
 // ── Bind token endpoint ──────────────────────────────────────────────────
@@ -65,7 +73,58 @@ app.post("/api/telegram/bind-token", async (req, res) => {
   }
 });
 
-// ── Telegram Login Widget callback ───────────────────────────────────────
+// ── Telegram Login Widget — REDIRECT mode (mobile-safe) ─────────────────
+// Telegram chiama questo endpoint via redirect del browser dopo la conferma
+// dell'utente. Niente JWT in header → identifichiamo l'utente col `state`
+// (token in-memory generato da /api/telegram/bind-token).
+app.get("/api/telegram/bind-callback", async (req, res) => {
+  try {
+    const state = String(req.query.state ?? "");
+    const { consumeBindToken } = await import("./lib/bind-tokens.js");
+    const userId = consumeBindToken(state);
+    if (!userId) {
+      return res.redirect(`${env.WEB_ORIGIN}/?telegram=expired`);
+    }
+
+    const data = {
+      id: Number(req.query.id),
+      first_name: req.query.first_name as string | undefined,
+      last_name: req.query.last_name as string | undefined,
+      username: req.query.username as string | undefined,
+      photo_url: req.query.photo_url as string | undefined,
+      auth_date: Number(req.query.auth_date),
+      hash: String(req.query.hash ?? ""),
+    };
+    const v = verifyTelegramAuth(data);
+    if (!v.ok) {
+      console.warn("[bind-callback] verify failed:", v.reason);
+      return res.redirect(`${env.WEB_ORIGIN}/?telegram=invalid`);
+    }
+
+    const { tier } = await assertCanUseBot(userId);
+    await upsertBinding({
+      telegram_user_id: data.id,
+      user_id: userId,
+      telegram_username: data.username ?? null,
+      language_code: null,
+      tier,
+    });
+
+    bot.api
+      .sendMessage(
+        data.id,
+        `✅ Collegato a Waydora dal sito (piano: ${tier}).\n\nScrivimi dove vuoi andare. /help per i comandi.`,
+      )
+      .catch(() => {});
+
+    res.redirect(`${env.WEB_ORIGIN}/?telegram=connected`);
+  } catch (e: any) {
+    console.error("[bind-callback]", e);
+    res.redirect(`${env.WEB_ORIGIN}/?telegram=error`);
+  }
+});
+
+// ── Telegram Login Widget — JS callback mode (legacy, fallback) ─────────
 // Frontend: dopo che il widget mostra il popup di conferma Telegram, riceve
 // i dati firmati e li manda qui. Verifichiamo la firma HMAC, controlliamo il
 // JWT Supabase, applichiamo il gate paid e creiamo il binding. Zero /start.

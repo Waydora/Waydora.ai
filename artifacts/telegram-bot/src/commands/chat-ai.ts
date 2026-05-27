@@ -15,7 +15,12 @@ export function registerChatAI(bot: Composer<BoundContext>) {
     const tgId = ctx.from!.id;
     const userId = ctx.binding.user_id;
 
+    // Typing persistente: Telegram dimentica dopo ~5s, ripetiamo finche' arriva la risposta
     await ctx.replyWithChatAction("typing");
+    const typingInterval = setInterval(() => {
+      ctx.replyWithChatAction("typing").catch(() => {});
+    }, 4000);
+
     const session = await loadOrCreateSession(userId, tgId);
 
     const userMsg: ChatMessage = { role: "user", content: text };
@@ -29,10 +34,19 @@ export function registerChatAI(bot: Composer<BoundContext>) {
         userTier: ctx.binding.tier,
       });
     } catch (e: any) {
-      console.error("[chat-ai]", e);
-      await ctx.reply("Ops, il servizio AI non risponde. Riprova fra poco.");
+      clearInterval(typingInterval);
+      const detail = String(e?.message ?? e);
+      console.error("[chat-ai]", detail);
+      // 502 dall'api-server = JSON malformato dall'AI (transitorio).
+      // Suggeriamo retry invece di mostrare detail tecnico.
+      if (detail.includes("502") || detail.includes("Risposta non valida")) {
+        await ctx.reply("Non sono riuscito a costruire la risposta (errore temporaneo dell'AI). Riformula il messaggio piu' breve o riprova fra qualche secondo.");
+      } else {
+        await ctx.reply(`Errore AI: ${detail.slice(0, 200)}`);
+      }
       return;
     }
+    clearInterval(typingInterval);
 
     // Aggiorna sessione
     session.turns.push({ role: "user", content: text });
