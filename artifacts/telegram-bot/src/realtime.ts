@@ -1,6 +1,5 @@
 import { supabase } from "./lib/supabase.js";
 import { getBindingByUserId } from "./lib/bindings.js";
-import { getTripOwner } from "./lib/trips.js";
 import { bot } from "./bot.js";
 
 // Sottoscrizione globale a user_trips e trip_messages.
@@ -55,7 +54,10 @@ export function startRealtimeBridge() {
         if (row.author === "telegram") return;
         const preview = String(row.text ?? "").slice(0, 200);
         const label =
-          row.type === "idea" ? "💡 Idea" : row.type === "ai_update" ? "🤖 Aggiornamento AI" : "💬 Messaggio";
+          row.type === "idea" ? "💡 Idea" :
+          row.type === "ai_update" ? "🤖 Aggiornamento AI" :
+          row.type === "media" ? "📸 Media" :
+          "💬 Messaggio";
         await bot.api
           .sendMessage(
             binding.telegram_user_id,
@@ -69,6 +71,3 @@ export function startRealtimeBridge() {
       if (status === "SUBSCRIBED") console.log("[realtime] trip_messages OK");
     });
 }
-
-// Esportato per chi vuole risolvere owner altrove
-export { getTripOwner };
