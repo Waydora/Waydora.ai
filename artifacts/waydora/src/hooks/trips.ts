@@ -64,6 +64,7 @@ export function useChatSessions(userId: string | undefined) {
       .from("chat_sessions")
       .select("*")
       .eq("user_id", userId)
+      .not("title", "like", "tg:%") // escludi le sessioni interne del bot Telegram
       .order("updated_at", { ascending: false })
       .limit(20);
     if (!error && data) setSessions(data as ChatSessionRow[]);

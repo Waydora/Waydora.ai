@@ -2,7 +2,7 @@ import type { Composer } from "grammy";
 import { InlineKeyboard } from "grammy";
 import type { BoundContext } from "../bot.js";
 import { callAI, type ChatMessage } from "../lib/chat-bridge.js";
-import { loadOrCreateSession, saveSession, trimHistory } from "../lib/persistence.js";
+import { loadOrCreateSession, saveSession, trimHistory, upsertSavedTripFromSession } from "../lib/persistence.js";
 import { summarizeItinerary, formatDay } from "../lib/format.js";
 import { getDone } from "../lib/done-set.js";
 
@@ -60,6 +60,23 @@ export function registerChatAI(bot: Composer<BoundContext>) {
 
     if (resp.itinerary) {
       const it = resp.itinerary;
+      // Auto-salva su saved_trips → appare in "Viaggi salvati" del sito.
+      // Stabile per sessione: stesso slug se la chat continua, nuovo dopo /nuovo.
+      try {
+        const slug = await upsertSavedTripFromSession({
+          userId,
+          sessionId: session.id,
+          itinerary: it,
+        });
+        // Iniettiamo lo slug nell'itinerario in memoria così la mappa Waydora
+        // puo' generare il link corretto.
+        (it as any).shareSlug = slug;
+        session.itinerary = it;
+        await saveSession(session);
+      } catch (e) {
+        console.warn("[chat-ai] auto-save saved_trip failed", e);
+      }
+
       await ctx.reply(summarizeItinerary(it), {
         parse_mode: "Markdown",
         reply_markup: buildItineraryKeyboard(it),
@@ -124,9 +141,11 @@ export function buildItineraryKeyboard(it: any): InlineKeyboard {
     if ((i + 1) % 4 === 0) kb.row();
   }
   kb.row();
-  kb.text("☁️ Meteo", "weather:cur").text("💡 Idee", "ideas:list");
+  kb.text("🗺 Mappa", "map:trip").text("☁️ Meteo", "weather:cur");
   kb.row();
-  kb.text("📆 Calendario .ics", "cal:export").text("⏰ Reminder", "rem:wizard");
+  kb.text("💡 Idee", "ideas:list").text("📆 Calendario", "cal:export");
+  kb.row();
+  kb.text("⏰ Reminder", "rem:wizard");
   return kb;
 }
 
@@ -142,7 +161,7 @@ function buildDayKeyboard(it: any, dayN: number): InlineKeyboard {
   if (dayN > 1) kb.text("◀️ Prec", `day:${dayN - 1}`);
   if (dayN < total) kb.text("Succ ▶️", `day:${dayN + 1}`);
   kb.row();
-  kb.text(`☁️ Meteo G${dayN}`, `weather:day:${dayN}`);
+  kb.text(`🗺 Mappa G${dayN}`, `map:day:${dayN}`).text(`☁️ Meteo G${dayN}`, `weather:day:${dayN}`);
   return kb;
 }
 

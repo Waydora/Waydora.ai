@@ -9,10 +9,9 @@ export type AIResponse = {
 };
 
 // Riusa /api/chat del server-standalone (Railway). Stesso prompt, stesso routing modelli.
-export async function callAI(input: {
+async function callOnce(input: {
   messages: ChatMessage[];
   existingItinerary?: Itinerary | null;
-  userTier: "free" | "paid";
 }): Promise<AIResponse> {
   const res = await fetch(`${env.API_SERVER_URL}/api/chat`, {
     method: "POST",
@@ -20,7 +19,8 @@ export async function callAI(input: {
     body: JSON.stringify({
       messages: input.messages,
       existingItinerary: input.existingItinerary ?? undefined,
-      userTier: input.userTier,
+      // Il bot Telegram serve solo utenti Pro → tier paid (16k token cap)
+      userTier: "paid",
     }),
   });
   if (!res.ok) {
@@ -28,4 +28,24 @@ export async function callAI(input: {
     throw new Error(`api-server ${res.status}: ${txt.slice(0, 200)}`);
   }
   return (await res.json()) as AIResponse;
+}
+
+export async function callAI(input: {
+  messages: ChatMessage[];
+  existingItinerary?: Itinerary | null;
+  userTier: "free" | "paid";
+}): Promise<AIResponse> {
+  try {
+    return await callOnce(input);
+  } catch (e: any) {
+    const msg = String(e?.message ?? e);
+    // 502 dall'api-server = JSON malformato di Sonnet, spesso transitorio.
+    // Retry una volta con history ridotta a ultimi 4 turni (meno contesto = piu' margine per JSON).
+    if (msg.includes("502") || msg.includes("Risposta non valida")) {
+      console.warn("[chat-bridge] retry con history ridotta dopo 502");
+      const slim = input.messages.slice(-4);
+      return await callOnce({ ...input, messages: slim });
+    }
+    throw e;
+  }
 }

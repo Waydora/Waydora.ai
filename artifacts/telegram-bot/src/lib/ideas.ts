@@ -32,16 +32,10 @@ export async function listIdeas(shareSlug: string, limit = 20) {
   return (data as Array<{ id: number; text: string; created_at: string; author: string }>) ?? [];
 }
 
-// Recupera share_slug del trip attivo se l'utente lo ha salvato; altrimenti slug personale.
-export async function resolveIdeasSlug(userId: string, tripId?: string): Promise<string> {
-  if (tripId) {
-    const { data } = await supabase
-      .from("saved_trips")
-      .select("share_slug")
-      .eq("user_id", userId)
-      .eq("trip_id", tripId)
-      .maybeSingle();
-    if ((data as any)?.share_slug) return (data as any).share_slug;
-  }
+// Risolve lo slug dove scrivere/leggere le idee:
+// 1. Se la sessione corrente ha gia' uno shareSlug (trip attivo) → usa quello
+// 2. Altrimenti slug personale tg-ideas-<userId>
+export async function resolveIdeasSlug(userId: string, activeShareSlug?: string | null): Promise<string> {
+  if (activeShareSlug) return activeShareSlug;
   return tgIdeasSlug(userId);
 }

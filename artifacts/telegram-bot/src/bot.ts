@@ -16,6 +16,8 @@ import { registerWeather } from "./commands/weather.js";
 import { registerIdeas } from "./commands/ideas.js";
 import { registerCalendar } from "./commands/calendar.js";
 import { registerReminders } from "./commands/reminders.js";
+import { registerMap } from "./commands/map.js";
+import { registerMedia } from "./commands/media.js";
 
 export type BoundContext = Context & { binding: Binding };
 
@@ -134,6 +136,8 @@ registerWeather(bot as any);
 registerIdeas(bot as any);
 registerCalendar(bot as any);
 registerReminders(bot as any);
+registerMap(bot as any);
+registerMedia(bot as any);
 
 bot.command("scollega", async (ctx) => {
   await deleteBindingByTelegramId(ctx.from!.id);
@@ -152,6 +156,7 @@ bot.command("help", async (ctx) => {
       "/viaggi — i tuoi viaggi salvati",
       "/viaggio — viaggio selezionato",
       "/oggi /giorno N — itinerario per giorno",
+      "/mappa — mappa interattiva del viaggio",
       "/meteo [citta'] — previsioni",
       "/idea <testo> — salva idea",
       "/idee — lista idee",
@@ -175,6 +180,7 @@ export async function setupBotMenu() {
     { command: "viaggio", description: "Viaggio selezionato" },
     { command: "oggi", description: "Itinerario di oggi" },
     { command: "giorno", description: "Itinerario di un giorno" },
+    { command: "mappa", description: "Mappa interattiva" },
     { command: "meteo", description: "Previsioni meteo" },
     { command: "idea", description: "Salva un'idea" },
     { command: "idee", description: "Le tue idee" },
