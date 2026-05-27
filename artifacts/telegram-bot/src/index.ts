@@ -172,6 +172,9 @@ app.post("/api/telegram/bind-from-widget", async (req, res) => {
 
 // ── Boot ─────────────────────────────────────────────────────────────────
 async function main() {
+  // Inizializza il bot (fetch botInfo da getMe). Necessario quando si usa
+  // bot.handleUpdate manualmente invece di webhookCallback.
+  await bot.init();
   await setupBotMenu();
 
   const webhookUrl = `${env.PUBLIC_BOT_URL}${webhookPath}`;
