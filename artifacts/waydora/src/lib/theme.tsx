@@ -1,33 +1,24 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect } from "react";
 
-type Theme = "dark" | "light";
+type Theme = "dark";
 
 interface ThemeContextValue {
   theme: Theme;
   toggle: () => void;
 }
 
-const ThemeContext = createContext<ThemeContextValue>({ theme: "light", toggle: () => {} });
+// Waydora è solo dark-mode. ThemeContext rimane per compatibilità API,
+// ma toggle è no-op e theme è sempre "dark".
+const ThemeContext = createContext<ThemeContextValue>({ theme: "dark", toggle: () => {} });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    try { return (localStorage.getItem("waydora-theme") as Theme) ?? "light"; } catch { return "light"; }
-  });
-
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-    try { localStorage.setItem("waydora-theme", theme); } catch {}
-  }, [theme]);
-
-  const toggle = () => setTheme(t => t === "dark" ? "light" : "dark");
+    document.documentElement.classList.add("dark");
+    try { localStorage.setItem("waydora-theme", "dark"); } catch {}
+  }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggle }}>
+    <ThemeContext.Provider value={{ theme: "dark", toggle: () => {} }}>
       {children}
     </ThemeContext.Provider>
   );

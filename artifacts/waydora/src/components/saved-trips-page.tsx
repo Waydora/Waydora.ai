@@ -184,7 +184,7 @@ export function SavedTripsPage({ saved, loading, onRemove, onLogin, isLoggedIn }
   };
 
   return (
-    <div style={{ height: "100%", overflowY: "auto", background: "#0a0a12", padding: "28px" }}>
+    <div style={{ height: "100%", overflowY: "auto", background: "var(--wd-bg)", padding: "28px" }}>
       {/* Sfondo blob */}
       <div style={{ position: "fixed", top: "-10%", right: "-5%", width: "40vw", height: "40vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(167,139,250,0.12) 0%,transparent 65%)", filter: "blur(60px)", pointerEvents: "none" }} />
 
@@ -209,7 +209,7 @@ export function SavedTripsPage({ saved, loading, onRemove, onLogin, isLoggedIn }
               Salva i tuoi itinerari e condividili con chi vuoi.
             </p>
             <button onClick={onLogin}
-              style={{ padding: "12px 28px", borderRadius: "9999px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>
+              style={{ padding: "12px 28px", borderRadius: "9999px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>
               Accedi o Registrati
             </button>
           </div>

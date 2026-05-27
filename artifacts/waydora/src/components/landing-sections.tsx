@@ -3,11 +3,11 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageSquare, Sparkles, PlaneTakeoff, Star,
-  ChevronDown, Mail, FileText, Sun, Moon, Send,
-  Compass, MapPin, Search, Wand2,
+  ChevronDown, Mail, FileText, Send,
+  Compass, MapPin, Search, Wand2, Camera, Wallet,
+
 } from "lucide-react";
 import waydoraLogo from "@assets/LOGO1.png";
-import { useTheme } from "@/lib/theme";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
@@ -323,6 +323,258 @@ export function HeroLanding({ onSubmit, isPending }: HeroLandingProps) {
         @keyframes wd-spin  { to{transform:rotate(360deg)} }
       `}</style>
     </section>
+  );
+}
+
+// ── Sezione: WorldGallery — marquee infinito di foto destinazioni ────────
+const WORLD_PHOTOS = [
+  { src: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=900&q=70&auto=format&fit=crop",      label: "Parigi"     },
+  { src: "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=900&q=70&auto=format&fit=crop",      label: "Tokyo"      },
+  { src: "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=900&q=70&auto=format&fit=crop",      label: "Santorini"  },
+  { src: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=900&q=70&auto=format&fit=crop",      label: "Bali"       },
+  { src: "https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?w=900&q=70&auto=format&fit=crop",      label: "New York"   },
+  { src: "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=900&q=70&auto=format&fit=crop",      label: "Istanbul"   },
+  { src: "https://images.unsplash.com/photo-1579283135011-0974a412341a?w=900&q=70&auto=format&fit=crop",      label: "Marrakech"  },
+  { src: "https://images.unsplash.com/photo-1518684079-3c830dcef090?w=900&q=70&auto=format&fit=crop",        label: "Dubai"      },
+  { src: "https://images.unsplash.com/photo-1551632811-561732d1e306?w=900&q=70&auto=format&fit=crop",        label: "Dolomiti"   },
+  { src: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=900&q=70&auto=format&fit=crop",      label: "Londra"     },
+  { src: "https://images.unsplash.com/photo-1742216564155-952ff4743a7f?w=900&q=70&auto=format&fit=crop",      label: "Cefalù"     },
+  { src: "https://images.unsplash.com/photo-1585208798174-6cedd86e019a?w=900&q=70&auto=format&fit=crop",      label: "Lisbona"    },
+  { src: "https://images.unsplash.com/photo-1538485399081-7191377e8241?w=900&q=70&auto=format&fit=crop",      label: "Seoul"      },
+  { src: "https://images.unsplash.com/photo-1565426873118-a17ed65d74b9?w=900&q=70&auto=format&fit=crop",      label: "Budapest"   },
+];
+
+function MarqueeRow({ items, direction = "left", speed = 50 }: { items: typeof WORLD_PHOTOS; direction?: "left" | "right"; speed?: number }) {
+  // Render del doppio set per ottenere loop senza salti
+  const doubled = [...items, ...items];
+  return (
+    <div style={{ overflow: "hidden", width: "100%", maskImage: "linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%)", WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%)" }}>
+      <div style={{
+        display: "flex", gap: "16px", width: "max-content",
+        animation: `${direction === "left" ? "wd-marquee-left" : "wd-marquee-right"} ${speed}s linear infinite`,
+      }}>
+        {doubled.map((p, i) => (
+          <div key={i} style={{
+            position: "relative", width: "220px", height: "280px", flexShrink: 0,
+            borderRadius: "18px", overflow: "hidden",
+            boxShadow: "var(--wd-shadow-card)",
+            border: "1px solid var(--wd-border-10)",
+          }}>
+            <img src={p.src} alt={p.label} loading="lazy"
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, transparent 50%, rgba(8,12,32,0.78) 100%)" }} />
+            <div style={{ position: "absolute", left: "14px", bottom: "12px", display: "inline-flex", alignItems: "center", gap: "6px", padding: "5px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.18)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.28)", color: "#fff", fontSize: "12px", fontWeight: 700, letterSpacing: "0.04em" }}>
+              <MapPin style={{ width: "11px", height: "11px" }} />{p.label}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function WorldGallery() {
+  return (
+    <SectionWrapper variant="mix">
+      <section className="py-20 md:py-28">
+        <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+          className="text-center mb-12 px-4">
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: "6px",
+            padding: "6px 14px", borderRadius: "9999px",
+            background: "rgba(var(--wd-sky-rgb),0.12)", border: "1px solid rgba(var(--wd-sky-rgb),0.32)",
+            color: "var(--wd-sky)", fontSize: "11px", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: "20px",
+          }}>
+            ✈️ Il mondo in un battito
+          </span>
+          <h2 className="font-black leading-tight" style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", letterSpacing: "-0.025em", color: "var(--wd-text)" }}>
+            Da Tokyo a Lisbona,<br /><span className="wd-travel-text">tutto in una chat.</span>
+          </h2>
+          <p style={{ marginTop: "12px", color: "var(--wd-text-55)", fontSize: "15px", maxWidth: "560px", marginInline: "auto", lineHeight: 1.65 }}>
+            Più di 200 destinazioni, una sola assistente. Lasciati cullare da queste foto e scegli la prossima.
+          </p>
+        </motion.div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <MarqueeRow items={WORLD_PHOTOS}            direction="left"  speed={55} />
+          <MarqueeRow items={[...WORLD_PHOTOS].reverse()} direction="right" speed={68} />
+        </div>
+
+        <style>{`
+          @keyframes wd-marquee-left  { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+          @keyframes wd-marquee-right { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+          @media (prefers-reduced-motion: reduce) {
+            [style*="wd-marquee-left"], [style*="wd-marquee-right"] { animation-play-state: paused !important; }
+          }
+        `}</style>
+      </section>
+    </SectionWrapper>
+  );
+}
+
+// ── Sezione: AppShowcase — funzionalità webapp su sfondi di luoghi reali ─
+const SHOWCASE_FEATURES = [
+  {
+    icon: MapPin,
+    title: "Mappa interattiva",
+    text: "Tutte le tappe del viaggio in una mappa Google con percorsi e pin colorati.",
+    bg: "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=1400&q=80&auto=format&fit=crop",
+    mockup: "map",
+    accent: "var(--wd-sky)",
+  },
+  {
+    icon: Wand2,
+    title: "Itinerario giornaliero",
+    text: "Orari, attività, ristoranti e budget — un giorno alla volta, con un clic puoi modificare tutto.",
+    bg: "https://images.unsplash.com/photo-1485871981521-5b1fd3805eee?w=1400&q=80&auto=format&fit=crop",
+    mockup: "itinerary",
+    accent: "var(--wd-coral)",
+  },
+  {
+    icon: Camera,
+    title: "Lista bagaglio smart",
+    text: "Genera la lista perfetta in base a meteo e attività. Link Amazon integrati per ciò che ti manca.",
+    bg: "https://images.unsplash.com/photo-1551632811-561732d1e306?w=1400&q=80&auto=format&fit=crop",
+    mockup: "packing",
+    accent: "var(--wd-sun)",
+  },
+  {
+    icon: Wallet,
+    title: "Prenotazioni in un clic",
+    text: "Hotel, voli, esperienze e ristoranti via Booking, Skyscanner, GetYourGuide e TheFork.",
+    bg: "https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=1400&q=80&auto=format&fit=crop",
+    mockup: "booking",
+    accent: "var(--wd-pink)",
+  },
+];
+
+function ShowcaseMockup({ kind, accent }: { kind: string; accent: string }) {
+  // Mini-mockup HTML stilizzato, in stile "wireframe" — niente screenshot reali
+  if (kind === "map") {
+    return (
+      <div style={{ position: "relative", borderRadius: "12px", height: "100%", overflow: "hidden", background: "linear-gradient(135deg, #0c1330, #1a2654)" }}>
+        {/* Pin route */}
+        <svg viewBox="0 0 200 130" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+          <path d="M20 100 Q 60 50, 100 80 T 180 35" stroke={accent} strokeWidth="2.4" fill="none" strokeDasharray="5,5" />
+          {[ [20,100], [70,60], [110,80], [150,55], [180,35] ].map(([x,y], i) => (
+            <g key={i}>
+              <circle cx={x} cy={y} r="6" fill={accent} />
+              <circle cx={x} cy={y} r="11" fill={accent} opacity="0.25" />
+            </g>
+          ))}
+        </svg>
+        <div style={{ position: "absolute", left: "10px", bottom: "10px", padding: "5px 10px", borderRadius: "9999px", background: "rgba(255,255,255,0.18)", backdropFilter: "blur(8px)", color: "#fff", fontSize: "10px", fontWeight: 700 }}>5 tappe · 12 km</div>
+      </div>
+    );
+  }
+  if (kind === "itinerary") {
+    return (
+      <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "8px", height: "100%", background: "rgba(255,255,255,0.06)" }}>
+        {["09:00 Colosseo", "12:30 Trattoria Da Enzo", "15:00 Galleria Borghese", "20:00 Aperitivo Trastevere"].map((line, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: "#fff" }}>
+            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: accent, flexShrink: 0 }} />
+            <span style={{ background: "rgba(255,255,255,0.08)", padding: "5px 10px", borderRadius: "8px", flex: 1 }}>{line}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (kind === "packing") {
+    return (
+      <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "6px", height: "100%", background: "rgba(255,255,255,0.06)" }}>
+        {["✓ Scarpe da trekking", "✓ Crema solare SPF 50", "○ Power bank 20.000mAh", "○ Borraccia termica", "○ Giacca antipioggia"].map((line, i) => (
+          <div key={i} style={{ fontSize: "11px", color: i < 2 ? "rgba(255,255,255,0.5)" : "#fff", textDecoration: i < 2 ? "line-through" : "none" }}>
+            {line}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  // booking
+  return (
+    <div style={{ padding: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", height: "100%", background: "rgba(255,255,255,0.06)" }}>
+      {["Booking", "Skyscanner", "TheFork", "GetYourGuide"].map((name, i) => (
+        <div key={i} style={{ background: "rgba(255,255,255,0.10)", borderRadius: "8px", padding: "8px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          <span style={{ fontSize: "10px", fontWeight: 800, color: "#fff" }}>{name}</span>
+          <span style={{ fontSize: "9px", fontWeight: 700, padding: "3px 7px", borderRadius: "9999px", background: accent, color: "#fff", alignSelf: "flex-start" }}>Prenota</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function AppShowcase() {
+  return (
+    <SectionWrapper variant="warm">
+      <section className="py-20 md:py-28 px-4 max-w-6xl mx-auto">
+        <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+          className="text-center mb-14">
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: "6px",
+            padding: "6px 14px", borderRadius: "9999px",
+            background: "rgba(var(--wd-pink-rgb),0.12)", border: "1px solid rgba(var(--wd-pink-rgb),0.32)",
+            color: "var(--wd-pink)", fontSize: "11px", fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", marginBottom: "20px",
+          }}>
+            ✦ Dentro la webapp
+          </span>
+          <h2 className="font-black leading-tight" style={{ fontSize: "clamp(2rem, 5vw, 3.2rem)", letterSpacing: "-0.025em", color: "var(--wd-text)" }}>
+            Tutto quello che ti serve,<br /><span className="wd-travel-text">in un'unica chat.</span>
+          </h2>
+        </motion.div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {SHOWCASE_FEATURES.map((f, i) => {
+            const Icon = f.icon;
+            return (
+              <motion.div key={f.title} initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ delay: i * 0.1 }}
+                whileHover={{ y: -6 }}
+                style={{
+                  position: "relative", borderRadius: "22px", overflow: "hidden",
+                  border: "1px solid var(--wd-border-10)",
+                  boxShadow: "var(--wd-shadow-card)",
+                  minHeight: "340px",
+                  display: "flex", flexDirection: "column",
+                }}>
+                {/* sfondo foto */}
+                <div style={{
+                  position: "absolute", inset: 0,
+                  backgroundImage: `url(${f.bg})`, backgroundSize: "cover", backgroundPosition: "center",
+                }} />
+                <div style={{ position: "absolute", inset: 0, background: `linear-gradient(160deg, rgba(8,12,32,0.45) 0%, rgba(8,12,32,0.75) 100%)` }} />
+
+                {/* contenuto */}
+                <div style={{ position: "relative", padding: "22px", display: "flex", flexDirection: "column", gap: "16px", flex: 1, color: "#fff" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                      width: "44px", height: "44px", borderRadius: "14px",
+                      background: `linear-gradient(135deg, ${f.accent}, var(--wd-pink))`,
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      boxShadow: "var(--wd-shadow-strong)",
+                    }}>
+                      <Icon style={{ width: "20px", height: "20px", color: "#fff" }} />
+                    </div>
+                    <h3 style={{ fontSize: "1.25rem", fontWeight: 800, letterSpacing: "-0.015em" }}>{f.title}</h3>
+                  </div>
+                  <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.85)", lineHeight: 1.6 }}>{f.text}</p>
+                  {/* mini mockup */}
+                  <div style={{
+                    marginTop: "auto",
+                    background: "rgba(8,12,32,0.78)",
+                    backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: "14px", overflow: "hidden",
+                    height: "130px",
+                  }}>
+                    <ShowcaseMockup kind={f.mockup} accent={f.accent} />
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </section>
+    </SectionWrapper>
   );
 }
 
@@ -695,23 +947,17 @@ export function Faq() {
 
 // ── SiteFooter ───────────────────────────────────────────────────────────
 export function SiteFooter() {
-  const { theme, toggle: toggleTheme } = useTheme();
   return (
     <SectionWrapper variant="warm">
       <footer style={{ borderTop: "1px solid var(--wd-border-7)" }}>
         <div className="max-w-6xl mx-auto px-4 py-14 grid grid-cols-2 md:grid-cols-4 gap-8">
           <div className="col-span-2 space-y-4">
             <a href="/">
-              <img src={waydoraLogo} alt="Waydora" style={{ height: "44px", width: "auto", objectFit: "contain", filter: theme === "dark" ? "brightness(0) invert(1)" : "none" }} />
+              <img src={waydoraLogo} alt="Waydora" style={{ height: "44px", width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)" }} />
             </a>
             <p style={{ fontSize: "14px", color: "var(--wd-text-55)", maxWidth: "320px", lineHeight: 1.65 }}>
               Il tuo concierge di viaggio AI. Pianifica, prenota, parti — tutto in italiano.
             </p>
-            <button onClick={toggleTheme} aria-label={theme === "dark" ? "Passa a modalità chiara" : "Passa a modalità scura"}
-              title={theme === "dark" ? "Modalità chiara" : "Modalità scura"}
-              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "38px", height: "38px", borderRadius: "9999px", background: "var(--wd-surface-8)", border: "1px solid var(--wd-border-10)", color: "var(--wd-text-65)", cursor: "pointer" }}>
-              {theme === "dark" ? <Sun style={{ width: "16px", height: "16px" }} /> : <Moon style={{ width: "16px", height: "16px" }} />}
-            </button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--wd-text-55)" }}>Legale</div>

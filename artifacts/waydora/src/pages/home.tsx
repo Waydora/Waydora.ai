@@ -20,18 +20,17 @@ import {
   Lightbulb, CheckSquare, LogOut, LogIn, User,
   Mic, MicOff, ImagePlus, X, Link, ExternalLink,
   Navigation, Download, Plus, MessageSquare, Edit3, ArrowLeft,
-  Sparkles, Bell, Sun, Moon,
+  Sparkles, Bell,
 } from "lucide-react";
 import { Layout, Logo } from "@/components/layout";
 import { ItineraryResults, PackingList } from "@/components/itinerary-results";
 import { TripMap } from "@/components/trip-map";
 import {
-  HowItWorks, TripCounter, Partners, Reviews, Faq, SiteFooter, HeroLanding, StickyLandingHeader,
-  SuggestedTrips, AnimatedRoadmap,
+  TripCounter, Partners, Reviews, Faq, SiteFooter, HeroLanding, StickyLandingHeader,
+  SuggestedTrips, AnimatedRoadmap, WorldGallery, AppShowcase,
 } from "@/components/landing-sections";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { useTheme } from "@/lib/theme";
 
 type ChatTurn = { id: number; userMessage: string; assistantReply: string; itinerary?: ItineraryData; mediaPreview?: string; };
 type MediaContent = { mediaType: string; data: string; preview: string; name: string; };
@@ -93,13 +92,25 @@ function MapTool({ itinerary }: { itinerary?: ItineraryData }) {
   };
   if (!itinerary) return <div className="h-full flex flex-col items-center justify-center gap-3" style={{ color: "rgba(255,255,255,0.3)" }}><Map style={{ width: "36px", height: "36px", opacity: 0.3 }} /><span className="text-sm">La mappa apparirà qui</span></div>;
   return (
-    <div className="h-full flex flex-col">
-      <div className="px-3 py-2 shrink-0 flex items-center justify-end" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <button onClick={open} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full" style={{ background: "rgba(66,133,244,0.15)", color: "#4285f4", border: "1px solid rgba(66,133,244,0.3)", cursor: "pointer" }}>
-          <Navigation style={{ width: "12px", height: "12px" }} />Apri in Google Maps<ExternalLink style={{ width: "11px", height: "11px" }} />
-        </button>
-      </div>
-      <div className="flex-1 min-h-0"><TripMap itinerary={itinerary} /></div>
+    <div className="h-full relative">
+      <div className="absolute inset-0"><TripMap itinerary={itinerary} /></div>
+      {/* Pulsante overlay in primo piano — la mappa diventa più grande perché non c'è più la barra */}
+      <button onClick={open} aria-label="Apri in Google Maps"
+        style={{
+          position: "absolute", top: "12px", right: "12px", zIndex: 10,
+          display: "inline-flex", alignItems: "center", gap: "6px",
+          fontSize: "12.5px", fontWeight: 700, padding: "9px 14px",
+          borderRadius: "9999px",
+          background: "rgba(255,255,255,0.95)",
+          color: "#1a1f3a",
+          border: "1px solid rgba(255,255,255,0.6)",
+          boxShadow: "0 6px 22px rgba(0,0,0,0.30), 0 2px 6px rgba(0,0,0,0.18)",
+          cursor: "pointer",
+          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+        }}>
+        <Navigation style={{ width: "13px", height: "13px", color: "#4285f4" }} />Google Maps
+        <ExternalLink style={{ width: "11px", height: "11px", color: "#4285f4" }} />
+      </button>
     </div>
   );
 }
@@ -134,7 +145,7 @@ function CalendarTool({ itinerary }: { itinerary?: ItineraryData }) {
         {itinerary.days?.map((day: any, i: number) => (
           <div key={day.day} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-              <div style={{ width: "22px", height: "22px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 900, color: "#fff" }}>{i + 1}</div>
+              <div style={{ width: "22px", height: "22px", borderRadius: "50%", background: "var(--wd-grad-warm)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 900, color: "#fff" }}>{i + 1}</div>
               <div style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>{day.title}</div>
             </div>
             {day.activities?.map((a: any, ai: number) => (
@@ -189,7 +200,7 @@ function IdeasTool({ ideas, onAdd, onRemove }: { ideas: string[]; onAdd: (i: str
       <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff", marginBottom: "14px" }}>💡 Le tue idee</div>
       <div style={{ display: "flex", gap: "8px", marginBottom: "14px" }}>
         <input value={v} onChange={e => setV(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }} placeholder="Aggiungi un'idea..." style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "8px 12px", color: "#fff", fontSize: "13px", outline: "none" }} />
-        <button onClick={add} style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><Plus style={{ width: "16px", height: "16px" }} /></button>
+        <button onClick={add} style={{ width: "36px", height: "36px", borderRadius: "10px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><Plus style={{ width: "16px", height: "16px" }} /></button>
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
         {ideas.length === 0 ? <div style={{ textAlign: "center", padding: "40px 20px", color: "rgba(255,255,255,0.3)" }}><div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>💡</div><p style={{ fontSize: "13px" }}>Nessuna idea ancora</p></div>
@@ -325,7 +336,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
         {user ? (
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             {user.avatar ? <img src={user.avatar} alt={user.name} style={{ width: isMobile ? "40px" : "34px", height: isMobile ? "40px" : "34px", borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-              : <div style={{ width: isMobile ? "40px" : "34px", height: isMobile ? "40px" : "34px", borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: isMobile ? "15px" : "13px" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>}
+              : <div style={{ width: isMobile ? "40px" : "34px", height: isMobile ? "40px" : "34px", borderRadius: "50%", flexShrink: 0, background: "var(--wd-grad-warm)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: isMobile ? "15px" : "13px" }}>{user.name?.[0]?.toUpperCase() ?? "W"}</div>}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: isMobile ? "14px" : "13px", fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</div>
               <div style={{ fontSize: isMobile ? "12px" : "11px", color: "rgba(255,255,255,0.35)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
@@ -374,11 +385,18 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
 
 function MobilePageHeader({ title, onBack }: { title: string; onBack: () => void }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
-      <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", display: "flex", padding: 0 }}>
-        <ArrowLeft style={{ width: "22px", height: "22px" }} />
+    <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
+      <button onClick={onBack} aria-label="Torna alla chat"
+        style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 14px 8px 8px", borderRadius: "9999px", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: "pointer",
+          background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.20)",
+          backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+        }}>
+        <span style={{ width: "22px", height: "22px", borderRadius: "50%", background: "var(--wd-grad-warm)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+          <ArrowLeft style={{ width: "13px", height: "13px", color: "#fff" }} />
+        </span>
+        Chat
       </button>
-      <span style={{ fontSize: "16px", fontWeight: 700, color: "#fff" }}>{title}</span>
+      <span style={{ fontSize: "16px", fontWeight: 700, color: "#fff", letterSpacing: "-0.01em" }}>{title}</span>
     </div>
   );
 }
@@ -388,7 +406,7 @@ function UserBubble({ text, mediaPreview }: { text: string; mediaPreview?: strin
     <div className="flex justify-end">
       <div style={{ maxWidth: "80%", display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
         {mediaPreview && <div style={{ borderRadius: "12px", overflow: "hidden", maxWidth: "200px" }}><img src={mediaPreview} alt="allegato" style={{ width: "100%", objectFit: "cover", display: "block" }} /></div>}
-        {text && <div style={{ padding: "10px 14px", borderRadius: "18px 18px 4px 18px", background: "linear-gradient(135deg,#f97316,#a855f7)", color: "#fff", fontSize: "14px", lineHeight: 1.55, boxShadow: "0 4px 16px rgba(249,115,22,0.2)" }}>{text}</div>}
+        {text && <div style={{ padding: "10px 14px", borderRadius: "18px 18px 4px 18px", background: "var(--wd-grad-warm)", color: "#fff", fontSize: "14px", lineHeight: 1.55, boxShadow: "0 4px 16px rgba(249,115,22,0.2)" }}>{text}</div>}
       </div>
     </div>
   );
@@ -530,7 +548,7 @@ function AdvancedChatInput({ value, onChange, onSubmit, isPending, onMediaAttach
           <input ref={fileRef} type="file" accept="image/*,video/*" style={{ display: "none" }} onChange={hf} />
           <button onClick={() => fileRef.current?.click()} style={{ width: "32px", height: "32px", borderRadius: "50%", border: "none", background: mediaContent ? "rgba(167,139,250,0.2)" : "rgba(255,255,255,0.07)", color: mediaContent ? "#a78bfa" : "rgba(255,255,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><ImagePlus style={{ width: "15px", height: "15px" }} /></button>
           <button onClick={toggleRec} style={{ width: "32px", height: "32px", borderRadius: "50%", border: "none", background: isRecording ? "rgba(239,68,68,0.25)" : "rgba(255,255,255,0.07)", color: isRecording ? "#f87171" : "rgba(255,255,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{isRecording ? <MicOff style={{ width: "14px", height: "14px" }} /> : <Mic style={{ width: "14px", height: "14px" }} />}</button>
-          <button onClick={onSubmit} disabled={!active} style={{ width: "34px", height: "34px", borderRadius: "50%", border: "none", background: active ? "linear-gradient(135deg,#f97316,#a855f7)" : "rgba(255,255,255,0.06)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: active ? "pointer" : "not-allowed", transform: active ? "scale(1)" : "scale(0.9)", transition: "all 0.15s" }}>
+          <button onClick={onSubmit} disabled={!active} style={{ width: "34px", height: "34px", borderRadius: "50%", border: "none", background: active ? "var(--wd-grad-warm)" : "rgba(255,255,255,0.06)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: active ? "pointer" : "not-allowed", transform: active ? "scale(1)" : "scale(0.9)", transition: "all 0.15s" }}>
             {isPending ? <Loader2 style={{ width: "14px", height: "14px", animation: "wd-spin2 0.8s linear infinite" }} /> : <Send style={{ width: "13px", height: "13px" }} />}
           </button>
         </div>
@@ -572,7 +590,6 @@ function ChatTurnView({ turn }: { turn: ChatTurn }) {
 
 function LandingNavActions({ onLoginClick, onEnterChat }: { onLoginClick: () => void; onEnterChat: () => void }) {
   const { user, logout } = useAuth();
-  const { theme, toggle: toggleTheme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -586,12 +603,6 @@ function LandingNavActions({ onLoginClick, onEnterChat }: { onLoginClick: () => 
   const fg = scrolled ? "var(--wd-text)" : "#fff";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-      <button onClick={toggleTheme}
-        aria-label={theme === "dark" ? "Passa a modalità chiara" : "Passa a modalità scura"}
-        title={theme === "dark" ? "Modalità chiara" : "Modalità scura"}
-        style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "38px", height: "38px", borderRadius: "9999px", background: bg, backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border, color: fg, cursor: "pointer", flexShrink: 0, transition: "background 0.25s, color 0.25s, border-color 0.25s" }}>
-        {theme === "dark" ? <Sun style={{ width: "16px", height: "16px" }} /> : <Moon style={{ width: "16px", height: "16px" }} />}
-      </button>
       {user ? (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <button onClick={onEnterChat} style={{ display: "flex", alignItems: "center", gap: "8px", background: bg, border, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", borderRadius: "9999px", padding: "7px 14px 7px 8px", color: fg, fontSize: "13px", fontWeight: 600, cursor: "pointer", transition: "background 0.25s, color 0.25s, border-color 0.25s" }}>
@@ -637,7 +648,6 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
-  const { theme, toggle: toggleTheme } = useTheme();
   const chatScrollRef = useRef<HTMLDivElement>(null);
   // refs per swipe — solo dal bordo sinistro
   const swipeStartX = useRef<number>(-1);
@@ -800,8 +810,10 @@ export default function Home() {
           <StickyLandingHeader right={<LandingNavActions onLoginClick={() => setAuthOpen(true)} onEnterChat={() => { enterApp(); setActiveView("chat"); }} />} />
           <HeroLanding onSubmit={handleSubmit} isPending={chatMutation.isPending} />
           <SuggestedTrips onSelect={p => handleSubmit(p)} />
+          <WorldGallery />
+          <AppShowcase />
           <AnimatedRoadmap />
-          <HowItWorks /><TripCounter /><Partners /><Reviews /><Faq /><SiteFooter />
+          <TripCounter /><Partners /><Reviews /><Faq /><SiteFooter />
         </div>
         <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
       </Layout>
@@ -811,12 +823,23 @@ export default function Home() {
   const mobileHeader = (
     <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark, minHeight: "60px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <button onClick={() => setMobileSidebarOpen(true)}
-          style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "8px", cursor: "pointer", color: "rgba(255,255,255,0.8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <svg width="20" height="16" viewBox="0 0 20 16" fill="none"><rect y="0" width="20" height="2.5" rx="1.25" fill="currentColor"/><rect y="6.75" width="20" height="2.5" rx="1.25" fill="currentColor"/><rect y="13.5" width="20" height="2.5" rx="1.25" fill="currentColor"/></svg>
+        <button onClick={() => setMobileSidebarOpen(true)} aria-label="Apri menu"
+          style={{ position: "relative", width: "40px", height: "40px", borderRadius: "13px", padding: 0, cursor: "pointer",
+            background: "var(--wd-surface-8)",
+            border: "1px solid var(--wd-border-13)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.25)",
+            overflow: "hidden",
+          }}>
+          <span aria-hidden style={{ position: "absolute", inset: 0, background: "var(--wd-grad-warm)", opacity: 0.18 }} />
+          <svg width="18" height="14" viewBox="0 0 18 14" fill="none" style={{ position: "relative", zIndex: 1 }}>
+            <rect y="0"   width="18" height="2.2" rx="1.1" fill="#fff" />
+            <rect y="5.9" width="12" height="2.2" rx="1.1" fill="#fff" />
+            <rect y="11.8" width="15" height="2.2" rx="1.1" fill="#fff" />
+          </svg>
         </button>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)" }} />
+          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--wd-grad-warm)" }} />
           <span style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Waydora</span>
         </div>
       </div>
@@ -829,19 +852,14 @@ export default function Home() {
         {currentItinerary && (
           <button onClick={() => { setMobileScreen("map"); setMapReady(false); }}
             style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "13px", fontWeight: 600, padding: "7px 13px", borderRadius: "9999px", cursor: "pointer", transition: "all 0.2s",
-              background: mapReady ? "linear-gradient(135deg,#f97316,#a855f7)" : "rgba(255,255,255,0.07)",
+              background: mapReady ? "var(--wd-grad-warm)" : "rgba(255,255,255,0.07)",
               color: mapReady ? "#fff" : "rgba(255,255,255,0.7)",
               border: mapReady ? "none" : "1px solid rgba(255,255,255,0.12)",
               boxShadow: mapReady ? "0 0 16px rgba(249,115,22,0.4)" : "none" }}>
             <Map style={{ width: "14px", height: "14px" }} />Mappa
           </button>
         )}
-        <button onClick={toggleTheme}
-          title={theme === "dark" ? "Passa a modalità chiara" : "Passa a modalità scura"}
-          style={{ width: "34px", height: "34px", borderRadius: "50%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-          {theme === "dark" ? <Sun style={{ width: "16px", height: "16px" }} /> : <Moon style={{ width: "16px", height: "16px" }} />}
-        </button>
-        <button onClick={handleNewTrip}
+        <button onClick={handleNewTrip} aria-label="Nuova chat"
           style={{ width: "34px", height: "34px", borderRadius: "50%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <Plus style={{ width: "18px", height: "18px" }} />
         </button>
@@ -854,14 +872,11 @@ export default function Home() {
       <div className="hidden lg:flex px-4 py-3 items-center justify-between shrink-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {!sidebarOpen && <button onClick={() => setSidebarOpen(true)} style={{ color: "rgba(255,255,255,0.4)", background: "none", border: "none", cursor: "pointer", marginRight: "4px", display: "flex" }}><ChevronRight style={{ width: "18px", height: "18px" }} /></button>}
-          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)" }} />
+          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--wd-grad-warm)" }} />
           <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>Waydora</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {currentItinerary && <button onClick={handleSave} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)", cursor: "pointer" }}><Save style={{ width: "12px", height: "12px" }} />Salva</button>}
-          <button onClick={toggleTheme} title={theme === "dark" ? "Modalità chiara" : "Modalità scura"} style={{ width: "30px", height: "30px", borderRadius: "8px", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.55)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            {theme === "dark" ? <Sun style={{ width: "14px", height: "14px" }} /> : <Moon style={{ width: "14px", height: "14px" }} />}
-          </button>
           <button onClick={handleNewTrip} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", background: "transparent" }}><PlusCircle style={{ width: "12px", height: "12px" }} />Nuovo</button>
         </div>
       </div>
@@ -969,8 +984,15 @@ export default function Home() {
           <div className="flex-1 min-h-0 flex flex-col">
             <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark, minHeight: "60px" }}>
               <button onClick={() => setMobileScreen("chat")}
-                style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "10px", padding: "8px 14px", color: "#fff", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
-                <ArrowLeft style={{ width: "16px", height: "16px" }} />Chat
+                style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: "8px", padding: "9px 16px 9px 12px", borderRadius: "9999px", color: "#fff", fontSize: "13.5px", fontWeight: 700, cursor: "pointer",
+                  background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.22)",
+                  backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+                  boxShadow: "0 4px 18px rgba(0,0,0,0.25)",
+                }}>
+                <span style={{ width: "22px", height: "22px", borderRadius: "50%", background: "var(--wd-grad-warm)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                  <ArrowLeft style={{ width: "13px", height: "13px", color: "#fff" }} />
+                </span>
+                Torna alla chat
               </button>
               <span style={{ fontSize: "14px", fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>
                 {MAP_TOOLS.find(t => t.id === activeTool)?.label ?? "Mappa"}

@@ -142,6 +142,10 @@ REGOLE GENERALI:
 - Se l'utente fa domande conversazionali rispondi SOLO con reply e itinerary: null. MAX 150 parole.
 - Sii amichevole e naturale.
 
+━━━ LINGUA — TUTTO IN ITALIANO ━━━
+OBBLIGATORIO: title, summary, description, vibe, bestSeason, packingList, reply — TUTTI in italiano. Il nome proprio del POI può restare in lingua locale; "destination" resta in inglese.
+category enum (non tradurre): stay, food, experience, transport, sightseeing, nightlife, shopping, culture, nature.
+
 ━━━ POI E COORDINATE — OBBLIGATORI ━━━
 - title: usa SEMPRE il nome REALE e SPECIFICO del posto.
   ✅ "Trattoria Da Enzo al 29", "Colosseo", "Teatro alla Scala", "Mercato Centrale Firenze"

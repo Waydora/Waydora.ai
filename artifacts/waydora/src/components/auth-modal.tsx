@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, Lock, User, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/auth";
+import waydoraLogo from "@assets/LOGO1.png";
  
 // ── Icona Google SVG ──────────────────────────────────────────────────────
 function GoogleIcon() {
@@ -167,13 +168,9 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
  
               {/* Logo + titolo */}
               <div style={{ textAlign: "center", marginBottom: "28px" }}>
-                <div style={{
-                  fontSize: "1.6rem", fontWeight: 900, color: "#fff",
-                  letterSpacing: "-0.03em", marginBottom: "6px",
-                }}>
-                  waydora.
-                </div>
-                <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.45)" }}>
+                <img src={waydoraLogo} alt="Waydora"
+                  style={{ height: "48px", width: "auto", objectFit: "contain", filter: "brightness(0) invert(1)", marginInline: "auto", marginBottom: "10px", display: "block" }} />
+                <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.55)" }}>
                   {mode === "login" ? "Bentornato 👋" : "Crea il tuo account"}
                 </p>
               </div>
@@ -256,7 +253,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                       disabled={pending}
                       style={{
                         width: "100%", padding: "13px",
-                        background: "linear-gradient(135deg,#f97316,#a855f7)",
+                        background: "var(--wd-grad-warm)",
                         border: "none", borderRadius: "12px",
                         color: "#fff", fontWeight: 700, fontSize: "14px",
                         cursor: pending ? "not-allowed" : "pointer",

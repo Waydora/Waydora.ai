@@ -146,7 +146,10 @@ const CATEGORY_STYLE: Record<string, {
   experience: { icon: Compass,   label: "Esperienza",   gradient: "linear-gradient(135deg,#0ea5e9,#06b6d4)", iconBg: "rgba(14,165,233,0.2)",  iconColor: "#38bdf8", badgeBg: "rgba(14,165,233,0.18)",  badgeColor: "#7dd3fc", line: "rgba(14,165,233,0.3)"  },
   transport:  { icon: Bus,       label: "Trasporto",    gradient: "linear-gradient(135deg,#64748b,#94a3b8)", iconBg: "rgba(100,116,139,0.2)", iconColor: "#94a3b8", badgeBg: "rgba(100,116,139,0.18)", badgeColor: "#cbd5e1", line: "rgba(100,116,139,0.3)" },
   sightseeing:{ icon: MapPin,    label: "Visita",       gradient: "linear-gradient(135deg,#f59e0b,#eab308)", iconBg: "rgba(245,158,11,0.2)",  iconColor: "#fbbf24", badgeBg: "rgba(245,158,11,0.18)",  badgeColor: "#fcd34d", line: "rgba(245,158,11,0.3)"  },
-  nightlife:  { icon: Moon,      label: "Nightlife",    gradient: "linear-gradient(135deg,#ec4899,#a855f7)", iconBg: "rgba(236,72,153,0.2)",  iconColor: "#f472b6", badgeBg: "rgba(236,72,153,0.18)",  badgeColor: "#f9a8d4", line: "rgba(236,72,153,0.3)"  },
+  nightlife:  { icon: Moon,      label: "Vita notturna",gradient: "linear-gradient(135deg,#ec4899,#a855f7)", iconBg: "rgba(236,72,153,0.2)",  iconColor: "#f472b6", badgeBg: "rgba(236,72,153,0.18)",  badgeColor: "#f9a8d4", line: "rgba(236,72,153,0.3)"  },
+  shopping:   { icon: ShoppingBag,label: "Shopping",     gradient: "linear-gradient(135deg,#10b981,#06b6d4)", iconBg: "rgba(16,185,129,0.2)",  iconColor: "#34d399", badgeBg: "rgba(16,185,129,0.18)",  badgeColor: "#6ee7b7", line: "rgba(16,185,129,0.3)"  },
+  culture:    { icon: MapPin,    label: "Cultura",      gradient: "linear-gradient(135deg,#f59e0b,#eab308)", iconBg: "rgba(245,158,11,0.2)",  iconColor: "#fbbf24", badgeBg: "rgba(245,158,11,0.18)",  badgeColor: "#fcd34d", line: "rgba(245,158,11,0.3)"  },
+  nature:     { icon: Compass,   label: "Natura",       gradient: "linear-gradient(135deg,#22c55e,#10b981)", iconBg: "rgba(34,197,94,0.2)",   iconColor: "#4ade80", badgeBg: "rgba(34,197,94,0.18)",   badgeColor: "#86efac", line: "rgba(34,197,94,0.3)"   },
 };
 const DEFAULT_STYLE = { icon: Sparkles, label: "Attività", gradient: "linear-gradient(135deg,#a78bfa,#c084fc)", iconBg: "rgba(167,139,250,0.2)", iconColor: "#c084fc", badgeBg: "rgba(167,139,250,0.18)", badgeColor: "#ddd6fe", line: "rgba(167,139,250,0.3)" };
 
@@ -192,7 +195,7 @@ function DayHeader({ dayIndex, title, weather, summary }: { dayIndex: number; ti
   return (
     <div style={{ marginBottom: "16px", paddingTop: dayIndex > 0 ? "28px" : "0" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "6px" }}>
-        <div style={{ width: "30px", height: "30px", borderRadius: "50%", flexShrink: 0, background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: "13px", color: "#fff" }}>{dayIndex + 1}</div>
+        <div style={{ width: "30px", height: "30px", borderRadius: "50%", flexShrink: 0, background: "var(--wd-grad-warm)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: "13px", color: "#fff" }}>{dayIndex + 1}</div>
         <h3 style={{ fontSize: "16px", fontWeight: 800, color: "#ffffff", letterSpacing: "-0.01em" }}>{title}</h3>
         {weather && <span style={{ marginLeft: "auto", fontSize: "12px", fontWeight: 600, padding: "3px 10px", borderRadius: "9999px", background: "rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.1)" }}>{weather}</span>}
       </div>

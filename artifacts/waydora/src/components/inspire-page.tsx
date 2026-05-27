@@ -101,7 +101,7 @@ function TripCard({ trip, liked, onLike, onSelect }: {
           </div>
         )}
         <button onClick={() => onSelect(prompt)}
-          style={{ width: "100%", padding: "9px", borderRadius: "11px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
+          style={{ width: "100%", padding: "9px", borderRadius: "11px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
           <Sparkles style={{ width: "13px", height: "13px" }} />Pianifica con Waydora
         </button>
       </div>
@@ -125,7 +125,7 @@ export function InspirePage({ onSelectTrip, onLikeFeatured, isFeaturedLiked, pub
     : FEATURED_TRIPS.filter(t => t.tags.includes(filter));
 
   return (
-    <div style={{ height: "100%", overflowY: "auto", background: "#0a0a12" }}>
+    <div style={{ height: "100%", overflowY: "auto", background: "var(--wd-bg)" }}>
       <div style={{ position: "fixed", top: "-10%", right: "-5%", width: "50vw", height: "50vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(249,115,22,0.1) 0%,transparent 65%)", filter: "blur(70px)", pointerEvents: "none", zIndex: 0 }} />
 
       <div style={{ position: "relative", zIndex: 1, padding: "28px", maxWidth: "1000px", margin: "0 auto" }}>
@@ -144,7 +144,7 @@ export function InspirePage({ onSelectTrip, onLikeFeatured, isFeaturedLiked, pub
         <div style={{ display: "flex", gap: "7px", flexWrap: "wrap", marginBottom: "24px" }}>
           {ALL_FILTERS.map(f => (
             <button key={f} onClick={() => setFilter(f)}
-              style={{ padding: "5px 13px", borderRadius: "9999px", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s", background: filter === f ? "linear-gradient(135deg,#f97316,#a855f7)" : "rgba(255,255,255,0.07)", color: filter === f ? "#fff" : "rgba(255,255,255,0.5)", border: filter === f ? "none" : "1px solid rgba(255,255,255,0.1)" }}>
+              style={{ padding: "5px 13px", borderRadius: "9999px", fontSize: "12px", fontWeight: 600, cursor: "pointer", transition: "all 0.15s", background: filter === f ? "var(--wd-grad-warm)" : "rgba(255,255,255,0.07)", color: filter === f ? "#fff" : "rgba(255,255,255,0.5)", border: filter === f ? "none" : "1px solid rgba(255,255,255,0.1)" }}>
               {f}
             </button>
           ))}

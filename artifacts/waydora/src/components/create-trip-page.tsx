@@ -84,7 +84,7 @@ function DayEditor({ day, dayIndex, onChange, onRemove }: {
   return (
     <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "14px", marginBottom: "12px", overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 14px", cursor: "pointer", borderBottom: collapsed ? "none" : "1px solid rgba(255,255,255,0.06)" }} onClick={() => setCollapsed(!collapsed)}>
-        <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 900, color: "#fff", flexShrink: 0 }}>{dayIndex + 1}</div>
+        <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: "var(--wd-grad-warm)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 900, color: "#fff", flexShrink: 0 }}>{dayIndex + 1}</div>
         <input value={day.title} onChange={e => { e.stopPropagation(); onChange({ ...day, title: e.target.value }); }} onClick={e => e.stopPropagation()}
           placeholder={`Giorno ${dayIndex + 1}`}
           style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: "13px", fontWeight: 700, minWidth: 0 }} />
@@ -284,7 +284,7 @@ export function CreateTripPage({ userId, trips, onSaveDraft, onPublish, onDelete
           {saving ? "Salvataggio..." : saved ? "Salvato!" : "Salva bozza"}
         </button>
         <button onClick={handlePublish} disabled={!draft.title || !draft.destination || publishing}
-          style={{ flex: 2, padding: "11px", borderRadius: "11px", background: draft.title && draft.destination ? "linear-gradient(135deg,#f97316,#a855f7)" : "rgba(255,255,255,0.07)", border: "none", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: draft.title && draft.destination ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", opacity: publishing ? 0.8 : 1 }}>
+          style={{ flex: 2, padding: "11px", borderRadius: "11px", background: draft.title && draft.destination ? "var(--wd-grad-warm)" : "rgba(255,255,255,0.07)", border: "none", color: "#fff", fontSize: "13px", fontWeight: 700, cursor: draft.title && draft.destination ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", opacity: publishing ? 0.8 : 1 }}>
           {publishing ? <Loader2 style={{ width: "14px", height: "14px", animation: "wd-spin 0.8s linear infinite" }} /> : <Globe style={{ width: "14px", height: "14px" }} />}
           {draft.status === "published" ? "Aggiorna viaggio" : "Pubblica viaggio"}
         </button>
@@ -315,10 +315,10 @@ export function CreateTripPage({ userId, trips, onSaveDraft, onPublish, onDelete
   // ── Mobile: single column ─────────────────────────────────────────────
   if (mobileOnly) {
     return (
-      <div style={{ height: "100%", background: "#0a0a12", overflowY: "auto" }}>
+      <div style={{ height: "100%", background: "var(--wd-bg)", overflowY: "auto" }}>
         {editor}
         {showMobileMap && (
-          <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "#0a0a12", display: "flex", flexDirection: "column" }}>
+          <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "var(--wd-bg)", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: "12px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, background: "rgba(10,10,18,0.95)" }}>
               <button onClick={() => setShowMobileMap(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.7)", fontSize: "14px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
                 ← Torna all'editor
@@ -340,7 +340,7 @@ export function CreateTripPage({ userId, trips, onSaveDraft, onPublish, onDelete
 
   // ── Desktop: split ─────────────────────────────────────────────────────
   return (
-    <div style={{ height: "100%", display: "flex", overflow: "hidden", background: "#0a0a12" }}>
+    <div style={{ height: "100%", display: "flex", overflow: "hidden", background: "var(--wd-bg)" }}>
       <div style={{ flex: "0 0 50%", overflowY: "auto", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
         {editor}
       </div>

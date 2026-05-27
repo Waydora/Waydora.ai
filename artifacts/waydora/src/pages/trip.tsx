@@ -319,7 +319,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
           <button
             onClick={() => { if (isAiMode) sendAi(); else if (input.trim()) { sendMsg(input.trim()); setInput(""); } }}
             disabled={!input.trim() || aiPending}
-            style={{ width: "40px", height: "40px", borderRadius: "50%", border: "none", flexShrink: 0, cursor: input.trim() && !aiPending ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", background: input.trim() && !aiPending ? (isAiMode ? "linear-gradient(135deg,#a855f7,#6366f1)" : "linear-gradient(135deg,#f97316,#a855f7)") : "rgba(255,255,255,0.08)", color: "#fff", transition: "all 0.15s" }}>
+            style={{ width: "40px", height: "40px", borderRadius: "50%", border: "none", flexShrink: 0, cursor: input.trim() && !aiPending ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", background: input.trim() && !aiPending ? (isAiMode ? "linear-gradient(135deg,#a855f7,#6366f1)" : "var(--wd-grad-warm)") : "rgba(255,255,255,0.08)", color: "#fff", transition: "all 0.15s" }}>
             {aiPending ? <Loader2 style={{ width: "15px", height: "15px", animation: "wds 0.8s linear infinite" }} /> : <Send style={{ width: "15px", height: "15px" }} />}
           </button>
         </div>
@@ -367,7 +367,7 @@ function IdeasPanel({ slug }: { slug: string }) {
   };
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: "16px", gap: "12px", background: "#0a0a12" }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", padding: "16px", gap: "12px", background: "var(--wd-bg)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
         <Lightbulb style={{ width: "16px", height: "16px", color: "#fbbf24" }} />
         <span style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Idee condivise</span>
@@ -382,7 +382,7 @@ function IdeasPanel({ slug }: { slug: string }) {
         <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") add(); }}
           placeholder="Aggiungi un'idea..."
           style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "10px", padding: "8px 12px", color: "#fff", fontSize: "13px", outline: "none" }} />
-        <button onClick={add} style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+        <button onClick={add} style={{ width: "36px", height: "36px", borderRadius: "10px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
           <Plus style={{ width: "15px", height: "15px" }} />
         </button>
       </div>
@@ -471,7 +471,7 @@ function CalendarPanel({ itinerary }: { itinerary: any }) {
         {itinerary.days?.map((day: any, i: number) => (
           <div key={day.day} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "12px 14px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-              <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 900, color: "#fff", flexShrink: 0 }}>{i + 1}</div>
+              <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "var(--wd-grad-warm)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 900, color: "#fff", flexShrink: 0 }}>{i + 1}</div>
               <div style={{ fontSize: "13px", fontWeight: 700, color: "#fff" }}>{day.title}</div>
             </div>
             {day.activities?.map((a: any, ai: number) => (
@@ -678,7 +678,7 @@ export default function Trip() {
 
   if (loading) return (
     <Layout>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a12", gap: "12px" }}>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--wd-bg)", gap: "12px" }}>
         <Loader2 style={{ width: "32px", height: "32px", color: "#a78bfa", animation: "wds 0.8s linear infinite" }} />
         <span style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px" }}>Caricamento viaggio...</span>
         <style>{`@keyframes wds{to{transform:rotate(360deg)}}`}</style>
@@ -688,11 +688,11 @@ export default function Trip() {
 
   if (error || !itinerary) return (
     <Layout>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "20px", textAlign: "center", padding: "32px", background: "#0a0a12" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "20px", textAlign: "center", padding: "32px", background: "var(--wd-bg)" }}>
         <div style={{ fontSize: "4rem" }}>🗺️</div>
         <h2 style={{ fontSize: "22px", fontWeight: 900, color: "#fff" }}>Viaggio non trovato</h2>
         <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.45)", maxWidth: "380px" }}>Il link potrebbe essere scaduto o il viaggio è stato eliminato.</p>
-        <Link href="/"><button style={{ padding: "11px 28px", borderRadius: "9999px", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>← Torna alla home</button></Link>
+        <Link href="/"><button style={{ padding: "11px 28px", borderRadius: "9999px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>← Torna alla home</button></Link>
       </div>
     </Layout>
   );
@@ -723,7 +723,7 @@ export default function Trip() {
 
   return (
     <Layout>
-      <div style={{ position: "fixed", inset: 0, zIndex: -1, background: "#0a0a12" }}>
+      <div style={{ position: "fixed", inset: 0, zIndex: -1, background: "var(--wd-bg)" }}>
         <div style={{ position: "absolute", top: "-10%", right: "-5%", width: "50vw", height: "50vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(249,115,22,0.12) 0%,transparent 65%)", filter: "blur(70px)" }} />
         <div style={{ position: "absolute", bottom: "5%", left: "-5%", width: "45vw", height: "45vw", borderRadius: "50%", background: "radial-gradient(circle,rgba(168,85,247,0.12) 0%,transparent 65%)", filter: "blur(70px)" }} />
       </div>
@@ -765,7 +765,7 @@ export default function Trip() {
 
         {/* FAB chat */}
         <button onClick={() => setChatOpen(true)}
-          style={{ position: "fixed", bottom: `${TOOLBAR_H + 16}px`, right: "16px", zIndex: 35, width: "52px", height: "52px", borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#a855f7)", border: "2px solid rgba(255,255,255,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(249,115,22,0.4)" }}>
+          style={{ position: "fixed", bottom: `${TOOLBAR_H + 16}px`, right: "16px", zIndex: 35, width: "52px", height: "52px", borderRadius: "50%", background: "var(--wd-grad-warm)", border: "2px solid rgba(255,255,255,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(249,115,22,0.4)" }}>
           <MessageSquare style={{ width: "22px", height: "22px", color: "#fff" }} />
           {msgCount > 0 && (
             <div style={{ position: "absolute", top: "-3px", right: "-3px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#f97316" }}>
