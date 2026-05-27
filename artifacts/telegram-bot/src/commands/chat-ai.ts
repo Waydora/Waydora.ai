@@ -21,6 +21,40 @@ export function registerChatAI(bot: Composer<BoundContext>) {
       ctx.replyWithChatAction("typing").catch(() => {});
     }, 4000);
 
+    // Messaggio "vivo" che cambia ogni 5s con frasi a tema viaggio.
+    // Editiamo lo stesso messaggio invece di mandarne tanti.
+    const LOADING_MESSAGES = [
+      "🧭 Sto cercando i posti migliori...",
+      "🏄‍♂️ Sto controllando le onde locali...",
+      "🗺️ Sto disegnando la mappa...",
+      "🍝 Sto chiedendo ai chef del posto...",
+      "🌅 Sto guardando gli orari del tramonto...",
+      "✈️ Sto verificando voli e treni...",
+      "🏛 Sto leggendo le guide dei locali...",
+      "📍 Sto piazzando i pin sull'itinerario...",
+      "✨ Ultimi ritocchi...",
+    ];
+    let loadingMsgId: number | undefined;
+    try {
+      const m = await ctx.reply(LOADING_MESSAGES[0]);
+      loadingMsgId = m.message_id;
+    } catch {}
+    let loadingIdx = 0;
+    const loadingInterval = setInterval(() => {
+      loadingIdx = (loadingIdx + 1) % LOADING_MESSAGES.length;
+      if (loadingMsgId) {
+        ctx.api.editMessageText(ctx.chat!.id, loadingMsgId, LOADING_MESSAGES[loadingIdx]).catch(() => {});
+      }
+    }, 5000);
+
+    const cleanupLoading = async () => {
+      clearInterval(typingInterval);
+      clearInterval(loadingInterval);
+      if (loadingMsgId) {
+        await ctx.api.deleteMessage(ctx.chat!.id, loadingMsgId).catch(() => {});
+      }
+    };
+
     const session = await loadOrCreateSession(userId, tgId);
 
     const userMsg: ChatMessage = { role: "user", content: text };
@@ -34,11 +68,9 @@ export function registerChatAI(bot: Composer<BoundContext>) {
         userTier: ctx.binding.tier,
       });
     } catch (e: any) {
-      clearInterval(typingInterval);
+      await cleanupLoading();
       const detail = String(e?.message ?? e);
       console.error("[chat-ai]", detail);
-      // 502 dall'api-server = JSON malformato dall'AI (transitorio).
-      // Suggeriamo retry invece di mostrare detail tecnico.
       if (detail.includes("502") || detail.includes("Risposta non valida")) {
         await ctx.reply("Non sono riuscito a costruire la risposta (errore temporaneo dell'AI). Riformula il messaggio piu' breve o riprova fra qualche secondo.");
       } else {
@@ -46,7 +78,7 @@ export function registerChatAI(bot: Composer<BoundContext>) {
       }
       return;
     }
-    clearInterval(typingInterval);
+    await cleanupLoading();
 
     // Aggiorna sessione
     session.turns.push({ role: "user", content: text });

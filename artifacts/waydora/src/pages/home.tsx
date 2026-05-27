@@ -387,14 +387,59 @@ function renderWithLinks(text: string): ReactNode {
 function AssistantBubble({ text }: { text: string }) {
   return <div className="flex justify-start"><div style={{ maxWidth: "85%", padding: "10px 14px", borderRadius: "18px 18px 18px 4px", background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.11)", color: "rgba(255,255,255,0.88)", fontSize: "14px", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{renderWithLinks(text)}</div></div>;
 }
+const LOADING_PHRASES: Array<{ emoji: string; text: string }> = [
+  { emoji: "🧭", text: "Sto cercando i posti migliori..." },
+  { emoji: "🏄‍♂️", text: "Controllo le onde locali..." },
+  { emoji: "🗺️", text: "Sto disegnando la mappa..." },
+  { emoji: "🍝", text: "Chiedo consiglio agli chef del posto..." },
+  { emoji: "🌅", text: "Guardo gli orari del tramonto..." },
+  { emoji: "✈️", text: "Verifico voli e treni..." },
+  { emoji: "🏛", text: "Leggo le guide dei locali..." },
+  { emoji: "📍", text: "Piazzo i pin sull'itinerario..." },
+  { emoji: "🎒", text: "Preparo il bagaglio mentale..." },
+  { emoji: "✨", text: "Ultimi ritocchi..." },
+];
+
 function TypingIndicator() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIdx(i => (i + 1) % LOADING_PHRASES.length), 2800);
+    return () => clearInterval(t);
+  }, []);
+  const phrase = LOADING_PHRASES[idx];
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
-      <div className="flex items-center gap-2 px-4 py-3 rounded-2xl" style={{ background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}>
-        {[0, 150, 300].map(d => <div key={d} className="w-2 h-2 rounded-full" style={{ background: "rgba(255,255,255,0.5)", animation: `wd-bounce 1.2s ease-in-out ${d}ms infinite` }} />)}
-        <span className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.35)" }}>Waydora sta pianificando...</span>
+      <div className="flex items-center gap-3 px-4 py-3 rounded-2xl" style={{ background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.1)", minWidth: "260px" }}>
+        <motion.span
+          key={phrase.emoji}
+          initial={{ scale: 0.6, opacity: 0, y: 8 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 280, damping: 18 }}
+          style={{ fontSize: "22px", lineHeight: 1, display: "inline-block" }}
+        >
+          {phrase.emoji}
+        </motion.span>
+        <div className="flex flex-col gap-1" style={{ flex: 1, minWidth: 0 }}>
+          <AnimatePresence mode="wait">
+            <motion.span
+              key={phrase.text}
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8 }}
+              transition={{ duration: 0.25 }}
+              style={{ fontSize: "13px", color: "rgba(255,255,255,0.78)", fontWeight: 500 }}
+            >
+              {phrase.text}
+            </motion.span>
+          </AnimatePresence>
+          <div className="flex items-center gap-1">
+            {[0, 150, 300].map(d => (
+              <div key={d} className="rounded-full" style={{ width: "5px", height: "5px", background: "rgba(255,255,255,0.45)", animation: `wd-bounce 1.2s ease-in-out ${d}ms infinite` }} />
+            ))}
+          </div>
+        </div>
       </div>
-      <style>{`@keyframes wd-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}`}</style>
+      <style>{`@keyframes wd-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}`}</style>
     </motion.div>
   );
 }
