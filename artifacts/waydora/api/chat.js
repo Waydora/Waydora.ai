@@ -37,15 +37,49 @@ function stay22For(destination) {
   return `${AFF.STAY22_URL}?${p.toString()}`;
 }
 
-function buildAffiliate(category, title, destination) {
-  const q = encodeURIComponent(`${title || ""} ${destination || ""}`.trim());
-  switch ((category || "").toLowerCase()) {
+// Heuristica per dedurre transportMode quando l'AI non lo specifica.
+function inferTransportMode(activity) {
+  const explicit = (activity?.transportMode || "").toLowerCase().trim();
+  if (["flight", "train", "ferry", "bus", "taxi", "car"].includes(explicit)) return explicit;
+  const text = `${activity?.title || ""} ${activity?.description || ""}`.toLowerCase();
+  if (/\b(traghett|ferry|trajekt|luka|porto|catamarano|aliscaf)/.test(text)) return "ferry";
+  if (/\b(treno|train|frecci|italo|trenitalia|intercity|tgv|ave|ice|stazione)/.test(text)) return "train";
+  if (/\b(autobus|pullman|flixbus|bus\b)/.test(text)) return "bus";
+  if (/\b(taxi|uber|bolt|free now|cab)/.test(text)) return "taxi";
+  if (/\b(volo|voli|aereo|flight|aeroport)/.test(text)) return "flight";
+  return "flight";
+}
+
+function buildTransportAffiliate(activity, destination) {
+  const mode = inferTransportMode(activity);
+  const q = encodeURIComponent(`${activity?.title || ""} ${destination || ""}`.trim());
+  switch (mode) {
+    case "ferry":
+      return { provider: "Direct Ferries", label: "Cerca traghetti", url: `https://www.directferries.it/srp_pf.htm?keywords=${q}` };
+    case "train":
+      return { provider: "Trainline", label: "Cerca treni", url: `https://www.thetrainline.com/it/cerca/${q}` };
+    case "bus":
+      return { provider: "FlixBus", label: "Cerca bus", url: `https://www.flixbus.it/?q=${q}` };
+    case "taxi":
+      return { provider: "Google Maps", label: "Apri in Maps", url: `https://www.google.com/maps/search/?api=1&query=${q}` };
+    case "car":
+      return { provider: "Google Maps", label: "Indicazioni", url: `https://www.google.com/maps/dir/?api=1&destination=${q}` };
+    case "flight":
+    default:
+      return { provider: "Kiwi", label: "Cerca voli", url: AFF.KIWI_URL };
+  }
+}
+
+function buildAffiliate(activity, destination) {
+  const category = (activity?.category || "").toLowerCase();
+  const q = encodeURIComponent(`${activity?.title || ""} ${destination || ""}`.trim());
+  switch (category) {
     case "stay":
       return { provider: "Stay22", label: "Cerca alloggi", url: stay22For(destination) };
     case "food":
       return { provider: "Google Maps", label: "Vedi su Maps", url: `https://www.google.com/maps/search/?api=1&query=${q}` };
     case "transport":
-      return { provider: "Kiwi", label: "Cerca voli", url: AFF.KIWI_URL };
+      return buildTransportAffiliate(activity, destination);
     case "sightseeing":
     case "experience":
     case "nightlife":
@@ -55,15 +89,41 @@ function buildAffiliate(category, title, destination) {
 }
 
 // Safety-net: garantisce che ogni activity abbia un link affiliate valido
+// Safety-net date passate negli URL della reply (Skyscanner/Booking/Airbnb).
+// L'AI tende a usare 2024 anche se gli diciamo la data corrente.
+function fixPastDatesInReply(text) {
+  if (typeof text !== "string" || text.length === 0) return text;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().slice(0, 10);
+  const plus7 = new Date(today); plus7.setDate(today.getDate() + 7);
+  const plus7Str = plus7.toISOString().slice(0, 10);
+
+  const URL_RX = /(https?:\/\/[^\s)]+)/g;
+  const DATE_RX = /\d{4}-\d{2}-\d{2}/g;
+  return text.replace(URL_RX, (url) => {
+    let datesFound = 0;
+    return url.replace(DATE_RX, (d) => {
+      const dt = new Date(d);
+      if (isNaN(dt.getTime()) || dt >= today) return d;
+      datesFound++;
+      return datesFound === 1 ? todayStr : plus7Str;
+    });
+  });
+}
+
 function ensureAffiliateOnItinerary(itinerary) {
   if (!itinerary || !Array.isArray(itinerary.days)) return itinerary;
   const dest = itinerary.destination || "";
   for (const day of itinerary.days) {
     if (!Array.isArray(day.activities)) continue;
     for (const a of day.activities) {
+      const cat = (a.category || "").toLowerCase();
       const hasValid = a.affiliate && typeof a.affiliate.url === "string" && a.affiliate.url.startsWith("http");
-      if (!hasValid) a.affiliate = buildAffiliate(a.category, a.title, dest);
-      else if ((a.category || "").toLowerCase() === "stay") a.affiliate = buildAffiliate("stay", a.title, dest);
+      // Override sempre stay (Stay22 con address) e transport (label per modalità)
+      if (!hasValid || cat === "stay" || cat === "transport") {
+        a.affiliate = buildAffiliate(a, dest);
+      }
     }
   }
   return itinerary;
@@ -80,6 +140,33 @@ Usa per: saluti, consigli generici, suggerimenti ristoranti/locali, domande cult
 Rispondi in modo conciso e conversazionale. Max 150 parole. Usa emoji con moderazione.
 
 { "reply": "risposta conversazionale", "itinerary": null }
+
+━━━ MODALITÀ DISCOVERY — OBBLIGATORIA PRIMA DI GENERARE UN ITINERARIO NUOVO ━━━
+Prima di creare un itinerario da zero, DEVI conoscere almeno 3 di questi 4 dati:
+1. **Compagnia**: con chi viaggia (solo, coppia, famiglia con bambini, amici, gruppo)
+2. **Periodo**: mese o stagione (es. "fine giugno", "metà ottobre", "estate")
+3. **Partenza**: città/aeroporto di partenza
+4. **Budget**: fascia indicativa (low <€500, mid €500-1200, comfort €1200-2500, lusso >€2500 a persona escluso volo)
+
+Se l'utente ha già specificato 3+ di questi dati, NON chiedere nulla: passa direttamente a MODALITÀ ITINERARIO.
+Se mancano 2 o più dati, rispondi in MODALITÀ TESTO con **un solo messaggio breve, max 2 domande insieme**, come un'amica curiosa — NON un questionario.
+
+ESEMPI CORRETTI di discovery (naturale, breve, max 2 domande):
+- "voglio andare a Lisbona" → "Lisbona è una gran bella idea! 🇵🇹 Per costruirla su misura: con chi parti e in che periodo pensavi?"
+- "weekend al mare" → "Mare sì! ☀️ Da dove parti e che tipo di mare preferisci — selvaggio o organizzato?"
+- "3 giorni a Roma" → "Roma in 3 giorni è perfetto. 🏛 Siete in coppia, gruppo o famiglia? E che budget hai in testa?"
+
+ESEMPI PRONTI per itinerario (NON chiedere altro, genera subito):
+- "3 giorni a Tokyo low budget per 2 persone a giugno da Roma" → tutti i dati ci sono
+
+REGOLE DISCOVERY:
+- MAX 2 domande in un singolo messaggio. MAI un elenco di 4 cose.
+- Tono leggero, da amica esperta. NIENTE bullet list, NIENTE moduli.
+- Riconosci i dati già dati: non chiedere il budget se ha già detto "low budget".
+- Ricevute le risposte mancanti → genera l'itinerario nello stesso turno (non chiedere conferma).
+- Se l'utente dice "sorprendimi" / "scegli tu" → procedi con default (coppia, prossimo periodo favorevole, budget mid).
+
+ECCEZIONE: se esiste già un itinerario in chat → NON entrare in discovery, gestisci come edit normale.
 
 ━━━ MODALITÀ ITINERARIO (solo quando chiede di creare/modificare/aggiungere giorni) ━━━
 
@@ -167,10 +254,12 @@ Per OGNI activity compila il campo "affiliate" usando ESATTAMENTE questi formati
     "label": "Vedi su Maps",
     "url": "https://www.google.com/maps/search/?api=1&query=<NOME+POSTO>+<DESTINAZIONE>"
   }
-- category "transport" → {
-    "provider": "Kiwi",
-    "label": "Cerca voli",
-    "url": "https://kiwi.tpm.li/HdS8gBCi"
+- category "transport" → AGGIUNGI SEMPRE il campo "transportMode" con uno tra: "flight" (aereo), "train" (treno), "ferry" (traghetto/aliscafo), "bus" (autobus/pullman/FlixBus), "taxi" (taxi/Uber/Bolt), "car" (auto/noleggio).
+  Il backend sceglierà link e label coerenti (es. traghetto → Direct Ferries "Cerca traghetti", treno → Trainline, bus → FlixBus, volo → Kiwi). NON forzare mai "Cerca voli" su un traghetto/treno/bus.
+  Lascia placeholder: {
+    "provider": "auto",
+    "label": "auto",
+    "url": "https://waydora.com"
   }
 - category "sightseeing" | "experience" | "nightlife" → {
     "provider": "GetYourGuide",
@@ -452,9 +541,13 @@ export default async function handler(req, res) {
       tier: userTier,
     });
 
+    // Iniettiamo la data corrente: senza, il modello hallucina date passate negli URL → 404.
+    const today = new Date().toISOString().slice(0, 10);
+    const dateHint = `\n\n━━━ DATA OGGI ━━━\nOggi è ${today}. TUTTE le date che metti in URL (Skyscanner, Booking, Airbnb, etc) DEVONO essere uguali o successive a oggi. NON usare mai date passate. Se l'utente non ha dato date esatte, usa il primo mese plausibile da oggi in avanti.`;
+    const baseSystem = SYSTEM_PROMPT + dateHint;
     const systemPrompt = existingItinerary
-      ? `${SYSTEM_PROMPT}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`
-      : SYSTEM_PROMPT;
+      ? `${baseSystem}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`
+      : baseSystem;
 
     const orMessages = buildMessages(enrichedMessages, mediaContent);
 
@@ -520,6 +613,11 @@ export default async function handler(req, res) {
       catch (e) { console.error("Places err:", e.message); }
       // Safety-net: garantisce affiliate su OGNI activity (anche se il modello l'ha dimenticato)
       ensureAffiliateOnItinerary(payload.itinerary);
+    }
+
+    // Safety-net date passate negli URL della reply
+    if (typeof payload.reply === "string") {
+      payload.reply = fixPastDatesInReply(payload.reply);
     }
 
     return res.status(200).json(payload);

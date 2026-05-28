@@ -87,8 +87,10 @@ export function registerChatAI(bot: Composer<BoundContext>) {
     if (resp.itinerary) session.itinerary = resp.itinerary;
     await saveSession(session);
 
-    // Reply
-    await ctx.reply(resp.reply);
+    // Reply preambolo (plain, niente Markdown → mai a rischio rigetto)
+    if (resp.reply && resp.reply.trim()) {
+      await ctx.reply(resp.reply).catch((e) => console.warn("[chat-ai] reply preambolo failed:", e?.message));
+    }
 
     if (resp.itinerary) {
       const it = resp.itinerary;
@@ -109,10 +111,20 @@ export function registerChatAI(bot: Composer<BoundContext>) {
         console.warn("[chat-ai] auto-save saved_trip failed", e);
       }
 
-      await ctx.reply(summarizeItinerary(it), {
-        parse_mode: "Markdown",
-        reply_markup: buildItineraryKeyboard(it),
-      });
+      // Fallback robusto: se Telegram rigetta il Markdown (caratteri non escaped, parentesi, etc),
+      // ritenta senza parse_mode così l'utente vede comunque l'itinerario.
+      const summary = summarizeItinerary(it);
+      try {
+        await ctx.reply(summary, {
+          parse_mode: "Markdown",
+          reply_markup: buildItineraryKeyboard(it),
+        });
+      } catch (err: any) {
+        console.warn("[chat-ai] summary Markdown failed, retry plain:", err?.message);
+        await ctx.reply(summary.replace(/[*_`\[\]\\]/g, ""), {
+          reply_markup: buildItineraryKeyboard(it),
+        }).catch((e) => console.error("[chat-ai] summary plain failed:", e?.message));
+      }
     }
   });
 
@@ -129,10 +141,18 @@ export function registerChatAI(bot: Composer<BoundContext>) {
     }
     const done = getDone(tgId, session.id);
     await ctx.answerCallbackQuery();
-    await ctx.reply(formatDay(day, dayN, done), {
-      parse_mode: "Markdown",
-      reply_markup: buildDayKeyboard(it, dayN),
-    });
+    const dayText = formatDay(day, dayN, done);
+    try {
+      await ctx.reply(dayText, {
+        parse_mode: "Markdown",
+        reply_markup: buildDayKeyboard(it, dayN),
+      });
+    } catch (err: any) {
+      console.warn("[chat-ai] formatDay Markdown failed, retry plain:", err?.message);
+      await ctx.reply(dayText.replace(/[*_`\[\]\\]/g, ""), {
+        reply_markup: buildDayKeyboard(it, dayN),
+      }).catch((e) => console.error("[chat-ai] formatDay plain failed:", e?.message));
+    }
   });
 
   // Toggle "fatto" attivita'
@@ -147,12 +167,19 @@ export function registerChatAI(bot: Composer<BoundContext>) {
     await ctx.answerCallbackQuery({ text: nowDone ? "Segnato come fatto ✅" : "Rimosso" });
     const day = session.itinerary?.days?.[dayN - 1];
     if (day) {
+      const dayText = formatDay(day, dayN, done);
       try {
-        await ctx.editMessageText(formatDay(day, dayN, done), {
+        await ctx.editMessageText(dayText, {
           parse_mode: "Markdown",
           reply_markup: buildDayKeyboard(session.itinerary, dayN),
         });
-      } catch {}
+      } catch {
+        try {
+          await ctx.editMessageText(dayText.replace(/[*_`\[\]\\]/g, ""), {
+            reply_markup: buildDayKeyboard(session.itinerary, dayN),
+          });
+        } catch {}
+      }
     }
   });
 

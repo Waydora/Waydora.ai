@@ -29,7 +29,6 @@ import {
   TripCounter, Partners, Reviews, Faq, SiteFooter, HeroLanding, StickyLandingHeader,
   SuggestedTrips, AnimatedRoadmap, WorldGallery, AppShowcase,
 } from "@/components/landing-sections";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 
 type ChatTurn = { id: number; userMessage: string; assistantReply: string; itinerary?: ItineraryData; mediaPreview?: string; };
@@ -283,8 +282,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
       {sessions.length > 0 && (
         <div style={{ padding: isMobile ? "0 14px 10px" : "0 12px 8px" }}>
           <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(255,255,255,0.28)", padding: "4px 4px 8px" }}>Recenti</div>
-          <ScrollArea style={{ maxHeight: isMobile ? "200px" : "180px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+          <div style={{ maxHeight: isMobile ? "200px" : "180px", overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: "3px" }}>
               {sessions.map((s) => (
                 <div key={s.id} className="group" style={{ display: "flex", alignItems: "stretch", borderRadius: "12px", overflow: "hidden", transition: "background 0.12s" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
@@ -306,8 +304,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
                   </button>
                 </div>
               ))}
-            </div>
-          </ScrollArea>
+          </div>
         </div>
       )}
       <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: `4px ${isMobile ? "14px" : "12px"}` }} />
