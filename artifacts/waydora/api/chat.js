@@ -270,38 +270,45 @@ Per OGNI activity compila il campo "affiliate" usando ESATTAMENTE questi formati
 Sostituisci <NOME+POSTO> con il title dell'activity (spazi → +) e <DESTINAZIONE> con la città principale. NON omettere mai il campo affiliate.`;
 
 // ── Router: classifica la richiesta e sceglie modello + maxTokens ─────────
-function routeRequest({ lastUserMsg, existingItinerary, hasMedia, tier }) {
+// Richiede l'INTERA conversazione, non solo l'ultimo messaggio: in discovery flow
+// l'ultimo turno utente può essere cortissimo ("Budget medio") e isolato sembrerebbe
+// chat banale → cheap chat 1200 tok → itinerario non generabile.
+function routeRequest({ messages, existingItinerary, hasMedia, tier }) {
   const cap = TIER_TOKENS[tier] ?? TIER_TOKENS.guest;
-  const text = (lastUserMsg || "").toString().toLowerCase().trim();
+  const userMsgs = (messages || []).filter(m => m.role === "user");
+  const lastMsg = userMsgs[userMsgs.length - 1]?.content || "";
+  const lastText = (typeof lastMsg === "string" ? lastMsg : "").toLowerCase().trim();
+  const fullUserText = userMsgs
+    .map(m => typeof m.content === "string" ? m.content : "")
+    .join(" ")
+    .toLowerCase();
 
-  // Estrai numero giorni dalla richiesta (default 3)
-  const daysMatch = text.match(/(\d+)\s*(giorni|day|notti|notte|gg)/i);
+  const daysMatch = fullUserText.match(/(\d+)\s*(giorni|day|notti|notte|gg)/i);
   const days = daysMatch ? Math.min(parseInt(daysMatch[1]), 21) : 3;
 
-  // Vision: sempre Haiku (vision-capable, economico)
   if (hasMedia) {
     return { model: M.HAIKU, maxTokens: Math.min(cap, 10000), kind: "vision", days };
   }
 
-  // Intent itinerario
-  const itineraryRx = /itinerar|viagg|pianifica|organizza|programm|crea.+(gior|gg)|gior(no|ni)\s|vacanz|weekend|trip|tour|visit|cosa\s+(fare|vedere)|dove\s+(andare|visitare)/i;
+  const itineraryRx = /itinerar|viagg|pianifica|organizza|programm|crea.+(gior|gg)|gior(no|ni)\s|vacanz|weekend|trip|tour|visit|cosa\s+(fare|vedere)|dove\s+(andare|visitare)|vado\s+a|andare\s+a|partir|destinazion/i;
   const editRx = /aggiungi|togli|sposta|rimuov|sostitu|cambia|modifica|elimina|metti|aggiorna/i;
-
-  const hasItineraryIntent = itineraryRx.test(text);
-
-  // Pure chat: saluti / risposte corte / nessun riferimento a viaggio
   const greetRx = /^(ciao|salve|hey|ehi|grazie|prego|ok|sì|si|no|wow|bene|perfetto|fantastico|chi sei|come stai|che fai)\b/i;
-  if (!hasItineraryIntent && (greetRx.test(text) || text.length < 60)) {
+
+  const hasItineraryIntent = itineraryRx.test(fullUserText);
+  const lastAssistant = (messages || []).slice().reverse().find(m => m.role === "assistant");
+  const lastAssistantText = (typeof lastAssistant?.content === "string" ? lastAssistant.content : "").toLowerCase();
+  const discoveryRx = /con chi|in che periodo|da dove parti|che budget|fascia di prezzo|quante persone|quando pensavi|che mese/;
+  const inDiscovery = !existingItinerary && discoveryRx.test(lastAssistantText);
+
+  if (!hasItineraryIntent && !inDiscovery && (greetRx.test(lastText) || lastText.length < 60)) {
     return { model: M.CHEAP_CHAT, maxTokens: Math.min(cap, 1200), kind: "chat-cheap", days };
   }
 
-  // Modifica itinerario esistente
-  if (existingItinerary && (hasItineraryIntent || editRx.test(text))) {
+  if (existingItinerary && (hasItineraryIntent || editRx.test(lastText))) {
     const tokens = Math.min(cap, Math.max(8000, days * 1500 + 5000));
     return { model: M.HAIKU, maxTokens: tokens, kind: "edit", days };
   }
 
-  // Consulto su itinerario esistente (ristoranti, meteo, curiosità) — no itinerary intent
   if (existingItinerary && !hasItineraryIntent) {
     return { model: M.HAIKU, maxTokens: Math.min(cap, 3000), kind: "consult", days };
   }
@@ -531,11 +538,8 @@ export default async function handler(req, res) {
     // Arricchimento con dati TikTok se l'utente incolla un link
     const enrichedMessages = await enrichWithTikTok(messages ?? []);
 
-    const lastMsg = enrichedMessages?.[enrichedMessages.length - 1]?.content || "";
-    const lastText = typeof lastMsg === "string" ? lastMsg : (Array.isArray(lastMsg) ? lastMsg.find(c => c.type === "text")?.text || "" : "");
-
     const route = routeRequest({
-      lastUserMsg: lastText,
+      messages: enrichedMessages,
       existingItinerary,
       hasMedia: !!mediaContent,
       tier: userTier,

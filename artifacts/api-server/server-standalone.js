@@ -375,22 +375,43 @@ async function enrichWithTikTok(messages) {
 }
 
 // ── Router: classifica richiesta → modello + maxTokens ───────────────────
-function routeRequest({ lastUserMsg, existingItinerary, hasMedia, tier }) {
+// Richiede l'INTERA conversazione, non solo l'ultimo messaggio:
+// in discovery flow ("vado a Lisbona" → "con chi?" → "in 2" → "che budget?" → "medio"),
+// l'ultimo turno utente è cortissimo ("medio") e isolato sembrerebbe una chat banale.
+// Senza guardare la storia, il router instraderebbe al modello cheap con 1200 token,
+// troppo pochi per emettere l'itinerario completo che l'AI vuole generare.
+function routeRequest({ messages, existingItinerary, hasMedia, tier }) {
   const cap = TIER_TOKENS[tier] ?? TIER_TOKENS.guest;
-  const text = (lastUserMsg || "").toString().toLowerCase().trim();
-  const daysMatch = text.match(/(\d+)\s*(giorni|day|notti|notte|gg)/i);
+  const userMsgs = (messages || []).filter(m => m.role === "user");
+  const lastMsg = userMsgs[userMsgs.length - 1]?.content || "";
+  const lastText = (typeof lastMsg === "string" ? lastMsg : "").toLowerCase().trim();
+  // Storia: TUTTI i messaggi utente concatenati → cattura intent emerso nei turni precedenti.
+  const fullUserText = userMsgs
+    .map(m => typeof m.content === "string" ? m.content : "")
+    .join(" ")
+    .toLowerCase();
+  // days: cerca nella full history, non solo nell'ultimo messaggio.
+  const daysMatch = fullUserText.match(/(\d+)\s*(giorni|day|notti|notte|gg)/i);
   const days = daysMatch ? Math.min(parseInt(daysMatch[1]), 21) : 3;
 
   if (hasMedia) {
     return { model: M.HAIKU, maxTokens: Math.min(cap, 10000), kind: "vision", days };
   }
 
-  const itineraryRx = /itinerar|viagg|pianifica|organizza|programm|crea.+(gior|gg)|gior(no|ni)\s|vacanz|weekend|trip|tour|visit|cosa\s+(fare|vedere)|dove\s+(andare|visitare)/i;
+  const itineraryRx = /itinerar|viagg|pianifica|organizza|programm|crea.+(gior|gg)|gior(no|ni)\s|vacanz|weekend|trip|tour|visit|cosa\s+(fare|vedere)|dove\s+(andare|visitare)|vado\s+a|andare\s+a|partir|destinazion/i;
   const editRx = /aggiungi|togli|sposta|rimuov|sostitu|cambia|modifica|elimina|metti|aggiorna/i;
   const greetRx = /^(ciao|salve|hey|ehi|grazie|prego|ok|sì|si|no|wow|bene|perfetto|fantastico|chi sei|come stai|che fai)\b/i;
-  const hasItineraryIntent = itineraryRx.test(text);
+  // Intent itinerario = uno qualsiasi dei turni utente passati ha menzionato viaggio/destinazione.
+  // Così "Budget medio" da solo non ricade in chat-cheap se prima si era detto "vado a Lisbona".
+  const hasItineraryIntent = itineraryRx.test(fullUserText);
+  // Discovery in corso: ultimo assistant ha fatto domande discovery e l'utente sta rispondendo.
+  const lastAssistant = (messages || []).slice().reverse().find(m => m.role === "assistant");
+  const lastAssistantText = (typeof lastAssistant?.content === "string" ? lastAssistant.content : "").toLowerCase();
+  const discoveryRx = /con chi|in che periodo|da dove parti|che budget|fascia di prezzo|quante persone|quando pensavi|che mese/;
+  const inDiscovery = !existingItinerary && discoveryRx.test(lastAssistantText);
 
-  if (!hasItineraryIntent && (greetRx.test(text) || text.length < 60)) {
+  // Chat-cheap fast-path SOLO se davvero conversazione banale (saluto/ack) E nessun intent viaggio mai emerso.
+  if (!hasItineraryIntent && !inDiscovery && (greetRx.test(lastText) || lastText.length < 60)) {
     return { model: M.CHEAP_CHAT, maxTokens: Math.min(cap, 1200), kind: "chat-cheap", days };
   }
 
@@ -398,13 +419,13 @@ function routeRequest({ lastUserMsg, existingItinerary, hasMedia, tier }) {
 
   // Modifica leggera (sposta orario, cambia un nome, togli un'attività) → Haiku
   const heavyEditRx = /aggiungi.+(gior|gg|tappa)|nuov[oi]\s+gior|rigenera|ricr|rifare|cambia\s+(destinazion|citt[aà]|posto|paese)|sposta.+(gior|tutto)/i;
-  if (existingItinerary && editRx.test(text) && !heavyEditRx.test(text)) {
+  if (existingItinerary && editRx.test(lastText) && !heavyEditRx.test(lastText)) {
     const tokens = Math.min(cap, Math.max(6000, days * 1200 + 4000));
     return { model: M.HAIKU, maxTokens: tokens, kind: "edit-small", days };
   }
 
   // Consulto su itinerario esistente (no itinerary intent, no edit intent) → Haiku
-  if (existingItinerary && !hasItineraryIntent && !editRx.test(text)) {
+  if (existingItinerary && !hasItineraryIntent && !editRx.test(lastText)) {
     return { model: M.HAIKU, maxTokens: Math.min(cap, 3000), kind: "consult", days };
   }
 
@@ -487,9 +508,7 @@ async function callAI(messages, existingItinerary, mediaContent, userTier = "gue
     ? `${baseSystem}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`
     : baseSystem;
 
-  const lastMsg = messages[messages.length - 1]?.content || "";
-  const lastText = typeof lastMsg === "string" ? lastMsg : (Array.isArray(lastMsg) ? (lastMsg.find(c => c.type === "text")?.text || "") : "");
-  const route = routeRequest({ lastUserMsg: lastText, existingItinerary, hasMedia: !!mediaContent, tier: userTier });
+  const route = routeRequest({ messages, existingItinerary, hasMedia: !!mediaContent, tier: userTier });
   const orMessages = buildORMessages(messages, mediaContent);
 
   console.log(`[callAI] kind=${route.kind} model=${route.model} days=${route.days} maxTokens=${route.maxTokens}`);
