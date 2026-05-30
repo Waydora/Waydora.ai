@@ -186,6 +186,7 @@ ECCEZIONE: se esiste già un itinerario in chat → NON entrare in discovery, ge
         "day": 1,
         "title": "titolo giorno",
         "summary": "una frase",
+        "city": "Roma, Italy",
         "activities": [
           {
             "time": "09:00-11:00",
@@ -193,7 +194,6 @@ ECCEZIONE: se esiste già un itinerario in chat → NON entrare in discovery, ge
             "description": "descrizione vivace senza indirizzo",
             "category": "sightseeing",
             "estimatedCost": "€15",
-            "coordinates": { "lat": 41.90, "lng": 12.49 },
             "affiliate": {
               "provider": "GetYourGuide",
               "label": "Prenota ora",
@@ -233,11 +233,12 @@ REGOLE GENERALI:
 OBBLIGATORIO: title, summary, description, vibe, bestSeason, packingList, reply — TUTTI in italiano. Il nome proprio del POI può restare in lingua locale; "destination" resta in inglese.
 category enum (non tradurre): stay, food, experience, transport, sightseeing, nightlife, shopping, culture, nature.
 
-━━━ POI E COORDINATE — OBBLIGATORI ━━━
+━━━ POI E CITY — OBBLIGATORI ━━━
 - title: usa SEMPRE il nome REALE e SPECIFICO del posto.
   ✅ "Trattoria Da Enzo al 29", "Colosseo", "Teatro alla Scala", "Mercato Centrale Firenze"
   ❌ "Ristorante locale", "Museo del centro", "Caffè caratteristico"
-- coordinates: lat/lng GPS REALI del posto specifico. Verifica mentalmente che siano nella città giusta.
+- city (per giorno): OBBLIGATORIO. Nome inglese internazionale della città+paese in cui si svolgono le attività di QUEL giorno. Es. "Athens, Greece", "Santorini, Greece", "Rome, Italy". Se in un giorno cambi città (transfer), usa la città di DESTINAZIONE. Serve per geocoding accurato.
+- NON includere coordinate (lat/lng): le aggiungiamo noi server-side via Google Places per massima precisione.
 - description: 1-2 frasi vivaci, perché l'utente dovrebbe andarci (NON ripetere il nome).
 - estimatedCost: realistico in euro, formato "€15" o "€20-30 a persona".
 
@@ -460,9 +461,9 @@ async function enrichWithTikTok(messages) {
 }
 
 // ── Google Places enrichment ──────────────────────────────────────────────
-function geocodeDestination(destination, apiKey) {
+function geocodeAddress(address, apiKey) {
   return new Promise((resolve) => {
-    const q = encodeURIComponent(destination);
+    const q = encodeURIComponent(address);
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${apiKey}`;
     const req = https.get(url, (r) => {
       let d = "";
@@ -477,42 +478,98 @@ function geocodeDestination(destination, apiKey) {
   });
 }
 
+function distanceKm(a, b) {
+  const R = 6371;
+  const toRad = (x) => (x * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function placesTextSearch(query, bias, apiKey) {
+  return new Promise((resolve) => {
+    const q = encodeURIComponent(query);
+    const locParam = bias ? `&location=${bias.lat},${bias.lng}&radius=30000` : "";
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}${locParam}&key=${apiKey}`;
+    const req = https.get(url, (r) => {
+      let d = "";
+      r.on("data", c => { d += c; });
+      r.on("end", () => {
+        try {
+          const data = JSON.parse(d);
+          const place = data.results?.[0];
+          if (place?.geometry?.location) {
+            resolve({ coords: { lat: place.geometry.location.lat, lng: place.geometry.location.lng }, name: place.name });
+            return;
+          }
+        } catch {}
+        resolve(null);
+      });
+    });
+    req.on("error", () => resolve(null));
+    req.setTimeout(5000, () => { req.destroy(); resolve(null); });
+  });
+}
+
+const MAX_KM_FROM_CITY = 50;
+
 function enrichWithGooglePlaces(itinerary) {
   return new Promise(async (resolve) => {
     const apiKey = process.env.GOOGLE_MAPS_KEY;
     if (!apiKey) { resolve(itinerary); return; }
 
-    const destCoords = await geocodeDestination(itinerary.destination, apiKey);
-    const locParam = destCoords ? `&location=${destCoords.lat},${destCoords.lng}&radius=50000` : "";
-    const activities = (itinerary.days ?? []).flatMap(d => d.activities ?? []);
+    const days = itinerary.days ?? [];
+    const cityCache = new Map();
+    const ensureCityCoords = async (city) => {
+      if (!city) return null;
+      if (cityCache.has(city)) return cityCache.get(city);
+      const coords = await geocodeAddress(city, apiKey);
+      cityCache.set(city, coords);
+      return coords;
+    };
 
-    const enrichOne = (activity) => new Promise((res) => {
-      try {
-        const q = encodeURIComponent(activity.title);
-        const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${q}${locParam}&key=${apiKey}`;
-        const req = https.get(url, (r) => {
-          let d = "";
-          r.on("data", c => { d += c; });
-          r.on("end", () => {
-            try {
-              const data = JSON.parse(d);
-              if (data.results?.[0]) {
-                const place = data.results[0];
-                if (place.geometry?.location) activity.coordinates = { lat: place.geometry.location.lat, lng: place.geometry.location.lng };
-                if (place.name) activity.title = place.name;
-              }
-            } catch {}
-            res();
-          });
-        });
-        req.on("error", () => res());
-        req.setTimeout(5000, () => { req.destroy(); res(); });
-      } catch { res(); }
-    });
+    const uniqueCities = [...new Set(days.map(d => d.city || itinerary.destination).filter(Boolean))];
+    await Promise.all(uniqueCities.map(ensureCityCoords));
+
+    const enrichOne = async (activity, dayCity) => {
+      const cityCoords = await ensureCityCoords(dayCity);
+      const cityLabel = dayCity || "";
+
+      let result = await placesTextSearch(
+        cityLabel ? `${activity.title}, ${cityLabel}` : activity.title,
+        cityCoords,
+        apiKey
+      );
+
+      if (result && cityCoords && distanceKm(result.coords, cityCoords) > MAX_KM_FROM_CITY) {
+        const retry = await placesTextSearch(activity.title, cityCoords, apiKey);
+        if (retry && distanceKm(retry.coords, cityCoords) <= MAX_KM_FROM_CITY) {
+          result = retry;
+        } else {
+          result = null;
+        }
+      }
+
+      if (result) {
+        activity.coordinates = result.coords;
+        if (result.name) activity.title = result.name;
+      } else if (cityCoords) {
+        activity.coordinates = cityCoords;
+      }
+    };
+
+    const tasks = [];
+    for (const day of days) {
+      const dayCity = day.city || itinerary.destination;
+      for (const activity of (day.activities ?? [])) {
+        tasks.push(enrichOne(activity, dayCity));
+      }
+    }
 
     await Promise.race([
-      Promise.allSettled(activities.map(enrichOne)),
-      new Promise(res => setTimeout(res, 5000)),
+      Promise.allSettled(tasks),
+      new Promise(res => setTimeout(res, 8000)),
     ]);
     resolve(itinerary);
   });
