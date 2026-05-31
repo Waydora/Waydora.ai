@@ -116,6 +116,10 @@ export async function upsertSavedTripFromSession(input: {
       .update({
         itinerary: input.itinerary,
         title,
+        // Il bot condivide automaticamente: il link /trip/<slug> che invia
+        // deve funzionare per i guest (policy SELECT: is_public = true OR owner).
+        // Impostare a true non declassa mai (un trip gia' pubblico resta pubblico).
+        is_public: true,
         updated_at: new Date().toISOString(),
       })
       .eq("id", (existing as any).id);
@@ -126,6 +130,8 @@ export async function upsertSavedTripFromSession(input: {
       share_slug: slug,
       title,
       trip_id: null,
+      // Auto-condivisione: il link inviato su Telegram deve essere visibile ai guest.
+      is_public: true,
       notes: "Creato da Telegram bot",
       created_at: new Date().toISOString(),
     });
@@ -135,4 +141,52 @@ export async function upsertSavedTripFromSession(input: {
 
 export function shareSlugForSession(sessionId: string): string {
   return slugForSession(sessionId);
+}
+
+// A2 — Le idee/media "personali" (senza viaggio attivo) vengono inseriti in
+// trip_messages con uno share_slug che NON ha un saved_trips padre. Le policy
+// RLS di trip_messages richiedono un saved_trips padre con stesso share_slug e
+// is_public=true, altrimenti i messaggi sono invisibili alla webapp (anon key).
+//
+// Questo helper garantisce (in modo idempotente) un saved_trip "contenitore"
+// per lo slug dato, cosi' i trip_messages successivi risolvono il padre.
+// - Idempotente: se il contenitore esiste gia', lo riusa senza duplicare.
+//   Si limita a riportare is_public a true se per qualche motivo era false.
+// - itinerary null: e' un contenitore, non un vero viaggio. La webapp mostra
+//   comunque idee/media/chat legati allo slug.
+export async function ensurePersonalContainer(input: {
+  userId: string;
+  shareSlug: string;
+  title: string;
+}): Promise<void> {
+  const { data: existing } = await supabase
+    .from("saved_trips")
+    .select("id,is_public")
+    .eq("share_slug", input.shareSlug)
+    .maybeSingle();
+
+  if (existing) {
+    // Garantisce visibilita' guest senza toccare titolo/itinerario esistenti.
+    if ((existing as { is_public?: boolean }).is_public !== true) {
+      await supabase
+        .from("saved_trips")
+        .update({ is_public: true, updated_at: new Date().toISOString() })
+        .eq("id", (existing as { id: string }).id);
+    }
+    return;
+  }
+
+  const { error } = await supabase.from("saved_trips").insert({
+    user_id: input.userId,
+    itinerary: null,
+    share_slug: input.shareSlug,
+    title: input.title,
+    trip_id: null,
+    is_public: true,
+    notes: "Contenitore personale Telegram",
+    created_at: new Date().toISOString(),
+  });
+  // Race condition (due insert quasi simultanei sullo stesso slug): un conflitto
+  // sull'unique share_slug e' benigno, il contenitore esiste comunque.
+  if (error && !/duplicate|unique|conflict/i.test(error.message ?? "")) throw error;
 }

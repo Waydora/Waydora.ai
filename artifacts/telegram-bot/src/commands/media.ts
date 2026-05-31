@@ -1,15 +1,34 @@
 import type { Composer } from "grammy";
 import type { BoundContext } from "../bot.js";
-import { loadOrCreateSession, shareSlugForSession } from "../lib/persistence.js";
+import { loadOrCreateSession, shareSlugForSession, ensurePersonalContainer } from "../lib/persistence.js";
 import { uploadTelegramMedia, recordMediaInTrip } from "../lib/media.js";
+import type { Session } from "../lib/persistence.js";
+
+// Risolve lo share_slug dove registrare il media:
+// - con viaggio attivo → usa il suo shareSlug (padre saved_trips gia' is_public,
+//   garantito da upsertSavedTripFromSession);
+// - senza viaggio attivo → slug personale tg-<hash> della sessione. In quel caso
+//   garantiamo (idempotente) un saved_trips padre is_public=true, altrimenti il
+//   media finirebbe orfano e invisibile alla webapp (policy RLS trip_messages).
+async function resolveMediaSlug(userId: string, session: Session): Promise<string> {
+  const active = (session.itinerary as { shareSlug?: string } | null)?.shareSlug;
+  if (active) return active;
+  const slug = shareSlugForSession(session.id);
+  await ensurePersonalContainer({
+    userId,
+    shareSlug: slug,
+    title: "I miei media da Telegram",
+  });
+  return slug;
+}
 
 // Gestisce foto, video, documenti inviati al bot.
 // L'utente deve avere un trip attivo (con shareSlug) altrimenti il media va
-// in un bucket "personale" tg-media-<userId>.
+// in un contenitore "personale" della sessione (tg-<hash>).
 export function registerMedia(bot: Composer<BoundContext>) {
   bot.on(":photo", async (ctx) => {
     const session = await loadOrCreateSession(ctx.binding.user_id, ctx.from!.id);
-    const slug = (session.itinerary as any)?.shareSlug ?? shareSlugForSession(session.id);
+    const slug = await resolveMediaSlug(ctx.binding.user_id, session);
 
     // photo e' un array di taglie; prendiamo la piu' grande
     const photo = ctx.message!.photo!.at(-1)!;
@@ -57,7 +76,7 @@ export function registerMedia(bot: Composer<BoundContext>) {
 
 async function handleFile(ctx: any, fileObj: { file_id: string; file_unique_id: string; mime_type?: string }, kindOrName: string) {
   const session = await loadOrCreateSession(ctx.binding.user_id, ctx.from!.id);
-  const slug = (session.itinerary as any)?.shareSlug ?? shareSlugForSession(session.id);
+  const slug = await resolveMediaSlug(ctx.binding.user_id, session);
 
   const file = await ctx.api.getFile(fileObj.file_id);
   if (!file.file_path) {

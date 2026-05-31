@@ -1,6 +1,6 @@
 import type { Composer } from "grammy";
 import type { BoundContext } from "../bot.js";
-import { loadOrCreateSession } from "../lib/persistence.js";
+import { loadOrCreateSession, ensurePersonalContainer } from "../lib/persistence.js";
 import { addIdea, listIdeas, resolveIdeasSlug } from "../lib/ideas.js";
 
 async function activeSlug(ctx: any): Promise<string> {
@@ -17,6 +17,15 @@ export function registerIdeas(bot: Composer<BoundContext>) {
       return;
     }
     const slug = await activeSlug(ctx);
+    // Se e' lo slug personale (nessun viaggio attivo), garantisci il saved_trips
+    // padre is_public=true cosi' la webapp (anon key) vede le idee. Idempotente.
+    if (slug.startsWith("tg-ideas-")) {
+      await ensurePersonalContainer({
+        userId: ctx.binding.user_id,
+        shareSlug: slug,
+        title: "Le mie idee da Telegram",
+      });
+    }
     await addIdea({ shareSlug: slug, text });
     const tied = slug.startsWith("tg-ideas-") ? "(salvata in idee personali)" : "(salvata nel viaggio attivo)";
     await ctx.reply(`💡 Idea salvata ${tied}. Vedi tutte con /idee.`);
