@@ -10,6 +10,13 @@ import { apiRateLimiter, chatRateLimiter } from "./lib/rate-limit";
 
 const app: Express = express();
 
+// Trust the first proxy hop. Railway (and most PaaS) sits behind a reverse
+// proxy that sets X-Forwarded-For. Without this, express-rate-limit throws
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR and can't read the real client IP.
+// Use 1 (single hop) rather than `true` to avoid the permissive-trust-proxy
+// warning and IP spoofing of the rate limiter.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
