@@ -10,7 +10,7 @@ import { z } from "zod";
  *   - the rest of the codebase gets full type inference instead of `string |
  *     undefined`.
  */
-const envSchema = z.object({
+export const envSchema = z.object({
   // --- Core ---------------------------------------------------------------
   ANTHROPIC_API_KEY: z
     .string()
