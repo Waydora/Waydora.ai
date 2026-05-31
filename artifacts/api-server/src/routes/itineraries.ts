@@ -8,6 +8,7 @@ import {
   DeleteItineraryParams,
   GetSharedItineraryParams,
 } from "@workspace/api-zod";
+import { asyncHandler } from "../lib/async-handler";
 
 const router: IRouter = Router();
 
@@ -24,98 +25,113 @@ function rowToResponse(row: typeof itinerariesTable.$inferSelect) {
   };
 }
 
-router.get("/itineraries", async (_req, res) => {
-  const rows = await db
-    .select()
-    .from(itinerariesTable)
-    .orderBy(itinerariesTable.createdAt);
-  res.json(rows.map(rowToResponse).reverse());
-});
+router.get(
+  "/itineraries",
+  asyncHandler(async (_req, res) => {
+    const rows = await db
+      .select()
+      .from(itinerariesTable)
+      .orderBy(itinerariesTable.createdAt);
+    res.json(rows.map(rowToResponse).reverse());
+  }),
+);
 
-router.post("/itineraries", async (req, res) => {
-  const parsed = SaveItineraryBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid request body" });
-    return;
-  }
+router.post(
+  "/itineraries",
+  asyncHandler(async (req, res) => {
+    const parsed = SaveItineraryBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid request body" });
+      return;
+    }
 
-  const slug = makeShareSlug();
-  const [row] = await db
-    .insert(itinerariesTable)
-    .values({
-      shareSlug: slug,
-      data: parsed.data.itinerary,
-    })
-    .returning();
+    const slug = makeShareSlug();
+    const [row] = await db
+      .insert(itinerariesTable)
+      .values({
+        shareSlug: slug,
+        data: parsed.data.itinerary,
+      })
+      .returning();
 
-  if (!row) {
-    res.status(500).json({ error: "Failed to save itinerary" });
-    return;
-  }
+    if (!row) {
+      res.status(500).json({ error: "Failed to save itinerary" });
+      return;
+    }
 
-  res.status(201).json(rowToResponse(row));
-});
+    res.status(201).json(rowToResponse(row));
+  }),
+);
 
-router.get("/itineraries/share/:slug", async (req, res) => {
-  const parsed = GetSharedItineraryParams.safeParse(req.params);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid slug" });
-    return;
-  }
+router.get(
+  "/itineraries/share/:slug",
+  asyncHandler(async (req, res) => {
+    const parsed = GetSharedItineraryParams.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid slug" });
+      return;
+    }
 
-  const [row] = await db
-    .select()
-    .from(itinerariesTable)
-    .where(eq(itinerariesTable.shareSlug, parsed.data.slug))
-    .limit(1);
+    const [row] = await db
+      .select()
+      .from(itinerariesTable)
+      .where(eq(itinerariesTable.shareSlug, parsed.data.slug))
+      .limit(1);
 
-  if (!row) {
-    res.status(404).json({ error: "Itinerary not found" });
-    return;
-  }
+    if (!row) {
+      res.status(404).json({ error: "Itinerary not found" });
+      return;
+    }
 
-  res.json(rowToResponse(row));
-});
+    res.json(rowToResponse(row));
+  }),
+);
 
-router.get("/itineraries/:id", async (req, res) => {
-  const parsed = GetItineraryParams.safeParse(req.params);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+router.get(
+  "/itineraries/:id",
+  asyncHandler(async (req, res) => {
+    const parsed = GetItineraryParams.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
 
-  const [row] = await db
-    .select()
-    .from(itinerariesTable)
-    .where(eq(itinerariesTable.id, parsed.data.id))
-    .limit(1);
+    const [row] = await db
+      .select()
+      .from(itinerariesTable)
+      .where(eq(itinerariesTable.id, parsed.data.id))
+      .limit(1);
 
-  if (!row) {
-    res.status(404).json({ error: "Itinerary not found" });
-    return;
-  }
+    if (!row) {
+      res.status(404).json({ error: "Itinerary not found" });
+      return;
+    }
 
-  res.json(rowToResponse(row));
-});
+    res.json(rowToResponse(row));
+  }),
+);
 
-router.delete("/itineraries/:id", async (req, res) => {
-  const parsed = DeleteItineraryParams.safeParse(req.params);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+router.delete(
+  "/itineraries/:id",
+  asyncHandler(async (req, res) => {
+    const parsed = DeleteItineraryParams.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
 
-  const result = await db
-    .delete(itinerariesTable)
-    .where(eq(itinerariesTable.id, parsed.data.id))
-    .returning({ id: itinerariesTable.id });
+    const result = await db
+      .delete(itinerariesTable)
+      .where(eq(itinerariesTable.id, parsed.data.id))
+      .returning({ id: itinerariesTable.id });
 
-  if (result.length === 0) {
-    res.status(404).json({ error: "Itinerary not found" });
-    return;
-  }
+    if (result.length === 0) {
+      res.status(404).json({ error: "Itinerary not found" });
+      return;
+    }
 
-  res.status(204).end();
-});
+    res.status(204).end();
+  }),
+);
 
 export default router;

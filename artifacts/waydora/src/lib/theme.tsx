@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 
 type Theme = "dark";
 
@@ -11,7 +11,7 @@ interface ThemeContextValue {
 // ma toggle è no-op e theme è sempre "dark".
 const ThemeContext = createContext<ThemeContextValue>({ theme: "dark", toggle: () => {} });
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.classList.add("dark");
     try { localStorage.setItem("waydora-theme", "dark"); } catch {}

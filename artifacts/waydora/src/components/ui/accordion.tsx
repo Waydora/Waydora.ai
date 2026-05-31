@@ -1,8 +1,13 @@
 import * as React from "react"
 import * as AccordionPrimitive from "@radix-ui/react-accordion"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown as ChevronDownRaw } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+
+// I tipi di lucide-react risolvono ReactNode contro un @types/react diverso
+// (19, dal catalog mobile) da quello della webapp (18), generando TS2786.
+// Ri-tipizziamo l'icona come componente SVG valido per il React locale.
+const ChevronDown = ChevronDownRaw as React.FC<React.SVGProps<SVGSVGElement>>
 
 const Accordion = AccordionPrimitive.Root
 

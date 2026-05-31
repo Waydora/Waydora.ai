@@ -1,9 +1,14 @@
 import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
-import { X } from "lucide-react"
+import { X as XRaw } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+
+// I tipi di lucide-react risolvono ReactNode contro un @types/react diverso
+// (19, dal catalog mobile) da quello della webapp (18), generando TS2786.
+// Ri-tipizziamo l'icona come componente SVG valido per il React locale.
+const X = XRaw as React.FC<React.SVGProps<SVGSVGElement>>
 
 const ToastProvider = ToastPrimitives.Provider
 

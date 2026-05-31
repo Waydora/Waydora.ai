@@ -10,14 +10,36 @@ import type { SavedTripRow } from "@/hooks/trips";
 import type { ItineraryData } from "@/hooks/api";
 
 // ── ShareModal ────────────────────────────────────────────────────────────
-function ShareModal({ trip, onClose }: { trip: SavedTripRow; onClose: () => void }) {
+function ShareModal({ trip, onSetPublic, onClose }: {
+  trip: SavedTripRow;
+  onSetPublic: (id: string, isPublic: boolean) => Promise<boolean>;
+  onClose: () => void;
+}) {
   const [copied, setCopied] = useState(false);
+  const [isPublic, setIsPublic] = useState(trip.is_public);
+  const [toggling, setToggling] = useState(false);
   const shareUrl = `${window.location.origin}/trip/${trip.share_slug}`;
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Attiva la condivisione (is_public = true) e poi copia il link.
+  const enableAndCopy = async () => {
+    setToggling(true);
+    const ok = await onSetPublic(trip.id, true);
+    setToggling(false);
+    if (ok) { setIsPublic(true); await copyLink(); }
+  };
+
+  // Riporta il viaggio a privato (link non più accessibile ai guest).
+  const makePrivate = async () => {
+    setToggling(true);
+    const ok = await onSetPublic(trip.id, false);
+    setToggling(false);
+    if (ok) setIsPublic(false);
   };
 
   return (
@@ -40,20 +62,53 @@ function ShareModal({ trip, onClose }: { trip: SavedTripRow; onClose: () => void
             <h3 style={{ fontSize: "16px", fontWeight: 800, color: "#fff" }}>Condividi il viaggio</h3>
           </div>
 
-          <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", marginBottom: "16px" }}>
-            Chiunque abbia questo link può vedere l'itinerario. Presto potranno anche aggiungere idee e media.
-          </p>
-
-          {/* URL box */}
-          <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
-            <div style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", color: "rgba(255,255,255,0.6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {shareUrl}
+          {/* Stato condivisione */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px", borderRadius: "12px", marginBottom: "16px", background: isPublic ? "rgba(52,211,153,0.1)" : "rgba(255,255,255,0.05)", border: isPublic ? "1px solid rgba(52,211,153,0.25)" : "1px solid rgba(255,255,255,0.08)" }}>
+            {isPublic
+              ? <Globe style={{ width: "16px", height: "16px", color: "#34d399", flexShrink: 0 }} />
+              : <Lock style={{ width: "16px", height: "16px", color: "rgba(255,255,255,0.45)", flexShrink: 0 }} />}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: isPublic ? "#34d399" : "rgba(255,255,255,0.7)" }}>
+                {isPublic ? "Pubblico — il link è attivo" : "Privato — solo tu puoi vederlo"}
+              </div>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.45)", marginTop: "2px" }}>
+                {isPublic
+                  ? "Chiunque abbia il link può vedere l'itinerario e collaborare."
+                  : "Attiva la condivisione per generare un link accessibile a chi vuoi."}
+              </div>
             </div>
-            <button onClick={copyLink}
-              style={{ width: "40px", height: "40px", borderRadius: "10px", background: copied ? "rgba(52,211,153,0.2)" : "rgba(167,139,250,0.15)", border: copied ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(167,139,250,0.3)", color: copied ? "#34d399" : "#a78bfa", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-              {copied ? <Check style={{ width: "15px", height: "15px" }} /> : <Copy style={{ width: "15px", height: "15px" }} />}
-            </button>
           </div>
+
+          {!isPublic ? (
+            /* CTA: attiva condivisione */
+            <button onClick={enableAndCopy} disabled={toggling}
+              style={{ width: "100%", padding: "11px", borderRadius: "12px", marginBottom: "20px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", fontSize: "14px", fontWeight: 700, cursor: toggling ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: toggling ? 0.7 : 1 }}>
+              {toggling ? <Loader2 style={{ width: "15px", height: "15px", animation: "wd-spin 0.8s linear infinite" }} /> : <Share2 style={{ width: "15px", height: "15px" }} />}
+              {toggling ? "Attivazione..." : "Attiva condivisione e copia link"}
+              <style>{`@keyframes wd-spin{to{transform:rotate(360deg)}}`}</style>
+            </button>
+          ) : (
+            <>
+              {/* URL box */}
+              <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+                <div style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", color: "rgba(255,255,255,0.6)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {shareUrl}
+                </div>
+                <button onClick={copyLink}
+                  style={{ width: "40px", height: "40px", borderRadius: "10px", background: copied ? "rgba(52,211,153,0.2)" : "rgba(167,139,250,0.15)", border: copied ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(167,139,250,0.3)", color: copied ? "#34d399" : "#a78bfa", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                  {copied ? <Check style={{ width: "15px", height: "15px" }} /> : <Copy style={{ width: "15px", height: "15px" }} />}
+                </button>
+              </div>
+
+              {/* Rendi di nuovo privato */}
+              <button onClick={makePrivate} disabled={toggling}
+                style={{ width: "100%", padding: "9px", borderRadius: "10px", marginBottom: "20px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.6)", fontSize: "13px", fontWeight: 600, cursor: toggling ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", opacity: toggling ? 0.7 : 1 }}>
+                {toggling ? <Loader2 style={{ width: "14px", height: "14px", animation: "wd-spin 0.8s linear infinite" }} /> : <Lock style={{ width: "14px", height: "14px" }} />}
+                Rendi privato
+                <style>{`@keyframes wd-spin{to{transform:rotate(360deg)}}`}</style>
+              </button>
+            </>
+          )}
 
           {/* Info collaborazione */}
           <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "14px" }}>
@@ -146,11 +201,13 @@ function SavedTripCard({ trip, onRemove, onShare, onOpen }: {
           )}
         </div>
 
-        {/* Link condivisione */}
+        {/* Stato condivisione */}
         <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 10px", borderRadius: "8px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", marginBottom: "12px" }}>
-          <Globe style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+          {trip.is_public
+            ? <Globe style={{ width: "12px", height: "12px", color: "rgba(52,211,153,0.7)", flexShrink: 0 }} />
+            : <Lock style={{ width: "12px", height: "12px", color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />}
           <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            waydora.com/trip/{trip.share_slug}
+            {trip.is_public ? `waydora.com/trip/${trip.share_slug}` : "Privato — non condiviso"}
           </span>
         </div>
 
@@ -172,11 +229,12 @@ interface SavedTripsPageProps {
   saved: SavedTripRow[];
   loading: boolean;
   onRemove: (id: string) => void;
+  onSetPublic: (id: string, isPublic: boolean) => Promise<boolean>;
   onLogin: () => void;
   isLoggedIn: boolean;
 }
 
-export function SavedTripsPage({ saved, loading, onRemove, onLogin, isLoggedIn }: SavedTripsPageProps) {
+export function SavedTripsPage({ saved, loading, onRemove, onSetPublic, onLogin, isLoggedIn }: SavedTripsPageProps) {
   const [shareTrip, setShareTrip] = useState<SavedTripRow | null>(null);
 
   const openTrip = (trip: SavedTripRow) => {
@@ -252,7 +310,7 @@ export function SavedTripsPage({ saved, loading, onRemove, onLogin, isLoggedIn }
       </div>
 
       {/* Modal condivisione */}
-      {shareTrip && <ShareModal trip={shareTrip} onClose={() => setShareTrip(null)} />}
+      {shareTrip && <ShareModal trip={shareTrip} onSetPublic={onSetPublic} onClose={() => setShareTrip(null)} />}
     </div>
   );
 }

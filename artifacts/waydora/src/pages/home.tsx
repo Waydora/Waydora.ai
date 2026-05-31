@@ -650,7 +650,7 @@ export default function Home() {
 
   const { sessions: dbSessions, upsert: upsertSession, remove: removeDbSession } = useChatSessions(user?.id);
   const { trips: userTrips, upsert: upsertTrip, publish: publishTrip, remove: removeTrip } = useUserTrips(user?.id);
-  const { saved: savedTrips, saveItinerary, toggleFeaturedTrip, remove: removeSaved, isFeaturedLiked } = useSavedTrips(user?.id);
+  const { saved: savedTrips, saveItinerary, toggleFeaturedTrip, remove: removeSaved, setPublic: setTripPublic, isFeaturedLiked } = useSavedTrips(user?.id);
 
   const [localSessionsList, setLocalSessionsList] = useState<any[]>(() => localSessions.load());
   const sidebarSessions = user ? dbSessions : localSessionsList;
@@ -904,7 +904,7 @@ export default function Home() {
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} />
         {activeView === "inspire" && <div className="flex-1 min-h-0 overflow-hidden"><InspirePage onSelectTrip={p => handleSubmit(p)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} /></div>}
         {activeView === "create"  && <div className="flex-1 min-h-0 overflow-hidden"><CreateTripPage userId={user?.id} trips={userTrips} onSaveDraft={async d => await upsertTrip(d)} onPublish={async id => await publishTrip(id)} onDelete={removeTrip} /></div>}
-        {activeView === "saved"   && <div className="flex-1 min-h-0 overflow-hidden"><SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} /></div>}
+        {activeView === "saved"   && <div className="flex-1 min-h-0 overflow-hidden"><SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onSetPublic={setTripPublic} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} /></div>}
         {activeView === "chat" && (
           <>
             <section className="flex flex-col min-h-0 shrink-0" style={{ width: "38vw", borderRight: "1px solid rgba(255,255,255,0.07)" }}>{chatSection}</section>
@@ -1036,7 +1036,7 @@ export default function Home() {
           <div className="flex-1 min-h-0 flex flex-col">
             <MobilePageHeader title="Viaggi salvati" onBack={() => setMobileScreen("chat")} />
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-              <SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} />
+              <SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onSetPublic={setTripPublic} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} />
             </div>
           </div>
         )}

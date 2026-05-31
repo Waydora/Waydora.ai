@@ -41,6 +41,7 @@ export type SavedTripRow = {
   share_slug: string;
   title: string;
   notes: string;
+  is_public: boolean;
   created_at: string;
   // campo locale per i preferiti dai viaggi curati
   featured_trip_id?: string;
@@ -298,6 +299,19 @@ export function useSavedTrips(userId: string | undefined) {
     setSaved(prev => prev.filter(s => s.id !== id));
   }, []);
 
+  // ── Rende un viaggio pubblico (condiviso) o privato ───────────────────
+  // is_public = true => il link /trip/<slug> diventa accessibile a chiunque.
+  // is_public = false => il link torna privato (solo owner loggato).
+  const setPublic = useCallback(async (id: string, isPublic: boolean): Promise<boolean> => {
+    const { error } = await supabase
+      .from("saved_trips")
+      .update({ is_public: isPublic })
+      .eq("id", id);
+    if (error) return false;
+    setSaved(prev => prev.map(s => s.id === id ? { ...s, is_public: isPublic } : s));
+    return true;
+  }, []);
+
   const getBySlug = useCallback(async (slug: string): Promise<SavedTripRow | null> => {
     const { data, error } = await supabase
       .from("saved_trips")
@@ -316,7 +330,7 @@ export function useSavedTrips(userId: string | undefined) {
 
   return {
     saved, loading, saveItinerary, toggleFeaturedTrip,
-    remove, getBySlug, isFeaturedLiked, reload: load,
+    remove, setPublic, getBySlug, isFeaturedLiked, reload: load,
   };
 }
 

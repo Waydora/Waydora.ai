@@ -1,5 +1,22 @@
 import { useEffect, useMemo, useRef } from "react";
-type ItineraryData = any;
+
+// Tipo strutturale minimo: TripMap legge solo i giorni e le loro attività con
+// coordinate. Volutamente più permissivo di ItineraryData (hooks/api.ts) per
+// accettare sia l'itinerario salvato sia l'anteprima del create-trip editor,
+// che porta campi extra (es. tripPhotos) e attività senza coordinate.
+type MapActivity = {
+  title: string;
+  time: string;
+  category: string;
+  coordinates?: { lat: number; lng: number } | null;
+};
+type MapDay = {
+  day: number;
+  activities: MapActivity[];
+};
+type ItineraryData = {
+  days: MapDay[];
+};
 
 const DAY_COLORS = [
   "#FF8C42", "#3B82F6", "#10B981", "#F59E0B",
@@ -32,7 +49,7 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
     const out: MarkerData[] = [];
     const byDay: Record<number, google.maps.LatLngLiteral[]> = {};
 
-    itinerary.days.forEach((day: any, dayIndex: number) => {
+    itinerary.days.forEach((day: MapDay, dayIndex: number) => {
       let actIdx = 0;
       const dayPoints: google.maps.LatLngLiteral[] = [];
       for (const a of day.activities) {
@@ -204,7 +221,7 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
         <div className="absolute bottom-4 left-4 z-10 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl p-2.5 shadow-lg max-w-[160px]">
           <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-2">Legenda</div>
           <div className="space-y-1">
-            {itinerary.days.slice(0, 7).map((day: any, i: number) => (
+            {itinerary.days.slice(0, 7).map((day: MapDay, i: number) => (
               <div key={day.day} className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: getDayColor(i) }} />
                 <span className="text-[11px] font-medium text-gray-700 truncate">Giorno {day.day}</span>

@@ -2,9 +2,21 @@
 
 import * as React from "react"
 import * as SelectPrimitive from "@radix-ui/react-select"
-import { Check, ChevronDown, ChevronUp } from "lucide-react"
+import {
+  Check as CheckRaw,
+  ChevronDown as ChevronDownRaw,
+  ChevronUp as ChevronUpRaw,
+} from "lucide-react"
 
 import { cn } from "@/lib/utils"
+
+// I tipi di lucide-react risolvono ReactNode contro un @types/react diverso
+// (19, dal catalog mobile) da quello della webapp (18), generando TS2786.
+// Ri-tipizziamo le icone come componenti SVG validi per il React locale.
+type IconProps = React.SVGProps<SVGSVGElement>
+const Check = CheckRaw as React.FC<IconProps>
+const ChevronDown = ChevronDownRaw as React.FC<IconProps>
+const ChevronUp = ChevronUpRaw as React.FC<IconProps>
 
 const Select = SelectPrimitive.Root
 

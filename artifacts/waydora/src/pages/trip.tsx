@@ -640,9 +640,8 @@ export default function Trip() {
       .then(({ data, error: err }) => {
         if (err || !data?.itinerary) setError(true);
         else setItinerary(data.itinerary);
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
+        setLoading(false);
+      });
   }, [slug]);
 
   // Conteggio messaggi — canale univoco
