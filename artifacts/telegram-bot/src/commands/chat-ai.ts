@@ -5,6 +5,14 @@ import { callAI, type ChatMessage } from "../lib/chat-bridge.js";
 import { loadOrCreateSession, saveSession, trimHistory, upsertSavedTripFromSession } from "../lib/persistence.js";
 import { summarizeItinerary, formatDay } from "../lib/format.js";
 import { getDone } from "../lib/done-set.js";
+import { track } from "../lib/analytics.js";
+
+// Deriva il solo PAESE da una destinazione "Città, Paese" (no PII/dati superflui).
+function destinationCountry(dest?: unknown): string | undefined {
+  if (typeof dest !== "string" || !dest) return undefined;
+  const parts = dest.split(",").map((p) => p.trim()).filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : undefined;
+}
 
 export function registerChatAI(bot: Composer<BoundContext>) {
   // Catch-all per testo libero (ULTIMO da registrare nel bot principale).
@@ -14,6 +22,7 @@ export function registerChatAI(bot: Composer<BoundContext>) {
 
     const tgId = ctx.from!.id;
     const userId = ctx.binding.user_id;
+    const startedAt = Date.now(); // per ttv_ms di first_itinerary_generated
 
     // Typing persistente: Telegram dimentica dopo ~5s, ripetiamo finche' arriva la risposta
     await ctx.replyWithChatAction("typing");
@@ -57,6 +66,14 @@ export function registerChatAI(bot: Composer<BoundContext>) {
 
     const session = await loadOrCreateSession(userId, tgId);
 
+    // chat_started: primo turno di questa sessione di chat (turns vuoti).
+    const isFirstTurn = session.turns.length === 0;
+    // L'itinerario non esisteva ancora prima di questa richiesta → AHA candidato.
+    const hadItineraryBefore = Boolean(session.itinerary);
+    if (isFirstTurn) {
+      track(userId, "chat_started", { entry: "bot_freetext", is_authenticated: true });
+    }
+
     const userMsg: ChatMessage = { role: "user", content: text };
     const history = trimHistory([...session.api_messages, userMsg], 16);
 
@@ -94,6 +111,22 @@ export function registerChatAI(bot: Composer<BoundContext>) {
 
     if (resp.itinerary) {
       const it = resp.itinerary;
+
+      // first_itinerary_generated (AHA lato bot): solo la PRIMA volta in questa
+      // sessione (spec §3). duration_days + destination_country (solo paese) + ttv.
+      if (!hadItineraryBefore) {
+        const days = Array.isArray((it as { days?: unknown[] }).days)
+          ? (it as { days: unknown[] }).days.length
+          : 0;
+        track(userId, "first_itinerary_generated", {
+          is_authenticated: true,
+          duration_days: days,
+          destination_country: destinationCountry((it as { destination?: unknown }).destination),
+          ttv_ms: Date.now() - startedAt,
+          used_railway: true, // il bot passa sempre dall'api-server (Railway)
+        });
+      }
+
       // Auto-salva su saved_trips → appare in "Viaggi salvati" del sito.
       // Stabile per sessione: stesso slug se la chat continua, nuovo dopo /nuovo.
       try {

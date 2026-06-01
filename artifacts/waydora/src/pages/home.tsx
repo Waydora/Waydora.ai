@@ -14,6 +14,7 @@ import { CreateTripPage } from "@/components/create-trip-page";
 import { SavedTripsPage } from "@/components/saved-trips-page";
 import { useChatSessions, useUserTrips, useSavedTrips, useLocalSessions } from "@/hooks/trips";
 import { shouldUseRailway } from "@/lib/affiliates";
+import { track, destinationCountry, isGroupHint, hashSlug } from "@/lib/analytics";
 import {
   Send, Loader2, Save, PlusCircle, Map, ChevronLeft, ChevronRight,
   Compass, BookMarked, Calendar, DollarSign, Cloud, Camera,
@@ -647,6 +648,11 @@ export default function Home() {
   const swipeStartX = useRef<number>(-1);
   const swipeStartY = useRef<number>(0);
   const localSessions = useLocalSessions();
+  // Analytics: traccia il primo turno della sessione (chat_started) e il TTV
+  // (time-to-value) verso first_itinerary_generated. Reset su nuova chat.
+  const sessionStartedRef = useRef(false);
+  const sessionFirstSeenRef = useRef<number>(0);
+  const firstItineraryDoneRef = useRef(false);
 
   const { sessions: dbSessions, upsert: upsertSession, remove: removeDbSession } = useChatSessions(user?.id);
   const { trips: userTrips, upsert: upsertTrip, publish: publishTrip, remove: removeTrip } = useUserTrips(user?.id);
@@ -657,6 +663,21 @@ export default function Home() {
   const chatMutation = useChat();
 
   useEffect(() => { document.title = "Waydora — Travel simple, everywhere!"; }, []);
+
+  // Analytics: landing_viewed quando si vede la landing (spec §3 · Acquisition).
+  useEffect(() => {
+    if (!showLanding) return;
+    const params = new URLSearchParams(window.location.search);
+    track("landing_viewed", {
+      source: params.get("utm_source") ?? document.referrer ? "referral" : "direct",
+      utm_source: params.get("utm_source") ?? undefined,
+      utm_medium: params.get("utm_medium") ?? undefined,
+      utm_campaign: params.get("utm_campaign") ?? undefined,
+      referrer: document.referrer || undefined,
+    });
+    // Avvia il cronometro TTV alla prima vista della landing.
+    if (!sessionFirstSeenRef.current) sessionFirstSeenRef.current = Date.now();
+  }, [showLanding]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -705,12 +726,30 @@ export default function Home() {
     sessionStorage.setItem("waydora_in_app", "1");
   }, []);
 
-  const handleSubmit = useCallback((overridePrompt?: string) => {
+  const handleSubmit = useCallback((overridePrompt?: string, fromSuggestion = false) => {
     const promptText = (overridePrompt ?? input).trim();
     if ((!promptText && !mediaContent) || chatMutation.isPending) return;
     if (!overridePrompt) setInput("");
     enterApp(); setActiveView("chat"); setMobileScreen("chat");
     setMapReady(false); setMapNotifShown(false);
+
+    // Analytics: chat_started al primo turno della sessione; prompt_submitted_anon
+    // se l'utente NON è loggato (spec §3 · Acquisition→Activation, zero-login).
+    if (!sessionFirstSeenRef.current) sessionFirstSeenRef.current = Date.now();
+    if (!sessionStartedRef.current) {
+      sessionStartedRef.current = true;
+      track("chat_started", {
+        is_authenticated: !!user,
+        entry: fromSuggestion ? "suggestion" : "hero",
+      });
+    }
+    if (!user) {
+      track("prompt_submitted_anon", {
+        from_suggestion: fromSuggestion,
+        prompt_len: promptText.length,
+        is_group_hint: isGroupHint(promptText),
+      });
+    }
 
     const turnId = Date.now(); const mediaPreview = mediaContent?.preview;
     setTurns(prev => [...prev, { id: turnId, userMessage: promptText || "📎 Media allegato", assistantReply: "", mediaPreview }]);
@@ -733,6 +772,18 @@ export default function Home() {
           const updatedTurns = [...turns.filter(t => t.id !== turnId), { id: turnId, userMessage: promptText || "📎 Media allegato", assistantReply: data.reply, itinerary: data.itinerary ?? undefined, mediaPreview }];
           setTurns(updatedTurns);
           if (data.itinerary) {
+            // Analytics: first_itinerary_generated (AHA moment, spec §3) — solo
+            // la prima volta in questa sessione; porta il TTV (time-to-value).
+            if (!firstItineraryDoneRef.current) {
+              firstItineraryDoneRef.current = true;
+              track("first_itinerary_generated", {
+                is_authenticated: !!user,
+                destination_country: destinationCountry(data.itinerary.destination),
+                duration_days: data.itinerary.durationDays,
+                used_railway: shouldUseRailway(promptText, !!currentItinerary),
+                ttv_ms: sessionFirstSeenRef.current ? Date.now() - sessionFirstSeenRef.current : 0,
+              });
+            }
             const sid = await persistSession(updatedTurns, data.itinerary, [...newMsgs, { role: "assistant" as const, content: data.reply }], currentSessionId);
             if (sid) setCurrentSessionId(sid);
           }
@@ -745,14 +796,21 @@ export default function Home() {
         },
       }
     );
-  }, [input, mediaContent, apiMessages, currentItinerary, turns, currentSessionId, chatMutation, toast, persistSession, enterApp]);
+  }, [input, mediaContent, apiMessages, currentItinerary, turns, currentSessionId, chatMutation, toast, persistSession, enterApp, user]);
 
   const handleSave = async () => {
     if (!currentItinerary) return;
     if (!user) { setAuthOpen(true); return; }
     const result = await saveItinerary(currentItinerary);
-    if (result) toast({ title: "Itinerario salvato! 🎉", description: "Vai in 'Viaggi salvati' per condividerlo." });
-    else toast({ title: "Errore salvataggio", variant: "destructive" });
+    if (result) {
+      // Analytics: trip_saved (spec §3 · Activation→Referral). share_slug hashed.
+      track("trip_saved", {
+        trip_id: result.id,
+        share_slug_hash: hashSlug(result.share_slug),
+        auto_saved: false,
+      });
+      toast({ title: "Itinerario salvato! 🎉", description: "Vai in 'Viaggi salvati' per condividerlo." });
+    } else toast({ title: "Errore salvataggio", variant: "destructive" });
   };
 
   const handleNewTrip = useCallback(async () => {
@@ -761,6 +819,10 @@ export default function Home() {
     setInput(""); setMediaContent(null); setCurrentSessionId(undefined);
     setActiveView("chat"); setMobileScreen("chat");
     setMapReady(false); setMapNotifShown(false);
+    // Reset stato analytics di sessione: nuova chat = nuovo funnel.
+    sessionStartedRef.current = false;
+    firstItineraryDoneRef.current = false;
+    sessionFirstSeenRef.current = Date.now();
   }, [turns, currentItinerary, apiMessages, currentSessionId, persistSession]);
 
   const handleDeleteSession = useCallback(async (id: string | number) => {
@@ -779,6 +841,9 @@ export default function Home() {
     setTurns(s.turns ?? []); setApiMessages(s.apiMessages ?? s.api_messages ?? []);
     setCurrentItinerary(s.itinerary); setCurrentSessionId(s.id?.toString());
     enterApp(); setActiveView("chat"); setMobileScreen("chat");
+    // Sessione già avviata in passato: non rilanciare chat_started / AHA.
+    sessionStartedRef.current = true;
+    firstItineraryDoneRef.current = !!s.itinerary;
   };
 
   const handleChangeView = (view: ActiveView) => {
@@ -803,7 +868,7 @@ export default function Home() {
         <div className="flex-1 overflow-y-auto" style={{ background: "var(--wd-bg)", position: "relative" }}>
           <StickyLandingHeader right={<LandingNavActions onLoginClick={() => setAuthOpen(true)} onEnterChat={() => { enterApp(); setActiveView("chat"); }} />} />
           <HeroLanding onSubmit={handleSubmit} isPending={chatMutation.isPending} />
-          <SuggestedTrips onSelect={p => handleSubmit(p)} />
+          <SuggestedTrips onSelect={p => handleSubmit(p, true)} />
           <AnimatedRoadmap />
           <WorldGallery />
           <AppShowcase />
@@ -876,10 +941,10 @@ export default function Home() {
       </div>
       <div className="lg:hidden">{mobileHeader}</div>
       <div ref={chatScrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "20px" }}>
-        {turns.length === 0 ? <WelcomeMessage userName={user?.name} onPrompt={p => handleSubmit(p)} /> : turns.map(turn => <ChatTurnView key={turn.id} turn={turn} />)}
+        {turns.length === 0 ? <WelcomeMessage userName={user?.name} onPrompt={p => handleSubmit(p, true)} /> : turns.map(turn => <ChatTurnView key={turn.id} turn={turn} />)}
       </div>
       <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
-        <QuickSuggestions onSelect={p => handleSubmit(p)} visible={hasItinerary && !chatMutation.isPending} />
+        <QuickSuggestions onSelect={p => handleSubmit(p, true)} visible={hasItinerary && !chatMutation.isPending} />
         <div style={{ marginTop: hasItinerary ? "8px" : "0" }}>
           <AdvancedChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()} isPending={chatMutation.isPending}
             onMediaAttach={setMediaContent} mediaContent={mediaContent} onMediaRemove={() => setMediaContent(null)}
@@ -902,7 +967,7 @@ export default function Home() {
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewTrip={handleNewTrip}
           sessions={sidebarSessions} onLoadSession={handleLoadSession} onDeleteSession={handleDeleteSession}
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} />
-        {activeView === "inspire" && <div className="flex-1 min-h-0 overflow-hidden"><InspirePage onSelectTrip={p => handleSubmit(p)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} /></div>}
+        {activeView === "inspire" && <div className="flex-1 min-h-0 overflow-hidden"><InspirePage onSelectTrip={p => handleSubmit(p, true)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} /></div>}
         {activeView === "create"  && <div className="flex-1 min-h-0 overflow-hidden"><CreateTripPage userId={user?.id} trips={userTrips} onSaveDraft={async d => await upsertTrip(d)} onPublish={async id => await publishTrip(id)} onDelete={removeTrip} /></div>}
         {activeView === "saved"   && <div className="flex-1 min-h-0 overflow-hidden"><SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onSetPublic={setTripPublic} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} /></div>}
         {activeView === "chat" && (
@@ -1016,7 +1081,7 @@ export default function Home() {
           <div className="flex-1 min-h-0 flex flex-col">
             <MobilePageHeader title="Lasciati ispirare" onBack={() => setMobileScreen("chat")} />
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-              <InspirePage onSelectTrip={p => handleSubmit(p)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} />
+              <InspirePage onSelectTrip={p => handleSubmit(p, true)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} />
             </div>
           </div>
         )}

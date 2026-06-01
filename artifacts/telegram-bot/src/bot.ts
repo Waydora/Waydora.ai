@@ -10,6 +10,7 @@ import {
 } from "./lib/bindings.js";
 import { assertCanUseBot } from "./lib/auth-gate.js";
 import { checkRate } from "./lib/rate-limit.js";
+import { track, identifyBinding, hashTgId } from "./lib/analytics.js";
 import { registerTripCommands } from "./commands/trips.js";
 import { registerChatAI } from "./commands/chat-ai.js";
 import { registerWeather } from "./commands/weather.js";
@@ -43,6 +44,10 @@ async function tryBind(ctx: any, token: string): Promise<void> {
       language_code: ctx.from?.language_code ?? null,
       tier,
     });
+    // Identity (spec §4): collega gli eventi anonimi pre-bind (hashTgId) alla
+    // persona reale (user_id Supabase) e traccia il bind completato.
+    identifyBinding(tgId, userId);
+    track(userId, "telegram_bind_completed", { tier });
     await ctx.reply(
       `✅ Collegato a Waydora (piano: ${tier}).\n\n` +
         `Scrivimi dove vuoi andare e ti aiuto a costruire l'itinerario.\n` +
@@ -64,13 +69,22 @@ bot.command("start", async (ctx) => {
   const tgId = ctx.from?.id;
   if (!tgId) return;
   const token = ctx.match?.trim();
+  const hasToken = Boolean(token);
 
   if (token) {
+    // bot_started con distinct_id anonimo: il bind (e l'alias che ricuce gli
+    // eventi sulla persona reale) avviene dentro tryBind.
+    track(hashTgId(tgId), "bot_started", { has_token: true, source: "start_token" });
     await tryBind(ctx, token);
     return;
   }
 
   const existing = await getBindingByTelegramId(tgId);
+  // Identity: se gia' bindato usa user_id, altrimenti anonimo namespaced (spec §4).
+  track(existing ? existing.user_id : hashTgId(tgId), "bot_started", {
+    has_token: false,
+    source: existing ? "returning" : "new",
+  });
   if (existing) {
     await ctx.reply("Bentornato 👋\nScrivimi dove vuoi andare oppure usa /help.");
   } else {
@@ -127,6 +141,14 @@ bot.use(async (ctx, next) => {
 
   (ctx as BoundContext).binding = binding;
   touchLastSeen(tgId).catch(() => {});
+
+  // bot_command_used: solo il NOME del comando (es. "meteo"), mai il testo
+  // libero dei messaggi (spec §3/§5 — niente PII).
+  const cmdMatch = ctx.message?.text?.match(/^\/([a-z0-9_]+)/i);
+  if (cmdMatch) {
+    track(binding.user_id, "bot_command_used", { command: cmdMatch[1].toLowerCase() });
+  }
+
   await next();
 });
 

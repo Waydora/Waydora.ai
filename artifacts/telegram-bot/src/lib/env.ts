@@ -16,4 +16,8 @@ export const env = {
   API_SERVER_URL: req("API_SERVER_URL"),
   WEATHER_API_KEY: process.env.WEATHER_API_KEY ?? "",
   PORT: Number(process.env.PORT ?? 3000),
+  // Analytics (PostHog EU) — OPZIONALI: senza POSTHOG_KEY il wrapper e' no-op
+  // totale (nessun client, nessuna rete). Vedi src/lib/analytics.ts.
+  POSTHOG_KEY: process.env.POSTHOG_KEY ?? "",
+  POSTHOG_HOST: process.env.POSTHOG_HOST ?? "https://eu.i.posthog.com",
 };

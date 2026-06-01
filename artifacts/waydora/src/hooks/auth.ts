@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase, toUserProfile, type UserProfile } from "@/lib/supabase";
+import { identify, reset, track } from "@/lib/analytics";
  
 // ── Hook principale autenticazione ────────────────────────────────────────
 export function useAuth() {
@@ -14,9 +15,18 @@ export function useAuth() {
     });
  
     // Ascolta cambi di stato auth (login, logout, refresh token)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ? toUserProfile(session.user) : null);
       setLoading(false);
+      // Identity cross-channel (spec §4): SIGNED_IN → identify(user_id) con merge
+      // automatico dell'anon id; SIGNED_OUT → reset(). Niente PII nelle props.
+      if (event === "SIGNED_IN" && session?.user) {
+        identify(session.user.id, {
+          auth_method: session.user.app_metadata?.provider ?? "email",
+        });
+      } else if (event === "SIGNED_OUT") {
+        reset();
+      }
     });
  
     return () => subscription.unsubscribe();
@@ -32,12 +42,14 @@ export function useAuth() {
       },
     });
     if (error) console.error("Errore login Google:", error.message);
+    else track("login", { method: "google" });
   }, []);
  
   // ── Login con email/password ──
   const loginWithEmail = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
+    track("login", { method: "email" });
   }, []);
  
   // ── Registrazione con email/password ──
@@ -48,6 +60,7 @@ export function useAuth() {
       options: { data: { full_name: name } },
     });
     if (error) throw new Error(error.message);
+    track("signup", { method: "email" });
   }, []);
  
   // ── Logout ──

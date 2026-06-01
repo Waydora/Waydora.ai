@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { supabase } from "./supabase.js";
 import { bot } from "../bot.js";
+import { track } from "./analytics.js";
 
 // Loop di scheduling: ogni minuto carica reminder con fire_at <= now e sent_at null,
 // li manda su Telegram, marca sent_at. Semplice, niente coda esterna.
@@ -41,15 +42,26 @@ async function tick() {
   const nowIso = new Date().toISOString();
   const { data } = await supabase
     .from("telegram_reminders")
-    .select("id,telegram_user_id,message")
+    .select("id,telegram_user_id,user_id,trip_id,message")
     .lte("fire_at", nowIso)
     .is("sent_at", null)
     .limit(50);
-  const due = (data as Array<{ id: number; telegram_user_id: number; message: string }>) ?? [];
+  const due =
+    (data as Array<{
+      id: number;
+      telegram_user_id: number;
+      user_id: string | null;
+      trip_id: string | null;
+      message: string;
+    }>) ?? [];
   for (const r of due) {
     try {
       await bot.api.sendMessage(r.telegram_user_id, `⏰ ${r.message}`);
       await supabase.from("telegram_reminders").update({ sent_at: new Date().toISOString() }).eq("id", r.id);
+      // trip_reminder_sent: distinct_id = user_id Supabase (spec §4); niente testo.
+      if (r.user_id) {
+        track(r.user_id, "trip_reminder_sent", { trip_id: r.trip_id ?? null, reminder_kind: "manual" });
+      }
     } catch (e) {
       console.error("[reminders] send err", e);
     }

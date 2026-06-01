@@ -7,6 +7,7 @@ import { verifyTelegramAuth, type TelegramAuthData } from "./lib/widget-verify.j
 import { upsertBinding } from "./lib/bindings.js";
 import { startRealtimeBridge } from "./realtime.js";
 import { startReminderLoop } from "./lib/reminders.js";
+import { track, identifyBinding, shutdown as shutdownAnalytics } from "./lib/analytics.js";
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -109,6 +110,9 @@ app.get("/api/telegram/bind-callback", async (req, res) => {
       language_code: null,
       tier,
     });
+    // Identity + bind tracciato (spec §4): stesso evento del bind via /start.
+    identifyBinding(data.id, userId);
+    track(userId, "telegram_bind_completed", { tier, source: "widget_redirect" });
 
     bot.api
       .sendMessage(
@@ -151,6 +155,9 @@ app.post("/api/telegram/bind-from-widget", async (req, res) => {
       language_code: null,
       tier,
     });
+    // Identity + bind tracciato (spec §4): stesso evento del bind via /start.
+    identifyBinding(data.id, userId);
+    track(userId, "telegram_bind_completed", { tier, source: "widget_js" });
 
     // Manda saluto su Telegram (best-effort, non blocca la risposta)
     bot.api
@@ -190,6 +197,19 @@ async function main() {
   app.listen(env.PORT, () => {
     console.log(`[bot] listening on :${env.PORT}`);
   });
+
+  // Flush degli eventi analytics in coda alla chiusura del processo
+  // (posthog-node fa batching → senza flush si perdono gli ultimi eventi).
+  let shuttingDown = false;
+  const gracefulShutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[bot] ${signal} → flush analytics e uscita`);
+    await shutdownAnalytics();
+    process.exit(0);
+  };
+  process.once("SIGTERM", () => void gracefulShutdown("SIGTERM"));
+  process.once("SIGINT", () => void gracefulShutdown("SIGINT"));
 }
 
 main().catch((e) => {

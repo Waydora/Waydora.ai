@@ -14,6 +14,7 @@ import { supabase } from "@/lib/supabase";
 import { fetchWeather, type WeatherData } from "@/lib/weather";
 import { useAuth } from "@/hooks/auth";
 import { shouldUseRailway, AFFILIATES } from "@/lib/affiliates";
+import { track, hashSlug } from "@/lib/analytics";
 
 const URL_RX = /(https?:\/\/[^\s)]+[^\s).,;:!?])/g;
 function renderWithLinks(text: string): ReactNode {
@@ -363,6 +364,8 @@ function IdeasPanel({ slug }: { slug: string }) {
     const author = (user?.name ?? name.trim()) || "Anonimo";
     if (!user) localStorage.setItem("waydora_guest_name", author);
     await supabase.from("trip_messages").insert({ share_slug: slug, author, text: input.trim(), type: "idea" });
+    // Analytics: idea_added (spec §3 · Referral/Engagement, input WAGT).
+    track("idea_added", { share_slug_hash: hashSlug(slug), is_authenticated: !!user });
     setInput("");
   };
 
@@ -565,14 +568,20 @@ function BaggagePanel({ packingList, destination }: { packingList: any[]; destin
   );
 }
 
-function MediaPanel() {
+function MediaPanel({ slug }: { slug: string }) {
   const [files, setFiles] = useState<Array<{ name: string; preview: string }>>([]);
   const ref = useRef<HTMLInputElement>(null);
   return (
     <div style={{ padding: "20px", height: "100%", display: "flex", flexDirection: "column", gap: "14px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div><div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>📸 Foto e media</div><div style={{ fontSize: "11px", color: "rgba(255,255,255,0.35)", marginTop: "2px" }}>Solo visibili su questo dispositivo</div></div>
-        <input ref={ref} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => { setFiles(p => [...p, ...Array.from(e.target.files ?? []).map(f => ({ name: f.name, preview: URL.createObjectURL(f) }))]); e.target.value = ""; }} />
+        <input ref={ref} type="file" accept="image/*,video/*" multiple style={{ display: "none" }} onChange={e => {
+          const added = Array.from(e.target.files ?? []).map(f => ({ name: f.name, preview: URL.createObjectURL(f) }));
+          setFiles(p => [...p, ...added]);
+          // Analytics: media_added (spec §3 · Retention/Referral, UGC → WAGT).
+          if (added.length) track("media_added", { share_slug_hash: hashSlug(slug), count: added.length });
+          e.target.value = "";
+        }} />
         <button onClick={() => ref.current?.click()} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer" }}><Plus style={{ width: "13px", height: "13px" }} />Carica</button>
       </div>
       {files.length === 0
@@ -608,7 +617,7 @@ function renderTool(tool: string, itinerary: any, slug: string, isMobile = false
   if (tool === "weather")   return <WeatherPanel destination={itinerary.destination} durationDays={itinerary.durationDays ?? 3} />;
   if (tool === "ideas")     return <IdeasPanel slug={slug} />;
   if (tool === "bagaglio")  return <BaggagePanel packingList={itinerary.packingList ?? []} destination={itinerary.destination} />;
-  if (tool === "media")     return <MediaPanel />;
+  if (tool === "media")     return <MediaPanel slug={slug} />;
   if (tool === "expenses")  return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", textAlign: "center", padding: "32px" }}>
       <div style={{ fontSize: "2.8rem" }}>💰</div>
@@ -624,6 +633,8 @@ export default function Trip() {
   const params = useParams();
   const slug = params.slug ?? "";
   const { toast } = useToast();
+  const { user } = useAuth();
+  const viewTrackedRef = useRef(false);
 
   const [itinerary,  setItinerary]  = useState<any>(null);
   const [loading,    setLoading]    = useState(true);
@@ -639,10 +650,28 @@ export default function Trip() {
     supabase.from("saved_trips").select("*").eq("share_slug", slug).single()
       .then(({ data, error: err }) => {
         if (err || !data?.itinerary) setError(true);
-        else setItinerary(data.itinerary);
+        else {
+          setItinerary(data.itinerary);
+          // Analytics (spec §3 · Referral): itinerary_viewed sempre; se chi apre
+          // NON è l'owner del viaggio → shared_link_opened (invite acceptance).
+          if (!viewTrackedRef.current) {
+            viewTrackedRef.current = true;
+            const isOwner = !!user && data.user_id === user.id;
+            const slugHash = hashSlug(slug);
+            track("itinerary_viewed", { trip_id: data.id, share_slug_hash: slugHash, is_owner: isOwner });
+            if (!isOwner) {
+              track("shared_link_opened", {
+                trip_id: data.id,
+                share_slug_hash: slugHash,
+                is_authenticated: !!user,
+                is_owner: false,
+              });
+            }
+          }
+        }
         setLoading(false);
       });
-  }, [slug]);
+  }, [slug, user]);
 
   // Conteggio messaggi — canale univoco
   useEffect(() => {
@@ -672,6 +701,8 @@ export default function Trip() {
   const copy = async () => {
     await navigator.clipboard.writeText(shareUrl);
     setCopied(true); setTimeout(() => setCopied(false), 2000);
+    // Analytics: trip_shared (spec §3 · Referral, numeratore k-factor).
+    track("trip_shared", { share_slug_hash: hashSlug(slug), method: "copy" });
     toast({ title: "Link copiato!" });
   };
 
