@@ -40,7 +40,11 @@ export type AnalyticsEvent =
   | "idea_added"
   | "media_added"
   | "signup"
-  | "login";
+  | "login"
+  | "start_page_viewed"
+  | "start_destination_submitted"
+  | "start_activation"
+  | "template_forked";
 
 // Proprietà: solo valori non-PII (id tecnici, enum, bool, conteggi, hash).
 export type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;

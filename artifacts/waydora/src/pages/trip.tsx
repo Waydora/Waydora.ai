@@ -1,10 +1,10 @@
 import { useEffect, useState, useRef, useCallback, Fragment, type ReactNode } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import {
   Loader2, MessageSquare, Copy, Navigation, ExternalLink,
   CheckSquare, Square, Lightbulb, Camera, DollarSign,
   Plus, X, ShoppingBag, Check, Send, Download, Cloud,
-  Calendar, FileText,
+  Calendar, FileText, Pencil,
 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { ItineraryResults } from "@/components/itinerary-results";
@@ -14,7 +14,7 @@ import { supabase } from "@/lib/supabase";
 import { fetchWeather, type WeatherData } from "@/lib/weather";
 import { useAuth } from "@/hooks/auth";
 import { shouldUseRailway, AFFILIATES } from "@/lib/affiliates";
-import { track, hashSlug } from "@/lib/analytics";
+import { track, hashSlug, destinationCountry } from "@/lib/analytics";
 
 const URL_RX = /(https?:\/\/[^\s)]+[^\s).,;:!?])/g;
 function renderWithLinks(text: string): ReactNode {
@@ -628,21 +628,118 @@ function renderTool(tool: string, itinerary: any, slug: string, isMobile = false
   return null;
 }
 
+// ── Template helpers ──────────────────────────────────────────────────────
+
+function generateForkSlug(): string {
+  return Math.random().toString(36).substring(2, 10);
+}
+
+// Banner fisso mobile e blocco desktop per i template di sola lettura
+function TemplateBanner({ onFork, forking }: { onFork: () => void; forking: boolean }) {
+  return (
+    <>
+      {/* Mobile: banner sopra la toolbar (z-index 29 per stare sotto il drawer ma sopra i contenuti) */}
+      <div className="lg:hidden" style={{
+        position: "fixed", bottom: `${TOOLBAR_H}px`, left: 0, right: 0, zIndex: 29,
+        background: "linear-gradient(135deg,rgba(249,115,22,0.95) 0%,rgba(168,85,247,0.95) 100%)",
+        padding: "10px 16px",
+        display: "flex", alignItems: "center", gap: "10px",
+        boxShadow: "0 -2px 16px rgba(249,115,22,0.4)",
+      }}>
+        <Pencil style={{ width: "16px", height: "16px", color: "#fff", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: "12px", fontWeight: 800, color: "#fff", lineHeight: 1.2 }}>Viaggio di esempio</div>
+          <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.82)", lineHeight: 1.2 }}>Personalizza e condividi la tua copia</div>
+        </div>
+        <button
+          onClick={onFork}
+          disabled={forking}
+          style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            padding: "7px 14px", borderRadius: "9999px",
+            background: forking ? "rgba(255,255,255,0.2)" : "#fff",
+            color: forking ? "rgba(255,255,255,0.7)" : "#f97316",
+            border: "none", fontSize: "12px", fontWeight: 800,
+            cursor: forking ? "not-allowed" : "pointer",
+            flexShrink: 0, whiteSpace: "nowrap",
+            transition: "all 0.18s",
+          }}
+        >
+          {forking
+            ? <Loader2 style={{ width: "12px", height: "12px", animation: "wds 0.8s linear infinite" }} />
+            : <Pencil style={{ width: "12px", height: "12px" }} />
+          }
+          {forking ? "Creando..." : "Personalizza"}
+        </button>
+      </div>
+
+      {/* Desktop: nessun banner fisso — la CTA è inline nell'header (vedi hdr) */}
+    </>
+  );
+}
+
+// Pannello sostitutivo per chat/idee nei template
+function TemplateLockedPanel({ onFork, forking }: { onFork: () => void; forking: boolean }) {
+  return (
+    <div style={{
+      height: "100%", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: "32px 24px", gap: "16px", textAlign: "center",
+      background: "#0d0a18",
+    }}>
+      <div style={{ fontSize: "3rem" }}>✈️</div>
+      <div style={{ fontSize: "15px", fontWeight: 800, color: "#fff" }}>
+        Questo è un viaggio di esempio
+      </div>
+      <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", maxWidth: "280px", lineHeight: 1.55 }}>
+        La chat e le idee sono disabilitate per i template condivisi. Crea la tua copia personale per modificarlo e discuterne con i tuoi compagni di viaggio.
+      </div>
+      <button
+        onClick={onFork}
+        disabled={forking}
+        style={{
+          display: "flex", alignItems: "center", gap: "8px",
+          padding: "12px 24px", borderRadius: "9999px",
+          background: forking ? "rgba(255,255,255,0.08)" : "var(--wd-grad-warm)",
+          color: forking ? "rgba(255,255,255,0.5)" : "#fff",
+          border: "none", fontSize: "14px", fontWeight: 800,
+          cursor: forking ? "not-allowed" : "pointer",
+          transition: "all 0.18s",
+          boxShadow: forking ? "none" : "0 4px 20px rgba(249,115,22,0.4)",
+        }}
+      >
+        {forking
+          ? <Loader2 style={{ width: "16px", height: "16px", animation: "wds 0.8s linear infinite" }} />
+          : <Pencil style={{ width: "16px", height: "16px" }} />
+        }
+        {forking ? "Creazione copia..." : "Personalizza questo viaggio"}
+      </button>
+      <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.3)" }}>
+        Crea la tua copia da modificare e condividere
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function Trip() {
   const params = useParams();
   const slug = params.slug ?? "";
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
   const viewTrackedRef = useRef(false);
 
-  const [itinerary,  setItinerary]  = useState<any>(null);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState(false);
-  const [activeTool, setActiveTool] = useState("itinerary");
-  const [copied,     setCopied]     = useState(false);
-  const [chatOpen,   setChatOpen]   = useState(false);
-  const [msgCount,   setMsgCount]   = useState(0);
+  const [itinerary,   setItinerary]   = useState<any>(null);
+  const [isTemplate,  setIsTemplate]  = useState(false);
+  const [tripTitle,   setTripTitle]   = useState<string>("");
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(false);
+  const [activeTool,  setActiveTool]  = useState("itinerary");
+  const [copied,      setCopied]      = useState(false);
+  const [chatOpen,    setChatOpen]    = useState(false);
+  const [msgCount,    setMsgCount]    = useState(0);
+  const [forking,     setForking]     = useState(false);
 
   // Carica dati viaggio
   useEffect(() => {
@@ -652,13 +749,15 @@ export default function Trip() {
         if (err || !data?.itinerary) setError(true);
         else {
           setItinerary(data.itinerary);
+          setIsTemplate(!!data.is_template);
+          setTripTitle(data.title ?? data.itinerary?.title ?? "");
           // Analytics (spec §3 · Referral): itinerary_viewed sempre; se chi apre
           // NON è l'owner del viaggio → shared_link_opened (invite acceptance).
           if (!viewTrackedRef.current) {
             viewTrackedRef.current = true;
             const isOwner = !!user && data.user_id === user.id;
             const slugHash = hashSlug(slug);
-            track("itinerary_viewed", { trip_id: data.id, share_slug_hash: slugHash, is_owner: isOwner });
+            track("itinerary_viewed", { trip_id: data.id, share_slug_hash: slugHash, is_owner: isOwner, is_template: !!data.is_template });
             if (!isOwner) {
               track("shared_link_opened", {
                 trip_id: data.id,
@@ -673,9 +772,9 @@ export default function Trip() {
       });
   }, [slug, user]);
 
-  // Conteggio messaggi — canale univoco
+  // Conteggio messaggi — canale univoco (saltato per i template: non hanno messaggi propri)
   useEffect(() => {
-    if (!slug) return;
+    if (!slug || isTemplate) return;
     supabase.from("trip_messages").select("id", { count: "exact", head: true })
       .eq("share_slug", slug).in("type", ["message","ai_request","ai_update"])
       .then(({ count }) => { if (count) setMsgCount(count); });
@@ -691,11 +790,56 @@ export default function Trip() {
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [slug]);
+  }, [slug, isTemplate]);
 
   useEffect(() => {
     if (itinerary?.destination) document.title = `${itinerary.destination} — Waydora`;
   }, [itinerary]);
+
+  // ── Fork del template: crea una copia privata su saved_trips ─────────────
+  const forkTemplate = useCallback(async () => {
+    if (!itinerary || forking) return;
+    setForking(true);
+    try {
+      const newSlug = generateForkSlug();
+      const payload: Record<string, unknown> = {
+        itinerary,
+        share_slug: newSlug,
+        title: tripTitle || itinerary.title || "Il mio viaggio",
+        trip_id: null,
+        notes: "",
+        is_public: true,
+        is_template: false,
+        created_at: new Date().toISOString(),
+      };
+      // Assegna user_id solo se loggato
+      if (user?.id) payload.user_id = user.id;
+
+      const { data, error: insertErr } = await supabase
+        .from("saved_trips")
+        .insert(payload)
+        .select()
+        .single();
+
+      if (insertErr || !data) {
+        toast({ title: "Errore nella copia del viaggio. Riprova.", variant: "destructive" });
+        setForking(false);
+        return;
+      }
+
+      // Tracking PostHog (no PII)
+      track("template_forked", {
+        template_slug_hash: hashSlug(slug),
+        is_authenticated: !!user,
+        destination_country: destinationCountry(itinerary.destination),
+      });
+
+      setLocation(`/trip/${newSlug}`);
+    } catch {
+      toast({ title: "Errore di rete. Riprova.", variant: "destructive" });
+      setForking(false);
+    }
+  }, [itinerary, forking, slug, tripTitle, user, toast, setLocation]);
 
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/trip/${slug}` : "";
   const copy = async () => {
@@ -737,6 +881,12 @@ export default function Trip() {
             <MessageSquare style={{ width: "12px", height: "12px" }} />{mobile ? "Pianif." : "Pianificatore"}
           </button>
         </Link>
+        {/* Badge template visibile su entrambi i layout */}
+        {isTemplate && (
+          <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 8px", borderRadius: "9999px", background: "rgba(249,115,22,0.18)", color: "#fb923c", border: "1px solid rgba(249,115,22,0.3)" }}>
+            ESEMPIO
+          </span>
+        )}
       </div>
       {!mobile && (
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -744,10 +894,35 @@ export default function Trip() {
           <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{itinerary.title}</span>
         </div>
       )}
-      <button onClick={copy} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "9999px", background: copied ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.09)", border: copied ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(255,255,255,0.18)", color: copied ? "#34d399" : "#fff", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
-        {copied ? <Check style={{ width: "12px", height: "12px" }} /> : <Copy style={{ width: "12px", height: "12px" }} />}
-        {copied ? "Copiato!" : "Copia"}
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        {/* CTA Personalizza — visibile su desktop (lg+) nell'header */}
+        {isTemplate && !mobile && (
+          <button
+            onClick={forkTemplate}
+            disabled={forking}
+            style={{
+              display: "flex", alignItems: "center", gap: "6px",
+              padding: "7px 16px", borderRadius: "9999px",
+              background: forking ? "rgba(249,115,22,0.2)" : "linear-gradient(135deg,#f97316,#a855f7)",
+              color: forking ? "rgba(255,255,255,0.5)" : "#fff",
+              border: "none", fontSize: "12px", fontWeight: 800,
+              cursor: forking ? "not-allowed" : "pointer",
+              transition: "all 0.18s",
+              boxShadow: forking ? "none" : "0 2px 14px rgba(249,115,22,0.35)",
+            }}
+          >
+            {forking
+              ? <Loader2 style={{ width: "12px", height: "12px", animation: "wds 0.8s linear infinite" }} />
+              : <Pencil style={{ width: "12px", height: "12px" }} />
+            }
+            {forking ? "Creando..." : "Personalizza questo viaggio"}
+          </button>
+        )}
+        <button onClick={copy} style={{ display: "flex", alignItems: "center", gap: "5px", padding: "6px 12px", borderRadius: "9999px", background: copied ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.09)", border: copied ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(255,255,255,0.18)", color: copied ? "#34d399" : "#fff", fontSize: "11px", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}>
+          {copied ? <Check style={{ width: "12px", height: "12px" }} /> : <Copy style={{ width: "12px", height: "12px" }} />}
+          {copied ? "Copiato!" : "Copia"}
+        </button>
+      </div>
     </div>
   );
 
@@ -764,10 +939,17 @@ export default function Trip() {
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
           <ToolbarDesktop active={activeTool} onChange={setActiveTool} />
           <div style={{ flex: 1, minHeight: 0, overflow: activeTool === "map" ? "hidden" : "auto" }}>
-            {renderTool(activeTool, itinerary, slug, false)}
+            {/* Nei template, le tool "ideas" vengono bloccate — reindirizza all'itinerary */}
+            {renderTool(
+              isTemplate && activeTool === "ideas" ? "itinerary" : activeTool,
+              itinerary, slug, false
+            )}
           </div>
           <div style={{ width: "420px", flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", minHeight: 0 }}>
-            <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />
+            {isTemplate
+              ? <TemplateLockedPanel onFork={forkTemplate} forking={forking} />
+              : <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />
+            }
           </div>
         </div>
       </div>
@@ -775,17 +957,28 @@ export default function Trip() {
       {/* MOBILE */}
       <div className="flex-1 min-h-0 lg:hidden flex flex-col">
         {hdr(true)}
-        <div style={{ flex: 1, minHeight: 0, overflow: activeTool === "map" ? "hidden" : "auto", paddingBottom: activeTool === "map" ? "0" : `${TOOLBAR_H}px` }}>
-          {renderTool(activeTool, itinerary, slug, true)}
+        {/* Padding extra bottom quando il template banner è visibile (40px banner + TOOLBAR_H) */}
+        <div style={{
+          flex: 1, minHeight: 0,
+          overflow: activeTool === "map" ? "hidden" : "auto",
+          paddingBottom: activeTool === "map" ? "0" : `${TOOLBAR_H + (isTemplate ? 48 : 0)}px`,
+        }}>
+          {/* Nei template, blocca "ideas" — mostra itinerary al posto */}
+          {renderTool(
+            isTemplate && activeTool === "ideas" ? "itinerary" : activeTool,
+            itinerary, slug, true
+          )}
         </div>
 
         {/* Toolbar fissa */}
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 30, height: `${TOOLBAR_H}px`, display: "flex", alignItems: "center", overflowX: "auto", scrollbarWidth: "none", padding: "0 4px 8px", background: "rgba(10,10,18,0.96)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 -4px 24px rgba(0,0,0,0.5)" }}>
           {TOOLS.map(t => {
             const Icon = t.icon; const on = activeTool === t.id;
+            // In template mode evidenzia "ideas" come disabilitato
+            const blocked = isTemplate && t.id === "ideas";
             return (
-              <button key={t.id} onClick={() => setActiveTool(t.id)}
-                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "6px 10px", borderRadius: "10px", border: "none", flexShrink: 0, cursor: "pointer", transition: "all 0.15s", background: on ? "rgba(255,255,255,0.12)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "50px" }}>
+              <button key={t.id} onClick={() => { if (!blocked) setActiveTool(t.id); }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "6px 10px", borderRadius: "10px", border: "none", flexShrink: 0, cursor: blocked ? "default" : "pointer", transition: "all 0.15s", background: on ? "rgba(255,255,255,0.12)" : "transparent", color: blocked ? "rgba(255,255,255,0.18)" : on ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "50px", opacity: blocked ? 0.4 : 1 }}>
                 <Icon style={{ width: "18px", height: "18px" }} />
                 <span style={{ fontSize: "9px", fontWeight: 600 }}>{t.label}</span>
               </button>
@@ -793,21 +986,28 @@ export default function Trip() {
           })}
         </div>
 
-        {/* FAB chat */}
-        <button onClick={() => setChatOpen(true)}
-          style={{ position: "fixed", bottom: `${TOOLBAR_H + 16}px`, right: "16px", zIndex: 35, width: "52px", height: "52px", borderRadius: "50%", background: "var(--wd-grad-warm)", border: "2px solid rgba(255,255,255,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(249,115,22,0.4)" }}>
-          <MessageSquare style={{ width: "22px", height: "22px", color: "#fff" }} />
-          {msgCount > 0 && (
-            <div style={{ position: "absolute", top: "-3px", right: "-3px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#f97316" }}>
-              {msgCount > 9 ? "9+" : msgCount}
-            </div>
-          )}
-        </button>
+        {/* Template banner sopra la toolbar — visibile solo in template mode */}
+        {isTemplate && <TemplateBanner onFork={forkTemplate} forking={forking} />}
 
-        {/* Drawer CSS-only */}
-        <Drawer open={chatOpen} onClose={() => setChatOpen(false)}>
-          <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onClose={() => setChatOpen(false)} />
-        </Drawer>
+        {/* FAB chat — nascosto in template mode (sostituito dal banner) */}
+        {!isTemplate && (
+          <button onClick={() => setChatOpen(true)}
+            style={{ position: "fixed", bottom: `${TOOLBAR_H + 16}px`, right: "16px", zIndex: 35, width: "52px", height: "52px", borderRadius: "50%", background: "var(--wd-grad-warm)", border: "2px solid rgba(255,255,255,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(249,115,22,0.4)" }}>
+            <MessageSquare style={{ width: "22px", height: "22px", color: "#fff" }} />
+            {msgCount > 0 && (
+              <div style={{ position: "absolute", top: "-3px", right: "-3px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#f97316" }}>
+                {msgCount > 9 ? "9+" : msgCount}
+              </div>
+            )}
+          </button>
+        )}
+
+        {/* Drawer CSS-only — solo per viaggi non-template */}
+        {!isTemplate && (
+          <Drawer open={chatOpen} onClose={() => setChatOpen(false)}>
+            <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onClose={() => setChatOpen(false)} />
+          </Drawer>
+        )}
       </div>
     </Layout>
   );

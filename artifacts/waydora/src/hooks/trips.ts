@@ -42,6 +42,7 @@ export type SavedTripRow = {
   title: string;
   notes: string;
   is_public: boolean;
+  is_template?: boolean;
   created_at: string;
   // campo locale per i preferiti dai viaggi curati
   featured_trip_id?: string;
