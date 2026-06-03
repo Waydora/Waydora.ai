@@ -107,15 +107,18 @@ function WaydoraLogo() {
 }
 
 // ── TripChat ──────────────────────────────────────────────────────────────
-function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
+// mode="ai"        → chat di modifica itinerario (✨), input in basso, limite 50
+// mode="companions"→ messaggi tra i compagni di viaggio (💬), separati dall'AI
+function TripChat({ slug, itinerary, onItineraryUpdate, onClose, mode = "ai" }: {
   slug: string; itinerary: any; onItineraryUpdate: (i: any) => void; onClose?: () => void;
+  mode?: "ai" | "companions";
 }) {
+  const isAi = mode === "ai";
   const { user } = useAuth();
   const { toast } = useToast();
   const [messages,    setMessages]    = useState<TripMessage[]>([]);
   const [input,       setInput]       = useState("");
   const [name,        setName]        = useState(() => user?.name ?? localStorage.getItem("waydora_guest_name") ?? "");
-  const [isAiMode,    setIsAiMode]    = useState(false);
   const [aiPending,   setAiPending]   = useState(false);
   const [aiCallsLeft, setAiCallsLeft] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -159,8 +162,11 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
     return () => { supabase.removeChannel(ch); };
   }, [slug]);
 
-  // Realtime aggiornamenti itinerario — canale separato con ID univoco
+  // Realtime aggiornamenti itinerario — canale separato con ID univoco.
+  // Solo in modalità AI: evita doppia sottoscrizione/toast quando su desktop
+  // sono montati insieme il pannello AI e quello dei compagni.
   useEffect(() => {
+    if (!isAi) return;
     const id = chanId("itin");
     const ch = supabase.channel(id)
       .on("postgres_changes", {
@@ -252,22 +258,26 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
     return { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "12px", padding: "10px 12px" };
   };
 
+  const displayMessages = messages.filter(m =>
+    isAi ? (m.type === "ai_request" || m.type === "ai_update") : m.type === "message"
+  );
+  const submit = () => {
+    if (isAi) { sendAi(); }
+    else if (input.trim()) { sendMsg(input.trim()); setInput(""); }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", backgroundColor: "#0d0a18" }}>
       {/* Header */}
       <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "#0d0a18" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <MessageSquare style={{ width: "15px", height: "15px", color: "#a78bfa" }} />
-          <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>Chat di gruppo</span>
-          <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.07)", padding: "2px 8px", borderRadius: "9999px" }}>{messages.length}</span>
+          <span style={{ fontSize: "15px" }}>{isAi ? "✨" : "💬"}</span>
+          <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{isAi ? "Modifica con l'AI" : "Messaggi compagni"}</span>
+          {isAi
+            ? (aiCallsLeft !== null && <span style={{ fontSize: "10px", fontWeight: 700, color: aiCallsLeft <= 3 ? "#f87171" : "rgba(255,255,255,0.45)", background: "rgba(255,255,255,0.07)", padding: "2px 8px", borderRadius: "9999px" }}>{aiCallsLeft} modifiche</span>)
+            : <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.07)", padding: "2px 8px", borderRadius: "9999px" }}>{displayMessages.length}</span>}
         </div>
-        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: "2px", background: "rgba(255,255,255,0.07)", borderRadius: "10px", padding: "3px" }}>
-            <button onClick={() => setIsAiMode(false)} style={{ padding: "5px 10px", borderRadius: "7px", border: "none", fontSize: "12px", fontWeight: 600, cursor: "pointer", background: !isAiMode ? "rgba(255,255,255,0.14)" : "transparent", color: !isAiMode ? "#fff" : "rgba(255,255,255,0.4)" }}>💬</button>
-            <button onClick={() => setIsAiMode(true)}  style={{ padding: "5px 10px", borderRadius: "7px", border: "none", fontSize: "12px", fontWeight: 600, cursor: "pointer", background: isAiMode ? "rgba(168,85,247,0.3)" : "transparent", color: isAiMode ? "#c4b5fd" : "rgba(255,255,255,0.4)" }}>✨ AI</button>
-          </div>
-          {onClose && <button onClick={onClose} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px", width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.6)" }}><X style={{ width: "14px", height: "14px" }} /></button>}
-        </div>
+        {onClose && <button onClick={onClose} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px", width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.6)" }}><X style={{ width: "14px", height: "14px" }} /></button>}
       </div>
 
       {!user && (
@@ -278,22 +288,21 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
         </div>
       )}
 
-      {isAiMode && (
-        <div style={{ padding: "7px 16px", background: "rgba(168,85,247,0.1)", borderBottom: "1px solid rgba(168,85,247,0.2)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: "11px", color: "#c4b5fd" }}>✨ Modifica l'itinerario per tutti</span>
-          {aiCallsLeft !== null && <span style={{ fontSize: "11px", color: aiCallsLeft <= 3 ? "#f87171" : "rgba(255,255,255,0.4)" }}>{aiCallsLeft} rimaste</span>}
+      {isAi && (
+        <div style={{ padding: "7px 16px", background: "rgba(168,85,247,0.1)", borderBottom: "1px solid rgba(168,85,247,0.2)", flexShrink: 0 }}>
+          <span style={{ fontSize: "11px", color: "#c4b5fd" }}>✨ Le modifiche aggiornano l'itinerario per tutti i compagni</span>
         </div>
       )}
 
       {/* Messaggi */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px", backgroundColor: "#0d0a18" }}>
-        {messages.length === 0
+        {displayMessages.length === 0
           ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "60px 20px" }}>
-              <MessageSquare style={{ width: "36px", height: "36px", opacity: 0.25 }} />
-              <p style={{ fontSize: "14px", fontWeight: 600, color: "rgba(255,255,255,0.4)" }}>Nessun messaggio</p>
-              <p style={{ fontSize: "12px" }}>Commenta o proponi una modifica AI!</p>
+              <span style={{ fontSize: "32px", opacity: 0.4 }}>{isAi ? "✨" : "💬"}</span>
+              <p style={{ fontSize: "14px", fontWeight: 600, color: "rgba(255,255,255,0.4)" }}>{isAi ? "Nessuna modifica ancora" : "Nessun messaggio"}</p>
+              <p style={{ fontSize: "12px" }}>{isAi ? "Es: \"aggiungi un giorno a Oia\" o \"più budget\"" : "Scrivi ai tuoi compagni di viaggio"}</p>
             </div>
-          : messages.map(msg => (
+          : displayMessages.map(msg => (
             <div key={msg.id} style={msgBg(msg.type)}>
               <div style={{ fontSize: "13px", color: msg.type === "ai_update" ? "#6ee7b7" : "rgba(255,255,255,0.88)", marginBottom: "4px", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{renderWithLinks(msg.text)}</div>
               <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>{msg.author} · {new Date(msg.created_at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}</div>
@@ -310,17 +319,16 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose }: {
             onKeyDown={e => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                if (isAiMode) sendAi();
-                else if (input.trim()) { sendMsg(input.trim()); setInput(""); }
+                submit();
               }
             }}
-            placeholder={isAiMode ? "Es: aggiungi una giornata..." : "Scrivi un commento..."}
+            placeholder={isAi ? "Es: aggiungi una giornata a Oia..." : "Scrivi un commento..."}
             rows={1} disabled={aiPending}
-            style={{ flex: 1, background: "rgba(255,255,255,0.08)", border: `1px solid ${isAiMode ? "rgba(168,85,247,0.35)" : "rgba(255,255,255,0.13)"}`, borderRadius: "14px", padding: "9px 14px", color: "#fff", fontSize: "13px", outline: "none", resize: "none", maxHeight: "120px", fontFamily: "inherit" }} />
+            style={{ flex: 1, background: "rgba(255,255,255,0.08)", border: `1px solid ${isAi ? "rgba(168,85,247,0.35)" : "rgba(255,255,255,0.13)"}`, borderRadius: "14px", padding: "9px 14px", color: "#fff", fontSize: "13px", outline: "none", resize: "none", maxHeight: "120px", fontFamily: "inherit" }} />
           <button
-            onClick={() => { if (isAiMode) sendAi(); else if (input.trim()) { sendMsg(input.trim()); setInput(""); } }}
+            onClick={submit}
             disabled={!input.trim() || aiPending}
-            style={{ width: "40px", height: "40px", borderRadius: "50%", border: "none", flexShrink: 0, cursor: input.trim() && !aiPending ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", background: input.trim() && !aiPending ? (isAiMode ? "linear-gradient(135deg,#a855f7,#6366f1)" : "var(--wd-grad-warm)") : "rgba(255,255,255,0.08)", color: "#fff", transition: "all 0.15s" }}>
+            style={{ width: "40px", height: "40px", borderRadius: "50%", border: "none", flexShrink: 0, cursor: input.trim() && !aiPending ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", background: input.trim() && !aiPending ? (isAi ? "linear-gradient(135deg,#a855f7,#6366f1)" : "var(--wd-grad-warm)") : "rgba(255,255,255,0.08)", color: "#fff", transition: "all 0.15s" }}>
             {aiPending ? <Loader2 style={{ width: "15px", height: "15px", animation: "wds 0.8s linear infinite" }} /> : <Send style={{ width: "15px", height: "15px" }} />}
           </button>
         </div>
@@ -771,7 +779,8 @@ export default function Trip() {
   const [error,       setError]       = useState(false);
   const [activeTool,  setActiveTool]  = useState("itinerary");
   const [copied,      setCopied]      = useState(false);
-  const [chatOpen,    setChatOpen]    = useState(false);
+  const [aiOpen,        setAiOpen]        = useState(false);
+  const [companionsOpen, setCompanionsOpen] = useState(false);
   const [msgCount,    setMsgCount]    = useState(0);
   const [forking,     setForking]     = useState(false);
 
@@ -972,21 +981,31 @@ export default function Trip() {
         {hdr(false)}
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
           <ToolbarDesktop active={activeTool} onChange={setActiveTool} />
-          <div style={{ flex: 1, minHeight: 0, overflow: activeTool === "map" ? "hidden" : "auto" }}>
-            {/* Intro per nuovi visitatori — solo template, sulla scheda Itinerario */}
-            {isTemplate && (activeTool === "itinerary" || activeTool === "ideas") && (
-              <TemplateIntro destination={itinerary.destination} onFork={forkTemplate} forking={forking} />
-            )}
-            {/* Nei template, le tool "ideas" vengono bloccate — reindirizza all'itinerary */}
-            {renderTool(
-              isTemplate && activeTool === "ideas" ? "itinerary" : activeTool,
-              itinerary, slug, false
+          {/* Colonna centrale: contenuto + chat modifiche AI in basso */}
+          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <div style={{ flex: 1, minHeight: 0, overflow: activeTool === "map" ? "hidden" : "auto" }}>
+              {/* Intro per nuovi visitatori — solo template, sulla scheda Itinerario */}
+              {isTemplate && (activeTool === "itinerary" || activeTool === "ideas") && (
+                <TemplateIntro destination={itinerary.destination} onFork={forkTemplate} forking={forking} />
+              )}
+              {/* Nei template, le tool "ideas" vengono bloccate — reindirizza all'itinerary */}
+              {renderTool(
+                isTemplate && activeTool === "ideas" ? "itinerary" : activeTool,
+                itinerary, slug, false
+              )}
+            </div>
+            {/* Chat modifiche AI in basso (stile chat-app) — solo viaggio definitivo */}
+            {!isTemplate && (
+              <div style={{ height: "300px", flexShrink: 0, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                <TripChat mode="ai" slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />
+              </div>
             )}
           </div>
-          <div style={{ width: "420px", flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", minHeight: 0 }}>
+          {/* Pannello laterale destro: messaggi dei compagni (o blocco template) */}
+          <div style={{ width: "360px", flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", minHeight: 0 }}>
             {isTemplate
               ? <TemplateLockedPanel onFork={forkTemplate} forking={forking} />
-              : <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />
+              : <TripChat mode="companions" slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />
             }
           </div>
         </div>
@@ -999,7 +1018,7 @@ export default function Trip() {
         <div style={{
           flex: 1, minHeight: 0,
           overflow: activeTool === "map" ? "hidden" : "auto",
-          paddingBottom: activeTool === "map" ? "0" : `${TOOLBAR_H + (isTemplate ? 48 : 0)}px`,
+          paddingBottom: activeTool === "map" ? "0" : `${TOOLBAR_H + (isTemplate ? 48 : 56)}px`,
         }}>
           {/* Intro per nuovi visitatori — solo template, sulla scheda Itinerario */}
           {isTemplate && (activeTool === "itinerary" || activeTool === "ideas") && (
@@ -1031,23 +1050,38 @@ export default function Trip() {
         {/* Template banner sopra la toolbar — visibile solo in template mode */}
         {isTemplate && <TemplateBanner onFork={forkTemplate} forking={forking} />}
 
-        {/* FAB chat — nascosto in template mode (sostituito dal banner) */}
+        {/* Barra modifiche AI in basso (stile chat-app) + accesso compagni —
+            solo viaggio definitivo. Sopra la toolbar fissa. */}
         {!isTemplate && (
-          <button onClick={() => setChatOpen(true)}
-            style={{ position: "fixed", bottom: `${TOOLBAR_H + 16}px`, right: "16px", zIndex: 35, width: "52px", height: "52px", borderRadius: "50%", background: "var(--wd-grad-warm)", border: "2px solid rgba(255,255,255,0.2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(249,115,22,0.4)" }}>
-            <MessageSquare style={{ width: "22px", height: "22px", color: "#fff" }} />
-            {msgCount > 0 && (
-              <div style={{ position: "absolute", top: "-3px", right: "-3px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#f97316" }}>
-                {msgCount > 9 ? "9+" : msgCount}
-              </div>
-            )}
-          </button>
+          <div style={{ position: "fixed", bottom: `${TOOLBAR_H}px`, left: 0, right: 0, zIndex: 31, display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "rgba(13,10,24,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+            <button onClick={() => setAiOpen(true)}
+              style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", padding: "9px 14px", borderRadius: "14px", background: "rgba(168,85,247,0.14)", border: "1px solid rgba(168,85,247,0.35)", color: "rgba(255,255,255,0.6)", fontSize: "13px", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+              <span style={{ fontSize: "15px" }}>✨</span>
+              <span style={{ flex: 1 }}>Modifica con l'AI…</span>
+            </button>
+            <button onClick={() => setCompanionsOpen(true)}
+              style={{ position: "relative", width: "44px", height: "44px", borderRadius: "13px", flexShrink: 0, background: "var(--wd-grad-warm)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 12px rgba(249,115,22,0.4)" }}>
+              <MessageSquare style={{ width: "20px", height: "20px", color: "#fff" }} />
+              {msgCount > 0 && (
+                <div style={{ position: "absolute", top: "-4px", right: "-4px", width: "18px", height: "18px", borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#f97316" }}>
+                  {msgCount > 9 ? "9+" : msgCount}
+                </div>
+              )}
+            </button>
+          </div>
         )}
 
-        {/* Drawer CSS-only — solo per viaggi non-template */}
+        {/* Drawer modifiche AI (bottom sheet) — solo viaggio definitivo */}
         {!isTemplate && (
-          <Drawer open={chatOpen} onClose={() => setChatOpen(false)}>
-            <TripChat slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onClose={() => setChatOpen(false)} />
+          <Drawer open={aiOpen} onClose={() => setAiOpen(false)}>
+            <TripChat mode="ai" slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onClose={() => setAiOpen(false)} />
+          </Drawer>
+        )}
+
+        {/* Drawer messaggi compagni — solo viaggio definitivo */}
+        {!isTemplate && (
+          <Drawer open={companionsOpen} onClose={() => setCompanionsOpen(false)}>
+            <TripChat mode="companions" slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onClose={() => setCompanionsOpen(false)} />
           </Drawer>
         )}
       </div>
