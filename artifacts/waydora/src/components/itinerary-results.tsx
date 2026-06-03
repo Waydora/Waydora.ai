@@ -9,7 +9,7 @@ type ItineraryData = any;
 type ItineraryActivity = any;
 type PackingCategory = any;
 import { fetchPhoto } from "@/lib/photos";
-import { AFFILIATES, isGoCityDestination, isOutsideEU, goCityUrlFor, stay22UrlFor } from "@/lib/affiliates";
+import { AFFILIATES, isGoCityDestination, isOutsideEU, goCityUrlFor, stay22UrlFor, buildActivityAffiliate } from "@/lib/affiliates";
 
 const FALLBACK = "https://images.pexels.com/photos/346885/pexels-photo-346885.jpeg";
 const AMAZON_TAG = "waydora-21";
@@ -127,9 +127,12 @@ const CATEGORY_STYLE: Record<string, {
 const DEFAULT_STYLE = { icon: Sparkles, label: "Attività", gradient: "linear-gradient(135deg,#a78bfa,#c084fc)", iconBg: "rgba(167,139,250,0.2)", iconColor: "#c084fc", badgeBg: "rgba(167,139,250,0.18)", badgeColor: "#ddd6fe", line: "rgba(167,139,250,0.3)" };
 
 // ── ActivityCard ──────────────────────────────────────────────────────────
-function ActivityCard({ activity, index }: { activity: ItineraryActivity; index: number }) {
+function ActivityCard({ activity, index, destination }: { activity: ItineraryActivity; index: number; destination?: string }) {
   const style = CATEGORY_STYLE[activity.category] ?? DEFAULT_STYLE;
   const Icon = style.icon;
+  // Affiliate dell'attività: usa quello già presente (itinerari generati dal
+  // server) oppure lo costruisce al volo dalla categoria (itinerari template).
+  const aff = activity.affiliate ?? buildActivityAffiliate(activity, destination);
   return (
     <motion.div initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: Math.min(index * 0.06, 0.35) }}
       className="relative pl-11 pb-5 last:pb-0 group">
@@ -148,14 +151,14 @@ function ActivityCard({ activity, index }: { activity: ItineraryActivity; index:
         </div>
         <h4 style={{ fontSize: "15px", fontWeight: 700, color: "#ffffff", marginBottom: "6px", lineHeight: 1.3 }}>{activity.title}</h4>
         <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", lineHeight: 1.65, whiteSpace: "pre-line" }}>{activity.description}</p>
-        {activity.affiliate && (
+        {aff && (
           <div className="mt-3 flex items-center gap-2">
-            <a href={activity.affiliate.url} target="_blank" rel="noopener noreferrer"
+            <a href={aff.url} target="_blank" rel="noopener noreferrer sponsored"
               className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full text-white transition-all duration-200 hover:scale-105"
               style={{ background: style.gradient, boxShadow: `0 2px 10px ${style.iconColor}40`, textDecoration: "none" }}>
-              {activity.affiliate.label}<ExternalLink style={{ width: "11px", height: "11px" }} />
+              {aff.label}<ExternalLink style={{ width: "11px", height: "11px" }} />
             </a>
-            <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", letterSpacing: "0.05em" }}>via {activity.affiliate.provider}</span>
+            <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", letterSpacing: "0.05em" }}>via {aff.provider}</span>
           </div>
         )}
       </div>
@@ -237,7 +240,7 @@ export function ItineraryResults({ itinerary }: { itinerary: ItineraryData }) {
         <div key={day.day}>
           <DayHeader dayIndex={dayIndex} title={day.title} weather={day.weather} summary={day.summary} />
           {day.activities?.map((activity: any, actIndex: number) => (
-            <ActivityCard key={`${day.day}-${actIndex}`} activity={activity} index={actIndex} />
+            <ActivityCard key={`${day.day}-${actIndex}`} activity={activity} index={actIndex} destination={itinerary.destination} />
           ))}
         </div>
       ))}

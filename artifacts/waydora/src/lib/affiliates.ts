@@ -85,6 +85,57 @@ export function isOutsideEU(destination?: string): boolean {
   return !EU_KEYWORDS.some(eu => d.includes(eu));
 }
 
+// ── Affiliate per singola attività (fallback client) ──────────────────────
+// Mirror della logica server (ensureAffiliateOnItinerary/buildAffiliate in
+// server-standalone.js): costruisce il link di prenotazione per un'attività
+// in base alla categoria. Usato come FALLBACK quando l'attività non ha già un
+// campo `affiliate` — es. gli itinerari TEMPLATE seminati staticamente, che
+// non passano dal server. Garantisce i bottoni "Prenota" su ogni viaggio.
+export type ActivityAffiliate = { provider: string; label: string; url: string };
+
+type AffiliateActivity = { title?: string; description?: string; category?: string; transportMode?: string };
+
+function inferTransportMode(activity: AffiliateActivity): string {
+  const explicit = (activity?.transportMode || "").toLowerCase().trim();
+  if (["flight", "train", "ferry", "bus", "taxi", "car"].includes(explicit)) return explicit;
+  const text = `${activity?.title || ""} ${activity?.description || ""}`.toLowerCase();
+  if (/(traghett|ferry|catamarano|aliscaf|\bporto\b)/.test(text)) return "ferry";
+  if (/(funivia|funicolare|cabinovia|seggiovia|pedaggio)/.test(text)) return "car"; // montagna → Maps
+  if (/(treno|train|frecci|italo|trenitalia|intercity|tgv|\bave\b|\bice\b|stazione)/.test(text)) return "train";
+  if (/(autobus|pullman|flixbus|\bbus\b)/.test(text)) return "bus";
+  if (/(taxi|uber|bolt|free now|\bcab\b)/.test(text)) return "taxi";
+  if (/(volo|voli|aereo|flight|aeroport)/.test(text)) return "flight";
+  return "flight";
+}
+
+function buildTransportAffiliate(activity: AffiliateActivity, destination?: string): ActivityAffiliate {
+  const mode = inferTransportMode(activity);
+  const q = encodeURIComponent(`${activity?.title || ""} ${destination || ""}`.trim());
+  switch (mode) {
+    case "ferry": return { provider: "Direct Ferries", label: "Cerca traghetti", url: `https://www.directferries.it/srp_pf.htm?keywords=${q}` };
+    case "train": return { provider: "Trainline", label: "Cerca treni", url: `https://www.thetrainline.com/it/cerca/${q}` };
+    case "bus":   return { provider: "FlixBus", label: "Cerca bus", url: `https://www.flixbus.it/?q=${q}` };
+    case "taxi":  return { provider: "Google Maps", label: "Apri in Maps", url: `https://www.google.com/maps/search/?api=1&query=${q}` };
+    case "car":   return { provider: "Google Maps", label: "Indicazioni", url: `https://www.google.com/maps/dir/?api=1&destination=${q}` };
+    case "flight":
+    default:      return { provider: "Kiwi", label: "Cerca voli", url: AFFILIATES.KIWI_URL };
+  }
+}
+
+export function buildActivityAffiliate(activity: AffiliateActivity, destination?: string): ActivityAffiliate {
+  const category = (activity?.category || "").toLowerCase();
+  const q = encodeURIComponent(`${activity?.title || ""} ${destination || ""}`.trim());
+  switch (category) {
+    case "stay":      return { provider: "Stay22", label: "Cerca alloggi", url: stay22UrlFor(destination) };
+    case "food":      return { provider: "Google Maps", label: "Vedi su Maps", url: `https://www.google.com/maps/search/?api=1&query=${q}` };
+    case "transport": return buildTransportAffiliate(activity, destination);
+    case "sightseeing":
+    case "experience":
+    case "nightlife":
+    default:          return { provider: "GetYourGuide", label: "Prenota ora", url: `https://www.getyourguide.com/s/?q=${q}&partner_id=${AFFILIATES.GYG_PARTNER_ID}` };
+  }
+}
+
 // ── Decisione endpoint: Railway (Sonnet) vs Vercel (Haiku) ────────────────
 // Creazione nuovo itinerario o modifica "pesante" → Railway+Sonnet (no timeout, max qualità)
 // Tutto il resto → Vercel+Haiku (veloce, economico)

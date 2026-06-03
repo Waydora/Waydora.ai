@@ -721,6 +721,40 @@ function TemplateLockedPanel({ onFork, forking }: { onFork: () => void; forking:
   );
 }
 
+// Riquadro introduttivo per i template: spiega a un visitatore nuovo (es. da
+// TikTok) cosa puo' fare una volta arrivato sul viaggio pre-costruito.
+function TemplateIntro({ destination, onFork, forking }: { destination: string; onFork: () => void; forking: boolean }) {
+  const city = (destination || "").split(",")[0];
+  const rows: Array<[string, string]> = [
+    ["📖", "Sfoglialo giorno per giorno qui sotto"],
+    ["🎟️", "Prenota alloggi, tour e trasporti dai link di ogni tappa"],
+    ["✏️", "Rendilo tuo: modificalo, salvalo e condividilo coi compagni"],
+  ];
+  return (
+    <div style={{ maxWidth: "680px", margin: "0 auto", padding: "16px 16px 0" }}>
+      <div style={{ background: "linear-gradient(135deg,rgba(249,115,22,0.14),rgba(168,85,247,0.14))", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "16px", padding: "16px" }}>
+        <div style={{ fontSize: "14px", fontWeight: 800, color: "#fff", marginBottom: "10px", lineHeight: 1.35 }}>
+          👋 Questo è un itinerario pronto{city ? ` per ${city}` : ""}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "7px", marginBottom: "14px" }}>
+          {rows.map(([emoji, text]) => (
+            <div key={text} style={{ display: "flex", gap: "8px", fontSize: "12.5px", color: "rgba(255,255,255,0.74)", lineHeight: 1.5 }}>
+              <span style={{ flexShrink: 0 }}>{emoji}</span><span>{text}</span>
+            </div>
+          ))}
+        </div>
+        <button onClick={onFork} disabled={forking}
+          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", padding: "11px", borderRadius: "12px", background: forking ? "rgba(255,255,255,0.1)" : "var(--wd-grad-warm)", color: forking ? "rgba(255,255,255,0.5)" : "#fff", border: "none", fontSize: "13.5px", fontWeight: 800, cursor: forking ? "not-allowed" : "pointer", boxShadow: forking ? "none" : "0 4px 18px rgba(249,115,22,0.35)" }}>
+          {forking
+            ? <Loader2 style={{ width: "15px", height: "15px", animation: "wds 0.8s linear infinite" }} />
+            : <Pencil style={{ width: "15px", height: "15px" }} />}
+          {forking ? "Creazione copia..." : "Personalizza questo viaggio"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function Trip() {
   const params = useParams();
@@ -939,6 +973,10 @@ export default function Trip() {
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
           <ToolbarDesktop active={activeTool} onChange={setActiveTool} />
           <div style={{ flex: 1, minHeight: 0, overflow: activeTool === "map" ? "hidden" : "auto" }}>
+            {/* Intro per nuovi visitatori — solo template, sulla scheda Itinerario */}
+            {isTemplate && (activeTool === "itinerary" || activeTool === "ideas") && (
+              <TemplateIntro destination={itinerary.destination} onFork={forkTemplate} forking={forking} />
+            )}
             {/* Nei template, le tool "ideas" vengono bloccate — reindirizza all'itinerary */}
             {renderTool(
               isTemplate && activeTool === "ideas" ? "itinerary" : activeTool,
@@ -963,6 +1001,10 @@ export default function Trip() {
           overflow: activeTool === "map" ? "hidden" : "auto",
           paddingBottom: activeTool === "map" ? "0" : `${TOOLBAR_H + (isTemplate ? 48 : 0)}px`,
         }}>
+          {/* Intro per nuovi visitatori — solo template, sulla scheda Itinerario */}
+          {isTemplate && (activeTool === "itinerary" || activeTool === "ideas") && (
+            <TemplateIntro destination={itinerary.destination} onFork={forkTemplate} forking={forking} />
+          )}
           {/* Nei template, blocca "ideas" — mostra itinerary al posto */}
           {renderTool(
             isTemplate && activeTool === "ideas" ? "itinerary" : activeTool,
