@@ -112,9 +112,10 @@ function buildTransportAffiliate(activity: AffiliateActivity, destination?: stri
   const mode = inferTransportMode(activity);
   const q = encodeURIComponent(`${activity?.title || ""} ${destination || ""}`.trim());
   switch (mode) {
-    case "ferry": return { provider: "Direct Ferries", label: "Cerca traghetti", url: `https://www.directferries.it/srp_pf.htm?keywords=${q}` };
-    case "train": return { provider: "Trainline", label: "Cerca treni", url: `https://www.thetrainline.com/it/cerca/${q}` };
-    case "bus":   return { provider: "FlixBus", label: "Cerca bus", url: `https://www.flixbus.it/?q=${q}` };
+    // Treno/bus/traghetto: nessun affiliato monetizzato → Google Maps transit (affidabile)
+    case "ferry":
+    case "train":
+    case "bus":   return { provider: "Google Maps", label: "Come arrivare", url: `https://www.google.com/maps/dir/?api=1&destination=${q}&travelmode=transit` };
     case "taxi":  return { provider: "Google Maps", label: "Apri in Maps", url: `https://www.google.com/maps/search/?api=1&query=${q}` };
     case "car":   return { provider: "Google Maps", label: "Indicazioni", url: `https://www.google.com/maps/dir/?api=1&destination=${q}` };
     case "flight":

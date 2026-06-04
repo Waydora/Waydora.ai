@@ -55,11 +55,10 @@ function buildTransportAffiliate(activity, destination) {
   const q = encodeURIComponent(`${activity?.title || ""} ${destination || ""}`.trim());
   switch (mode) {
     case "ferry":
-      return { provider: "Direct Ferries", label: "Cerca traghetti", url: `https://www.directferries.it/srp_pf.htm?keywords=${q}` };
     case "train":
-      return { provider: "Trainline", label: "Cerca treni", url: `https://www.thetrainline.com/it/cerca/${q}` };
     case "bus":
-      return { provider: "FlixBus", label: "Cerca bus", url: `https://www.flixbus.it/?q=${q}` };
+      // Nessun affiliato monetizzato per questi: Google Maps transit (affidabile)
+      return { provider: "Google Maps", label: "Come arrivare", url: `https://www.google.com/maps/dir/?api=1&destination=${q}&travelmode=transit` };
     case "taxi":
       return { provider: "Google Maps", label: "Apri in Maps", url: `https://www.google.com/maps/search/?api=1&query=${q}` };
     case "car":
@@ -231,30 +230,29 @@ Frasi VIETATE se non seguite dal contenuto:
 
 Per OGNI cosa che consigli o menzioni come prenotabile, includi SEMPRE nello stesso messaggio un link cliccabile in formato markdown [Testo](URL). Usa questi URL pattern (sostituisci spazi con +):
 
-**Ristoranti / bar / locali / POI:**
-- Google Maps: "https://www.google.com/maps/search/?api=1&query=NOME+POSTO+CITTÀ"
-- TheFork (ristoranti): "https://www.thefork.it/ricerca?searchText=NOME+CITTÀ"
+⚠️ REGOLA URL CRITICA: NON inserire MAI nomi di città/stazioni/porti nel PATH dell'URL (es. ".../da-Napoli-a-Pietrarsa"): si rompono. I nomi vanno SOLO nei parametri (?query= ?q= ?address= origin= destination=). Per ogni categoria USA ESATTAMENTE il link affiliato qui sotto (da questi Waydora guadagna): è VIETATO sostituirli con Booking/Airbnb/Skyscanner/Viator/TheFork "nudi".
 
-**Attività / musei / esperienze:**
-- GetYourGuide: "https://www.getyourguide.it/s/?q=NOME+CITTÀ"
-- Viator: "https://www.viator.com/searchResults/all?text=NOME+CITTÀ"
+**Hotel / alloggi → Stay22 (AFFILIATO, obbligatorio):**
+- "https://booking.stay22.com/waydora/5DPoKS60Cy?address=DESTINAZIONE&adults=2"
 
-**Hotel / alloggi:**
-- Booking: "https://www.booking.com/searchresults.it.html?ss=DESTINAZIONE"
-- Airbnb: "https://www.airbnb.it/s/DESTINAZIONE/homes"
+**Attività / musei / tour / esperienze / biglietti → GetYourGuide (AFFILIATO, obbligatorio):**
+- "https://www.getyourguide.com/s/?q=NOME+CITTÀ&partner_id=EPBPR3R"
+  (partner_id=EPBPR3R è OBBLIGATORIO: senza, non guadagniamo nulla)
 
-⚠️ REGOLA URL CRITICA: NON costruire MAI un URL inserendo nomi di città, stazioni o porti dentro il PATH dell'indirizzo (es. ".../da-Napoli-a-Pietrarsa-S.-Giorgio"): producono link ROTTI. Metti i nomi SOLO nei parametri di ricerca (?query=, ?ss=, ?q=, origin=, destination=) usando i formati qui sotto. Nel dubbio, Google Maps è SEMPRE la scelta sicura.
+**Voli → Kiwi (AFFILIATO, obbligatorio):**
+- "https://kiwi.tpm.li/HdS8gBCi" (link fisso: l'utente cerca la tratta sul sito partner)
 
-**Voli:**
-- Skyscanner: "https://www.skyscanner.it/trasporti/voli/IATA_PARTENZA/IATA_ARRIVO/DATA_ANDATA/DATA_RITORNO/?adults=N" (usa SOLO codici IATA che conosci con certezza; altrimenti usa Google Flights: "https://www.google.com/travel/flights?q=voli+da+CITTÀ+a+CITTÀ")
+**eSIM / internet all'estero → Yesim (AFFILIATO):**
+- "https://yesim.tpm.li/3DONLGQL"
 
-**Treni / bus / spostamenti locali:**
-- USA SEMPRE Google Maps transit (il più affidabile per qualunque tratta, anche stazioni piccole): "https://www.google.com/maps/dir/?api=1&origin=PARTENZA&destination=ARRIVO&travelmode=transit"
-- (Italia, opzionale) Trenitalia: "https://www.trenitalia.com/" — homepage, l'utente cerca la tratta
+**Attrezzatura da viaggio / bagaglio → Amazon (AFFILIATO):**
+- "https://www.amazon.it/s?k=NOME+ARTICOLO+viaggio&tag=waydora-21" (tag=waydora-21 OBBLIGATORIO)
 
-**Traghetti / barche:**
-- Google Maps: "https://www.google.com/maps/dir/?api=1&origin=PORTO_PARTENZA&destination=PORTO_ARRIVO&travelmode=transit"
-- Direct Ferries: "https://www.directferries.it/cerca.htm?from=PORTO_PARTENZA&to=PORTO_ARRIVO"
+**Ristoranti / bar / cibo → Google Maps (nessun affiliato, va bene):**
+- "https://www.google.com/maps/search/?api=1&query=NOME+POSTO+CITTÀ"
+
+**Treni / bus / traghetti / spostamenti locali → Google Maps transit (nessun affiliato):**
+- "https://www.google.com/maps/dir/?api=1&origin=PARTENZA&destination=ARRIVO&travelmode=transit"
 
 Formato consigliato per ogni opzione:
 - **Nome** — descrizione breve (prezzo indicativo). [Prenota](URL) · [Mappa](URL)
