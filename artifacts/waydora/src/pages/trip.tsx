@@ -4,7 +4,7 @@ import {
   Loader2, MessageSquare, Copy, Navigation, ExternalLink,
   CheckSquare, Square, Lightbulb, Camera, DollarSign,
   Plus, X, ShoppingBag, Check, Send, Download, Cloud,
-  Calendar, FileText, Pencil,
+  Calendar, FileText, Pencil, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { ItineraryResults } from "@/components/itinerary-results";
@@ -109,9 +109,9 @@ function WaydoraLogo() {
 // ── TripChat ──────────────────────────────────────────────────────────────
 // mode="ai"        → chat di modifica itinerario (✨), input in basso, limite 50
 // mode="companions"→ messaggi tra i compagni di viaggio (💬), separati dall'AI
-function TripChat({ slug, itinerary, onItineraryUpdate, onClose, mode = "ai" }: {
+function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mode = "ai" }: {
   slug: string; itinerary: any; onItineraryUpdate: (i: any) => void; onClose?: () => void;
-  mode?: "ai" | "companions";
+  onCollapse?: () => void; mode?: "ai" | "companions";
 }) {
   const isAi = mode === "ai";
   const { user } = useAuth();
@@ -253,8 +253,10 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, mode = "ai" }: 
   }, [input, aiPending, itinerary, slug, user, toast]);
 
   const msgBg = (t: TripMessage["type"]): React.CSSProperties => {
-    if (t === "ai_request") return { background: "rgba(168,85,247,0.15)", border: "1px solid rgba(168,85,247,0.3)", borderRadius: "12px", padding: "10px 12px" };
-    if (t === "ai_update")  return { background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: "12px", padding: "10px 12px" };
+    // Richiesta di modifica dell'utente → stile "bolla utente" caldo (come la chat principale)
+    if (t === "ai_request") return { background: "rgba(251,146,60,0.14)", border: "1px solid rgba(251,146,60,0.26)", borderRadius: "12px", padding: "10px 12px", marginLeft: "auto", maxWidth: "85%" };
+    // Risposta/conferma AI → neutro-verde tenue
+    if (t === "ai_update")  return { background: "rgba(52,211,153,0.09)", border: "1px solid rgba(52,211,153,0.22)", borderRadius: "12px", padding: "10px 12px", maxWidth: "92%" };
     return { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: "12px", padding: "10px 12px" };
   };
 
@@ -277,7 +279,11 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, mode = "ai" }: 
             ? (aiCallsLeft !== null && <span style={{ fontSize: "10px", fontWeight: 700, color: aiCallsLeft <= 3 ? "#f87171" : "rgba(255,255,255,0.45)", background: "rgba(255,255,255,0.07)", padding: "2px 8px", borderRadius: "9999px" }}>{aiCallsLeft} modifiche</span>)
             : <span style={{ fontSize: "10px", color: "rgba(255,255,255,0.4)", background: "rgba(255,255,255,0.07)", padding: "2px 8px", borderRadius: "9999px" }}>{displayMessages.length}</span>}
         </div>
-        {onClose && <button onClick={onClose} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px", width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.6)" }}><X style={{ width: "14px", height: "14px" }} /></button>}
+        {(onCollapse || onClose) && (
+          <button onClick={onCollapse ?? onClose} title={onCollapse ? "Riduci" : "Chiudi"} style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "8px", width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.6)" }}>
+            {onCollapse ? <ChevronDown style={{ width: "16px", height: "16px" }} /> : <X style={{ width: "14px", height: "14px" }} />}
+          </button>
+        )}
       </div>
 
       {!user && (
@@ -289,8 +295,8 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, mode = "ai" }: 
       )}
 
       {isAi && (
-        <div style={{ padding: "7px 16px", background: "rgba(168,85,247,0.1)", borderBottom: "1px solid rgba(168,85,247,0.2)", flexShrink: 0 }}>
-          <span style={{ fontSize: "11px", color: "#c4b5fd" }}>✨ Le modifiche aggiornano l'itinerario per tutti i compagni</span>
+        <div style={{ padding: "7px 16px", background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+          <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>✨ Le modifiche aggiornano l'itinerario per tutti i compagni</span>
         </div>
       )}
 
@@ -324,11 +330,11 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, mode = "ai" }: 
             }}
             placeholder={isAi ? "Es: aggiungi una giornata a Oia..." : "Scrivi un commento..."}
             rows={1} disabled={aiPending}
-            style={{ flex: 1, background: "rgba(255,255,255,0.08)", border: `1px solid ${isAi ? "rgba(168,85,247,0.35)" : "rgba(255,255,255,0.13)"}`, borderRadius: "14px", padding: "9px 14px", color: "#fff", fontSize: "13px", outline: "none", resize: "none", maxHeight: "120px", fontFamily: "inherit" }} />
+            style={{ flex: 1, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.13)", borderRadius: "14px", padding: "9px 14px", color: "#fff", fontSize: "13px", outline: "none", resize: "none", maxHeight: "120px", fontFamily: "inherit" }} />
           <button
             onClick={submit}
             disabled={!input.trim() || aiPending}
-            style={{ width: "40px", height: "40px", borderRadius: "50%", border: "none", flexShrink: 0, cursor: input.trim() && !aiPending ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", background: input.trim() && !aiPending ? (isAi ? "linear-gradient(135deg,#a855f7,#6366f1)" : "var(--wd-grad-warm)") : "rgba(255,255,255,0.08)", color: "#fff", transition: "all 0.15s" }}>
+            style={{ width: "40px", height: "40px", borderRadius: "50%", border: "none", flexShrink: 0, cursor: input.trim() && !aiPending ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", background: input.trim() && !aiPending ? "var(--wd-grad-warm)" : "rgba(255,255,255,0.08)", color: "#fff", transition: "all 0.15s" }}>
             {aiPending ? <Loader2 style={{ width: "15px", height: "15px", animation: "wds 0.8s linear infinite" }} /> : <Send style={{ width: "15px", height: "15px" }} />}
           </button>
         </div>
@@ -781,6 +787,7 @@ export default function Trip() {
   const [copied,      setCopied]      = useState(false);
   const [aiOpen,        setAiOpen]        = useState(false);
   const [companionsOpen, setCompanionsOpen] = useState(false);
+  const [aiCollapsed,   setAiCollapsed]   = useState(true); // desktop: dock AI ridotto di default
   const [msgCount,    setMsgCount]    = useState(0);
   const [forking,     setForking]     = useState(false);
 
@@ -994,11 +1001,21 @@ export default function Trip() {
                 itinerary, slug, false
               )}
             </div>
-            {/* Chat modifiche AI in basso (stile chat-app) — solo viaggio definitivo */}
-            {!isTemplate && (
-              <div style={{ height: "300px", flexShrink: 0, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                <TripChat mode="ai" slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />
-              </div>
+            {/* Chat modifiche AI in basso — solo viaggio definitivo e solo nella scheda Itinerario.
+                Collassabile: di default ridotta a una barra per non rubare spazio. */}
+            {!isTemplate && activeTool === "itinerary" && (
+              aiCollapsed ? (
+                <button onClick={() => setAiCollapsed(false)}
+                  style={{ flexShrink: 0, width: "100%", display: "flex", alignItems: "center", gap: "8px", padding: "12px 16px", background: "rgba(13,10,24,0.97)", border: "none", borderTop: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.72)", fontSize: "13px", fontWeight: 700, cursor: "pointer" }}>
+                  <span style={{ fontSize: "15px" }}>✨</span>
+                  <span style={{ flex: 1, textAlign: "left" }}>Modifica con l'AI</span>
+                  <ChevronUp style={{ width: "16px", height: "16px" }} />
+                </button>
+              ) : (
+                <div style={{ height: "300px", flexShrink: 0, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                  <TripChat mode="ai" slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onCollapse={() => setAiCollapsed(true)} />
+                </div>
+              )
             )}
           </div>
           {/* Pannello laterale destro: messaggi dei compagni (o blocco template) */}
@@ -1018,7 +1035,7 @@ export default function Trip() {
         <div style={{
           flex: 1, minHeight: 0,
           overflow: activeTool === "map" ? "hidden" : "auto",
-          paddingBottom: activeTool === "map" ? "0" : `${TOOLBAR_H + (isTemplate ? 48 : 56)}px`,
+          paddingBottom: activeTool === "map" ? "0" : `${TOOLBAR_H + (isTemplate ? 48 : (activeTool === "itinerary" ? 56 : 0))}px`,
         }}>
           {/* Intro per nuovi visitatori — solo template, sulla scheda Itinerario */}
           {isTemplate && (activeTool === "itinerary" || activeTool === "ideas") && (
@@ -1051,8 +1068,8 @@ export default function Trip() {
         {isTemplate && <TemplateBanner onFork={forkTemplate} forking={forking} />}
 
         {/* Barra modifiche AI in basso (stile chat-app) + accesso compagni —
-            solo viaggio definitivo. Sopra la toolbar fissa. */}
-        {!isTemplate && (
+            solo viaggio definitivo, solo scheda Itinerario. Sopra la toolbar fissa. */}
+        {!isTemplate && activeTool === "itinerary" && (
           <div style={{ position: "fixed", bottom: `${TOOLBAR_H}px`, left: 0, right: 0, zIndex: 31, display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "rgba(13,10,24,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
             <button onClick={() => setAiOpen(true)}
               style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", padding: "9px 14px", borderRadius: "14px", background: "rgba(168,85,247,0.14)", border: "1px solid rgba(168,85,247,0.35)", color: "rgba(255,255,255,0.6)", fontSize: "13px", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
