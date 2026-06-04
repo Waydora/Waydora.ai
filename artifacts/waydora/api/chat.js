@@ -243,19 +243,18 @@ Per OGNI cosa che consigli o menzioni come prenotabile, includi SEMPRE nello ste
 - Booking: "https://www.booking.com/searchresults.it.html?ss=DESTINAZIONE"
 - Airbnb: "https://www.airbnb.it/s/DESTINAZIONE/homes"
 
-**Voli:**
-- Skyscanner: "https://www.skyscanner.it/trasporti/voli/IATA_PARTENZA/IATA_ARRIVO/DATA_ANDATA/DATA_RITORNO/?adults=N"
+⚠️ REGOLA URL CRITICA: NON costruire MAI un URL inserendo nomi di città, stazioni o porti dentro il PATH dell'indirizzo (es. ".../da-Napoli-a-Pietrarsa-S.-Giorgio"): producono link ROTTI. Metti i nomi SOLO nei parametri di ricerca (?query=, ?ss=, ?q=, origin=, destination=) usando i formati qui sotto. Nel dubbio, Google Maps è SEMPRE la scelta sicura.
 
-**Treni:**
-- Trainline: "https://www.thetrainline.com/it/biglietti-treno/europa/da-CITTÀ_PARTENZA-a-CITTÀ_ARRIVO"
+**Voli:**
+- Skyscanner: "https://www.skyscanner.it/trasporti/voli/IATA_PARTENZA/IATA_ARRIVO/DATA_ANDATA/DATA_RITORNO/?adults=N" (usa SOLO codici IATA che conosci con certezza; altrimenti usa Google Flights: "https://www.google.com/travel/flights?q=voli+da+CITTÀ+a+CITTÀ")
+
+**Treni / bus / spostamenti locali:**
+- USA SEMPRE Google Maps transit (il più affidabile per qualunque tratta, anche stazioni piccole): "https://www.google.com/maps/dir/?api=1&origin=PARTENZA&destination=ARRIVO&travelmode=transit"
+- (Italia, opzionale) Trenitalia: "https://www.trenitalia.com/" — homepage, l'utente cerca la tratta
 
 **Traghetti / barche:**
-- Direct Ferries: "https://www.directferries.it/cerca.htm?to=PORTO_ARRIVO&from=PORTO_PARTENZA"
-- Ferryhopper: "https://www.ferryhopper.com/it/booking?departure_port=PORTO_PARTENZA&arrival_port=PORTO_ARRIVO"
-
-**Bus:**
-- FlixBus: "https://global.flixbus.com/bus/CITTÀ_PARTENZA-CITTÀ_ARRIVO"
-- Omio: "https://www.omio.it/search-frontend/results/CITTÀ_PARTENZA/CITTÀ_ARRIVO/DATA?adults=1"
+- Google Maps: "https://www.google.com/maps/dir/?api=1&origin=PORTO_PARTENZA&destination=PORTO_ARRIVO&travelmode=transit"
+- Direct Ferries: "https://www.directferries.it/cerca.htm?from=PORTO_PARTENZA&to=PORTO_ARRIVO"
 
 Formato consigliato per ogni opzione:
 - **Nome** — descrizione breve (prezzo indicativo). [Prenota](URL) · [Mappa](URL)
