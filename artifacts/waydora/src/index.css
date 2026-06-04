@@ -347,11 +347,20 @@
   animation: wd-neon-rotate 6s ease-in-out infinite;
 }
 
-/* Bolla utente "delicata" — sfumatura morbida pesca/corallo invece di neon esplosivo */
+/* Bolla utente — gradiente "sunset" che cambia sfumatura in modo dinamico */
 .wd-bubble-user {
-  background: linear-gradient(135deg, rgba(255,184,140,0.92) 0%, rgba(255,143,171,0.92) 100%);
+  background: linear-gradient(120deg,
+    rgba(255,194,140,0.95) 0%,
+    rgba(255,143,171,0.95) 32%,
+    rgba(255,118,150,0.95) 58%,
+    rgba(200,150,255,0.93) 100%);
+  background-size: 260% 260%;
+  animation: wd-grad-shift 8s ease infinite;
   color: #2a1430;
-  box-shadow: 0 4px 18px rgba(255,143,171,0.20);
+  box-shadow: 0 4px 18px rgba(255,143,171,0.22);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wd-bubble-user { animation: none; background-size: 100% 100%; }
 }
 
 @layer base {

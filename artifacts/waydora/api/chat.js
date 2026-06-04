@@ -111,6 +111,37 @@ function fixPastDatesInReply(text) {
   });
 }
 
+// Enforcement affiliati: riscrive nella reply i link "nudi" (Booking, Airbnb,
+// Skyscanner, Viator, TheFork, GetYourGuide senza partner_id) verso gli affiliati
+// monetizzati. Rete di sicurezza nel caso l'AI ignori le istruzioni del prompt.
+function rewriteAffiliateLinks(text) {
+  if (typeof text !== "string" || !text) return text;
+  const STAY22 = "https://booking.stay22.com/waydora/5DPoKS60Cy";
+  const KIWI   = "https://kiwi.tpm.li/HdS8gBCi";
+  const gyg = (raw) => `https://www.getyourguide.com/s/?q=${encodeURIComponent((raw || "").trim())}&partner_id=EPBPR3R`;
+  const stay22 = (dest) => dest ? `${STAY22}?address=${encodeURIComponent(dest)}&adults=2` : STAY22;
+  const URL_RX = /(https?:\/\/[^\s)\]]+)/g;
+  return text.replace(URL_RX, (url) => {
+    let u, host;
+    try { u = new URL(url); host = u.hostname.replace(/^www\./, "").toLowerCase(); }
+    catch { return url; }
+    if (host.includes("booking.com")) return stay22(u.searchParams.get("ss"));
+    if (host.includes("airbnb.")) {
+      const m = u.pathname.match(/\/s\/([^/]+)/);
+      return stay22(m ? decodeURIComponent(m[1]).replace(/-/g, " ") : "");
+    }
+    if (host.includes("skyscanner.")) return KIWI;
+    if (host.includes("google.") && u.pathname.includes("/travel/flights")) return KIWI;
+    if (host.includes("viator.")) return gyg(u.searchParams.get("text"));
+    if (host.includes("thefork.")) return gyg(u.searchParams.get("searchText"));
+    if (host.includes("getyourguide.")) {
+      if (!u.searchParams.has("partner_id")) { u.searchParams.set("partner_id", "EPBPR3R"); return u.toString(); }
+      return url;
+    }
+    return url;
+  });
+}
+
 function ensureAffiliateOnItinerary(itinerary) {
   if (!itinerary || !Array.isArray(itinerary.days)) return itinerary;
   const dest = itinerary.destination || "";
@@ -715,8 +746,9 @@ export default async function handler(req, res) {
       ensureAffiliateOnItinerary(payload.itinerary);
     }
 
-    // Safety-net date passate negli URL della reply
+    // Enforcement affiliati + safety-net date passate negli URL della reply
     if (typeof payload.reply === "string") {
+      payload.reply = rewriteAffiliateLinks(payload.reply);
       payload.reply = fixPastDatesInReply(payload.reply);
     }
 
