@@ -233,7 +233,8 @@ function buildFlightBlock(messages, itinerary) {
   const gf = `https://www.google.com/travel/flights?q=${encodeURIComponent(q)}`;
   const tratta = origin ? `da ${origin} a ${dest}` : `per ${dest}`;
   const when = dates[0] ? ` (andata ${dates[0]}${dates[1] ? `, ritorno ${dates[1]}` : ""})` : "";
-  return `\n\n✈️ Voli ${tratta}${when}:\n• Vedi voli e prezzi: ${gf}\n• Prenota su Kiwi: ${AFF.KIWI_URL}`;
+  // Markdown + etichetta brand: niente domini grezzi (tpm.li) nel testo visibile.
+  return `\n\n✈️ Voli ${tratta}${when}:\n• [Vedi voli e prezzi su Google Flights](${gf})\n• [Prenota su Kiwi](${AFF.KIWI_URL})`;
 }
 
 // ── Alloggi: link generati LATO CODICE (vedi server-standalone.js per i dettagli) ─
@@ -265,15 +266,18 @@ function buildLodgingBlock(messages, itinerary) {
   if (!dest) return null;
 
   const dates = coherentDates(parseItalianDates(datesText));
-  const sp = new URLSearchParams({ address: dest, adults: "2" });
+  const pax = parsePax(fullText) || 2;
+  const sp = new URLSearchParams({ address: dest, adults: String(pax) });
   if (dates[0]) sp.set("checkin", dates[0]);
   if (dates[1]) sp.set("checkout", dates[1]);
   const stay = `${AFF.STAY22_URL}?${sp.toString()}`;
 
-  let block = `\n\n🏨 Dove dormire a ${dest}:\n• Hotel, B&B e ostelli: ${stay}`;
+  // Markdown + etichetta brand (Booking): l'URL grezzo affiliato non si vede mai.
+  let block = `\n\n🏨 Dove dormire a ${dest}:\n• [Cerca hotel, B&B e ostelli su Booking](${stay})`;
+  // Campeggi SOLO se richiesti esplicitamente.
   if (CAMP_ASK_RX.test(fullText)) {
     const camp = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`campeggi ${dest}`)}`;
-    block += `\n• Campeggi in zona: ${camp}`;
+    block += `\n• [Cerca campeggi su Google Maps](${camp})`;
   }
   return block;
 }
@@ -429,6 +433,8 @@ Frasi VIETATE se non seguite dal contenuto:
 Per OGNI cosa che consigli o menzioni come prenotabile, includi SEMPRE nello stesso messaggio un link cliccabile in formato markdown [Testo](URL). Usa questi URL pattern (sostituisci spazi con +):
 
 ⚠️ REGOLA URL CRITICA: NON inserire MAI nomi di città/stazioni/porti nel PATH dell'URL (es. ".../da-Napoli-a-Pietrarsa"): si rompono. I nomi vanno SOLO nei parametri (?query= ?q= ?address= origin= destination=). Per ogni categoria USA ESATTAMENTE il link affiliato qui sotto (da questi Waydora guadagna): è VIETATO sostituirli con Booking/Airbnb/Skyscanner/Viator/TheFork "nudi".
+
+⚠️ ETICHETTE BRAND: ogni link va SEMPRE in formato markdown [Etichetta](url) con etichetta = brand riconoscibile ("Cerca su Booking", "Prenota su Kiwi", "Apri in Google Maps", "Prenota su GetYourGuide"). NON mostrare MAI nel testo visibile gli URL grezzi degli intermediari (stay22.com, tpm.li): l'utente non deve leggere "stay22" né "tpm.li", solo il nome del brand.
 
 **Hotel / alloggi → Stay22 (AFFILIATO, obbligatorio):**
 - "https://booking.stay22.com/waydora/5DPoKS60Cy?address=DESTINAZIONE&adults=2"

@@ -408,11 +408,27 @@ function UserBubble({ text, mediaPreview }: { text: string; mediaPreview?: strin
   );
 }
 const URL_RX = /(https?:\/\/[^\s)]+[^\s).,;:!?])/g;
+const LINK_STYLE = { color: "#fb923c", textDecoration: "underline", wordBreak: "break-all" } as const;
+// Auto-linka gli URL grezzi in un frammento di testo.
+function autoLink(text: string, keyBase: string): ReactNode[] {
+  return text.split(URL_RX).map((p, i) => /^https?:\/\//.test(p)
+    ? <a key={`${keyBase}-a${i}`} href={p} target="_blank" rel="noopener noreferrer sponsored" style={LINK_STYLE}>{p}</a>
+    : <Fragment key={`${keyBase}-t${i}`}>{p}</Fragment>);
+}
+// Renderizza i link markdown [etichetta](url) come <a> con SOLO l'etichetta visibile
+// (così l'URL affiliato grezzo, es. stay22/tpm.li, non appare mai); il resto del
+// testo mantiene l'auto-link degli URL nudi.
 function renderWithLinks(text: string): ReactNode {
-  const parts = text.split(URL_RX);
-  return parts.map((p, i) => /^https?:\/\//.test(p)
-    ? <a key={i} href={p} target="_blank" rel="noopener noreferrer sponsored" style={{ color: "#fb923c", textDecoration: "underline", wordBreak: "break-all" }}>{p}</a>
-    : <Fragment key={i}>{p}</Fragment>);
+  const out: ReactNode[] = [];
+  const rx = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let last = 0, k = 0, m: RegExpExecArray | null;
+  while ((m = rx.exec(text)) !== null) {
+    if (m.index > last) out.push(...autoLink(text.slice(last, m.index), `b${k}`));
+    out.push(<a key={`md${k}`} href={m[2]} target="_blank" rel="noopener noreferrer sponsored" style={LINK_STYLE}>{m[1]}</a>);
+    last = m.index + m[0].length; k++;
+  }
+  if (last < text.length) out.push(...autoLink(text.slice(last), `e${k}`));
+  return out;
 }
 function AssistantBubble({ text }: { text: string }) {
   return <div className="flex justify-start"><div style={{ maxWidth: "85%", padding: "10px 14px", borderRadius: "18px 18px 18px 4px", background: "rgba(32,22,52,0.98)", border: "1px solid rgba(255,255,255,0.11)", color: "rgba(255,255,255,0.88)", fontSize: "14px", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{renderWithLinks(text)}</div></div>;
