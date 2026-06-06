@@ -128,6 +128,18 @@ const CAMP_ASK_RX    = /\b(campegg\w*|camping|glamping|tenda|piazzola)\b/i;
 // Dettagli alloggio (tipo o budget): segnale che l'utente ha RISPOSTO alla domanda
 // dell'AI → solo allora generiamo il link (prima l'AI deve poter chiedere tipo+budget).
 const LODGING_DETAIL_RX = /\b(rifugi\w*|hotel|hostel|ostell\w*|b&b|bnb|airbnb|resort|appartament\w*|agriturism\w*|masseri\w*|pension\w*|glamping|campegg\w*|economic\w*|budget|medio|comfort|lusso|low[\s-]?cost|€\s?\d|\d+\s*(?:€|euro)|(?:a|per)\s+notte)\b/i;
+// Segnali che l'AI ha appena CHIESTO una domanda su alloggi / voli (per capire se
+// l'ultimo messaggio utente è una RISPOSTA a quella domanda). Richiede un "?".
+const LODGING_ASKED_RX = /(allogg\w*|dormir|rifugi|hotel|b&b|ostell\w*|hostel|airbnb|resort|camer[ae]|fascia di prezzo|per notte|tipo preferisci)/i;
+const FLIGHT_ASKED_RX  = /(vol[oi]|aere|partenz|da dove parti|da quale citt|che date|quando (parti|torni|vuoi|pensavi)|quante persone|periodo)/i;
+
+// Testo dell'ultimo messaggio assistant (per capire se ha posto una domanda).
+function lastAssistantText(messages) {
+  for (let i = (messages || []).length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "assistant") return typeof messages[i].content === "string" ? messages[i].content : "";
+  }
+  return "";
+}
 
 function parseItalianDates(text) {
   const today = new Date(); today.setHours(0,0,0,0);
@@ -207,12 +219,20 @@ function buildFlightBlock(messages, itinerary) {
     .map(m => typeof m.content === "string" ? m.content : "");
   const lastText = (userMsgs[userMsgs.length - 1] || "").trim();
   const fullText = userMsgs.join(" ");
-  // Voli = tema più RECENTE? (menzionati, e dopo eventuali alloggi). Vale anche
-  // quando l'utente risponde "da Napoli il 10 luglio" senza ripetere "voli".
+  // Il blocco scatta solo se il MESSAGGIO CORRENTE riguarda i voli: (a) intento voli
+  // nell'ultimo messaggio; (b) l'utente RISPONDE a una domanda voli dell'AI con
+  // partenza/date/persone; (c) chiede i link e i voli sono il tema in corso.
   const flightIdx = lastIdx(userMsgs, FLIGHT_ASK_RX);
   const lodgeIdx = Math.max(lastIdx(userMsgs, LODGING_ASK_RX), lastIdx(userMsgs, CAMP_ASK_RX));
   const flightRecent = flightIdx >= 0 && flightIdx >= lodgeIdx;
-  if (!flightRecent) return null;
+  const aiText = lastAssistantText(messages);
+  const aiAskedFlights = /\?/.test(aiText) && FLIGHT_ASKED_RX.test(aiText);
+  const directIntent = FLIGHT_ASK_RX.test(lastText);
+  const lastFlightDetails = parseItalianDates(lastText).length > 0
+    || /\bda\s+[\p{L}]/iu.test(lastText) || parsePax(lastText) != null;
+  const explicitLink = LINK_ASK_RX.test(lastText);
+  const fire = directIntent || (aiAskedFlights && lastFlightDetails) || (explicitLink && flightRecent);
+  if (!fire) return null;
 
   // Se l'ultimo messaggio apre una NUOVA tratta/destinazione, leggi tutto da lì
   // (non far colare tratta/date di una richiesta precedente). Se invece è un
@@ -235,10 +255,9 @@ function buildFlightBlock(messages, itinerary) {
   const dates = coherentDates(parseItalianDates(ctx));
   const pax = parsePax(ctx);
 
-  // CHIEDI PRIMA (coerente col prompt voli): genera i link SOLO quando c'è la
-  // partenza o le date, o se l'utente li chiede esplicitamente. Sulla prima
-  // richiesta vaga ("voli per X") lascia che l'AI chieda partenza/date/persone.
-  const explicitLink = LINK_ASK_RX.test(lastText);
+  // CHIEDI PRIMA (coerente col prompt voli): anche se l'intento voli è esplicito,
+  // genera i link SOLO quando abbiamo partenza o date (o richiesta esplicita di link).
+  // "voli per X" senza partenza/date → l'AI chiede prima.
   if (!explicitLink && !origin && dates.length === 0) return null;
 
   // Query Google Flights in inglese (il parser NL di Google è anglo-centrico).
@@ -267,13 +286,23 @@ function buildLodgingBlock(messages, itinerary) {
     .map(m => typeof m.content === "string" ? m.content : "");
   const lastText = (userMsgs[userMsgs.length - 1] || "").trim();
   const fullText = userMsgs.join(" ");
-  // Alloggi = tema più RECENTE? (menzionati, e dopo eventuali voli). Non basta
-  // l'ultimo messaggio: l'utente può aver risposto "rifugio, budget medio" senza
-  // ripetere "hotel" → conta che gli alloggi siano il tema in corso.
+  // Il blocco scatta SOLO se il MESSAGGIO CORRENTE riguarda gli alloggi (non basta
+  // che se ne sia parlato prima: se ora l'utente chiede il tragitto, niente link).
+  // Fire se: (a) intento+dettaglio nello stesso messaggio ("hotel economico a Roma",
+  // "campeggio in Sardegna"); (b) l'utente RISPONDE a una domanda alloggi dell'AI;
+  // (c) chiede esplicitamente i link e gli alloggi sono il tema in corso.
   const flightIdx = lastIdx(userMsgs, FLIGHT_ASK_RX);
   const lodgeIdx = Math.max(lastIdx(userMsgs, LODGING_ASK_RX), lastIdx(userMsgs, CAMP_ASK_RX));
   const lodgingRecent = lodgeIdx >= 0 && lodgeIdx >= flightIdx;
-  if (!lodgingRecent) return null;
+  const aiText = lastAssistantText(messages);
+  const aiAskedLodging = /\?/.test(aiText) && LODGING_ASKED_RX.test(aiText);
+  const directIntent = LODGING_ASK_RX.test(lastText) || CAMP_ASK_RX.test(lastText);
+  const detailsInLast = LODGING_DETAIL_RX.test(lastText);
+  const explicitLink = LINK_ASK_RX.test(lastText);
+  const fire = (directIntent && detailsInLast)
+    || (aiAskedLodging && detailsInLast)
+    || (explicitLink && lodgingRecent);
+  if (!fire) return null;
 
   // Se l'ultimo messaggio nomina una città esplicita è una richiesta FRESCA: usa
   // quella + le date di quel messaggio (no leak da argomenti precedenti). Altrimenti
@@ -289,12 +318,6 @@ function buildLodgingBlock(messages, itinerary) {
     datesText = t.city ? t.text : fullText;
   }
   if (!dest) return null; // senza destinazione non costruiamo nulla
-
-  // CHIEDI PRIMA: genera il link SOLO quando l'utente ha dato un dettaglio (tipo o
-  // budget) o chiede esplicitamente i link. Sulla prima richiesta vaga ("alloggi a
-  // X") lascia che l'AI chieda tipo+budget, senza buttare subito il link.
-  const explicitLink = LINK_ASK_RX.test(lastText);
-  if (!explicitLink && !LODGING_DETAIL_RX.test(fullText)) return null;
 
   const dates = coherentDates(parseItalianDates(datesText));
   const pax = parsePax(fullText) || 2;

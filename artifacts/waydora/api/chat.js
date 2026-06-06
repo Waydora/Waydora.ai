@@ -126,6 +126,15 @@ const LODGING_ASK_RX = /\b(dorm\w*|allogg\w*|hotel|b&b|bnb|ostell\w*|hostel|airb
 const CAMP_ASK_RX    = /\b(campegg\w*|camping|glamping|tenda|piazzola)\b/i;
 // Dettagli alloggio (tipo o budget): segnale che l'utente ha risposto → solo allora il link.
 const LODGING_DETAIL_RX = /\b(rifugi\w*|hotel|hostel|ostell\w*|b&b|bnb|airbnb|resort|appartament\w*|agriturism\w*|masseri\w*|pension\w*|glamping|campegg\w*|economic\w*|budget|medio|comfort|lusso|low[\s-]?cost|€\s?\d|\d+\s*(?:€|euro)|(?:a|per)\s+notte)\b/i;
+// L'AI ha appena CHIESTO su alloggi / voli? (per capire se l'ultimo msg è una risposta)
+const LODGING_ASKED_RX = /(allogg\w*|dormir|rifugi|hotel|b&b|ostell\w*|hostel|airbnb|resort|camer[ae]|fascia di prezzo|per notte|tipo preferisci)/i;
+const FLIGHT_ASKED_RX  = /(vol[oi]|aere|partenz|da dove parti|da quale citt|che date|quando (parti|torni|vuoi|pensavi)|quante persone|periodo)/i;
+function lastAssistantText(messages) {
+  for (let i = (messages || []).length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "assistant") return typeof messages[i].content === "string" ? messages[i].content : "";
+  }
+  return "";
+}
 
 function parseItalianDates(text) {
   const today = new Date(); today.setHours(0,0,0,0);
@@ -200,11 +209,19 @@ function buildFlightBlock(messages, itinerary) {
     .map(m => typeof m.content === "string" ? m.content : "");
   const lastText = (userMsgs[userMsgs.length - 1] || "").trim();
   const fullText = userMsgs.join(" ");
-  // Voli = tema più recente? (anche se l'utente risponde "da Napoli il 10 luglio").
+  // Scatta solo se il MESSAGGIO CORRENTE riguarda i voli (intento, risposta a una
+  // domanda voli dell'AI, o richiesta link col tema voli in corso).
   const flightIdx = lastIdx(userMsgs, FLIGHT_ASK_RX);
   const lodgeIdx = Math.max(lastIdx(userMsgs, LODGING_ASK_RX), lastIdx(userMsgs, CAMP_ASK_RX));
   const flightRecent = flightIdx >= 0 && flightIdx >= lodgeIdx;
-  if (!flightRecent) return null;
+  const aiText = lastAssistantText(messages);
+  const aiAskedFlights = /\?/.test(aiText) && FLIGHT_ASKED_RX.test(aiText);
+  const directIntent = FLIGHT_ASK_RX.test(lastText);
+  const lastFlightDetails = parseItalianDates(lastText).length > 0
+    || /\bda\s+[\p{L}]/iu.test(lastText) || parsePax(lastText) != null;
+  const explicitLink = LINK_ASK_RX.test(lastText);
+  const fire = directIntent || (aiAskedFlights && lastFlightDetails) || (explicitLink && flightRecent);
+  if (!fire) return null;
 
   // Ultimo messaggio = nuova tratta? leggi tutto da lì (no leak). Altrimenti
   // follow-up → topic corrente (ultima città citata), non l'itinerario stale.
@@ -227,7 +244,6 @@ function buildFlightBlock(messages, itinerary) {
   const pax = parsePax(ctx);
 
   // CHIEDI PRIMA: link solo con partenza/date note o se richiesti esplicitamente.
-  const explicitLink = LINK_ASK_RX.test(lastText);
   if (!explicitLink && !origin && dates.length === 0) return null;
 
   const q = [
@@ -251,12 +267,21 @@ function buildLodgingBlock(messages, itinerary) {
     .map(m => typeof m.content === "string" ? m.content : "");
   const lastText = (userMsgs[userMsgs.length - 1] || "").trim();
   const fullText = userMsgs.join(" ");
-  // Alloggi = tema più recente? (anche se l'utente risponde "rifugio, medio" senza
-  // ripetere "hotel"). La readiness (tipo/budget o link) decide se generare.
+  // Scatta solo se il MESSAGGIO CORRENTE riguarda gli alloggi: (a) intento+dettaglio
+  // nello stesso msg; (b) risposta a una domanda alloggi dell'AI; (c) richiesta link
+  // col tema alloggi in corso. Una domanda sul tragitto NON deve triggerare.
   const flightIdx = lastIdx(userMsgs, FLIGHT_ASK_RX);
   const lodgeIdx = Math.max(lastIdx(userMsgs, LODGING_ASK_RX), lastIdx(userMsgs, CAMP_ASK_RX));
   const lodgingRecent = lodgeIdx >= 0 && lodgeIdx >= flightIdx;
-  if (!lodgingRecent) return null;
+  const aiText = lastAssistantText(messages);
+  const aiAskedLodging = /\?/.test(aiText) && LODGING_ASKED_RX.test(aiText);
+  const directIntent = LODGING_ASK_RX.test(lastText) || CAMP_ASK_RX.test(lastText);
+  const detailsInLast = LODGING_DETAIL_RX.test(lastText);
+  const explicitLink = LINK_ASK_RX.test(lastText);
+  const fire = (directIntent && detailsInLast)
+    || (aiAskedLodging && detailsInLast)
+    || (explicitLink && lodgingRecent);
+  if (!fire) return null;
 
   // Città fresca nell'ultimo messaggio → usa quella + le sue date (no leak);
   // altrimenti follow-up → itinerario in chat o contesto completo.
@@ -270,10 +295,6 @@ function buildLodgingBlock(messages, itinerary) {
     datesText = t.city ? t.text : fullText;
   }
   if (!dest) return null;
-
-  // CHIEDI PRIMA: link solo dopo che l'utente ha dato tipo/budget o chiede i link.
-  const explicitLink = LINK_ASK_RX.test(lastText);
-  if (!explicitLink && !LODGING_DETAIL_RX.test(fullText)) return null;
 
   const dates = coherentDates(parseItalianDates(datesText));
   const pax = parsePax(fullText) || 2;
