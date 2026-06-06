@@ -144,6 +144,15 @@ function tidyCity(s) {
     .replace(/\b(il|lo|la|i|gli|le|per|circa)\b\s*$/i, "").trim();
 }
 
+// Estrae una città nominata ESPLICITAMENTE ("a/in/per Berlino"). Solo nomi propri
+// (iniziale maiuscola) → capisce se l'ultimo messaggio apre un NUOVO argomento,
+// così non riusiamo destinazione/date di una richiesta precedente.
+function cityFromText(text) {
+  if (!text) return null;
+  const m = text.match(/\b(?:a|ad|in|per|verso)\s+([\p{Lu}][\p{L}'’.-]+(?:\s+[\p{Lu}][\p{L}'’.-]+){0,2})/u);
+  return m ? tidyCity(m[1]) : null;
+}
+
 function parseRoute(fullText, itinerary) {
   let origin = null, dest = null;
   const m = fullText.match(/\bda\s+([\p{L}][\p{L}'’ .-]{1,28}?)\s+a\s+([\p{L}][\p{L}'’ .-]{1,28}?)(?=[\s,.;!?]|$| il | per | dal )/iu);
@@ -169,11 +178,23 @@ function buildFlightBlock(messages, itinerary) {
     || (LINK_ASK_RX.test(lastText) && FLIGHT_ASK_RX.test(fullText));
   if (!wantsFlights) return null;
 
-  const { origin, dest } = parseRoute(fullText, itinerary);
+  // Ultimo messaggio = nuova tratta? leggi tutto da lì (no leak). Altrimenti
+  // follow-up → contesto completo + itinerario.
+  const lastRoute = parseRoute(lastText, null);
+  const fresh = !!(lastRoute.dest || cityFromText(lastText));
+  let origin, dest, ctx;
+  if (fresh) {
+    origin = lastRoute.origin;
+    dest = lastRoute.dest || cityFromText(lastText);
+    ctx = lastText;
+  } else {
+    const r = parseRoute(fullText, itinerary);
+    origin = r.origin; dest = r.dest; ctx = fullText;
+  }
   if (!dest) return null;
 
-  const dates = parseItalianDates(fullText);
-  const pax = parsePax(fullText);
+  const dates = parseItalianDates(ctx);
+  const pax = parsePax(ctx);
   const q = [
     "flights", origin ? `from ${origin}` : null, `to ${dest}`,
     dates[0] ? `on ${dates[0]}` : null,
@@ -198,14 +219,19 @@ function buildLodgingBlock(messages, itinerary) {
     || (LINK_ASK_RX.test(lastText) && LODGING_ASK_RX.test(fullText));
   if (!wantsLodging) return null;
 
-  let dest = itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : null;
-  if (!dest) {
-    const m = fullText.match(/\b(?:a|in|per|verso)\s+([\p{Lu}][\p{L}'’ -]{2,28}?)(?=[\s,.;!?]|$)/u);
-    if (m) dest = tidyCity(m[1]);
+  // Città fresca nell'ultimo messaggio → usa quella + le sue date (no leak);
+  // altrimenti follow-up → itinerario in chat o contesto completo.
+  const cityInLast = cityFromText(lastText);
+  let dest, datesText;
+  if (cityInLast) {
+    dest = cityInLast; datesText = lastText;
+  } else {
+    dest = itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : cityFromText(fullText);
+    datesText = fullText;
   }
   if (!dest) return null;
 
-  const dates = parseItalianDates(fullText);
+  const dates = parseItalianDates(datesText);
   const sp = new URLSearchParams({ address: dest, adults: "2" });
   if (dates[0]) sp.set("checkin", dates[0]);
   if (dates[1]) sp.set("checkout", dates[1]);

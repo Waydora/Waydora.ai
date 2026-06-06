@@ -144,6 +144,16 @@ function tidyCity(s) {
     .replace(/\b(il|lo|la|i|gli|le|per|circa)\b\s*$/i, "").trim();
 }
 
+// Estrae una città nominata ESPLICITAMENTE nel testo ("a/in/per Berlino").
+// Solo nomi propri (iniziale maiuscola) → evita falsi positivi su parole comuni
+// (notti, persone, tenda…). Serve a capire se l'ultimo messaggio apre un NUOVO
+// argomento: in tal caso non riusiamo destinazione/date di una richiesta passata.
+function cityFromText(text) {
+  if (!text) return null;
+  const m = text.match(/\b(?:a|ad|in|per|verso)\s+([\p{Lu}][\p{L}'’.-]+(?:\s+[\p{Lu}][\p{L}'’.-]+){0,2})/u);
+  return m ? tidyCity(m[1]) : null;
+}
+
 function parseRoute(fullText, itinerary) {
   let origin = null, dest = null;
   const m = fullText.match(/\bda\s+([\p{L}][\p{L}'’ .-]{1,28}?)\s+a\s+([\p{L}][\p{L}'’ .-]{1,28}?)(?=[\s,.;!?]|$| il | per | dal | a giugno)/iu);
@@ -172,11 +182,24 @@ function buildFlightBlock(messages, itinerary) {
     || (LINK_ASK_RX.test(lastText) && FLIGHT_ASK_RX.test(fullText));
   if (!wantsFlights) return null;
 
-  const { origin, dest } = parseRoute(fullText, itinerary);
+  // Se l'ultimo messaggio apre una NUOVA tratta/destinazione, leggi tutto da lì
+  // (non far colare tratta/date di una richiesta precedente). Se invece è un
+  // follow-up ("dammi i link"), assembla dal contesto completo + itinerario.
+  const lastRoute = parseRoute(lastText, null);
+  const fresh = !!(lastRoute.dest || cityFromText(lastText));
+  let origin, dest, ctx;
+  if (fresh) {
+    origin = lastRoute.origin;
+    dest = lastRoute.dest || cityFromText(lastText);
+    ctx = lastText;
+  } else {
+    const r = parseRoute(fullText, itinerary);
+    origin = r.origin; dest = r.dest; ctx = fullText;
+  }
   if (!dest) return null; // senza destinazione non costruiamo nulla
 
-  const dates = parseItalianDates(fullText);
-  const pax = parsePax(fullText);
+  const dates = parseItalianDates(ctx);
+  const pax = parsePax(ctx);
 
   // Query Google Flights in inglese (il parser NL di Google è anglo-centrico).
   const q = [
@@ -209,15 +232,20 @@ function buildLodgingBlock(messages, itinerary) {
     || (LINK_ASK_RX.test(lastText) && LODGING_ASK_RX.test(fullText));
   if (!wantsLodging) return null;
 
-  // Destinazione: prima dall'itinerario in chat, poi parsing "a/in/per <Città>".
-  let dest = itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : null;
-  if (!dest) {
-    const m = fullText.match(/\b(?:a|in|per|verso)\s+([\p{Lu}][\p{L}'’ -]{2,28}?)(?=[\s,.;!?]|$)/u);
-    if (m) dest = tidyCity(m[1]);
+  // Se l'ultimo messaggio nomina una città esplicita è una richiesta FRESCA: usa
+  // quella + le date di quel messaggio (no leak da argomenti precedenti). Altrimenti
+  // (follow-up "dammi i link") cadi sull'itinerario in chat o sul contesto completo.
+  const cityInLast = cityFromText(lastText);
+  let dest, datesText;
+  if (cityInLast) {
+    dest = cityInLast; datesText = lastText;
+  } else {
+    dest = itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : cityFromText(fullText);
+    datesText = fullText;
   }
   if (!dest) return null; // senza destinazione non costruiamo nulla
 
-  const dates = parseItalianDates(fullText);
+  const dates = parseItalianDates(datesText);
   const sp = new URLSearchParams({ address: dest, adults: "2" });
   if (dates[0]) sp.set("checkin", dates[0]);
   if (dates[1]) sp.set("checkout", dates[1]);
