@@ -183,13 +183,14 @@ export function useChat() {
 
       let response = await callOnce(data);
 
-      // Retry su 502: Sonnet ha emesso JSON malformato o ha colpito max_tokens.
-      // Stesso pattern del bot Telegram: ritento UNA volta con history slim (ultimi 4 turni).
-      // Meno contesto = più margine per JSON completo + meno probabilità di troncamento.
-      if (response.status === 502 && data.messages?.length > 4) {
-        console.warn("[useChat] 502 da chat endpoint, retry con history ridotta");
-        const slim = { ...data, messages: data.messages.slice(-4) };
-        response = await callOnce(slim);
+      // Retry su 502: Sonnet/OpenRouter a volte risponde 502 in modo TRANSITORIO
+      // (JSON malformato, max_tokens, o errore upstream momentaneo). Ritento UNA
+      // volta SEMPRE — anche a inizio chat (history corta) dove prima non si ritentava
+      // e l'utente vedeva l'errore pur riuscendo al 2° tentativo manuale.
+      if (response.status === 502) {
+        console.warn("[useChat] 502 da chat endpoint, retry automatico");
+        const retryData = (data.messages?.length ?? 0) > 4 ? { ...data, messages: data.messages.slice(-4) } : data;
+        response = await callOnce(retryData);
       }
 
       if (!response.ok) {

@@ -122,8 +122,10 @@ const FLIGHT_ASK_RX = /\b(vol[oi]|aere[oi]|flight|biglietti?\s+aere)/i;
 const LINK_ASK_RX   = /\b(link|links|risultat|dammi|mostrami|fammi vedere|dove sono|non vedo)\b/i;
 // Intento alloggi: stesso fix dei voli (l'AI annuncia e non emette il link).
 // Stem troncati con \w* (non solo \b): "alloggio"/"ostello"/"campeggio" altrimenti non matchano.
-const LODGING_ASK_RX = /\b(dormire|allogg\w*|hotel|b&b|bnb|ostell\w*|hostel|airbnb|pensione|sistemazion\w*|dove\s+stare|dove\s+alloggiare|posto\s+dove\s+dormire)\b/i;
+const LODGING_ASK_RX = /\b(dorm\w*|allogg\w*|hotel|b&b|bnb|ostell\w*|hostel|airbnb|pensione|sistemazion\w*|dove\s+stare|dove\s+alloggiare)\b/i;
 const CAMP_ASK_RX    = /\b(campegg\w*|camping|glamping|tenda|piazzola)\b/i;
+// Dettagli alloggio (tipo o budget): segnale che l'utente ha risposto → solo allora il link.
+const LODGING_DETAIL_RX = /\b(rifugi\w*|hotel|hostel|ostell\w*|b&b|bnb|airbnb|resort|appartament\w*|agriturism\w*|masseri\w*|pension\w*|glamping|campegg\w*|economic\w*|budget|medio|comfort|lusso|low[\s-]?cost|€\s?\d|\d+\s*(?:€|euro)|(?:a|per)\s+notte)\b/i;
 
 function parseItalianDates(text) {
   const today = new Date(); today.setHours(0,0,0,0);
@@ -198,12 +200,11 @@ function buildFlightBlock(messages, itinerary) {
     .map(m => typeof m.content === "string" ? m.content : "");
   const lastText = (userMsgs[userMsgs.length - 1] || "").trim();
   const fullText = userMsgs.join(" ");
-  // Voli vs alloggi (hotel O campeggio): l'intento più recente vince un "dammi i link".
+  // Voli = tema più recente? (anche se l'utente risponde "da Napoli il 10 luglio").
   const flightIdx = lastIdx(userMsgs, FLIGHT_ASK_RX);
   const lodgeIdx = Math.max(lastIdx(userMsgs, LODGING_ASK_RX), lastIdx(userMsgs, CAMP_ASK_RX));
-  const wantsFlights = FLIGHT_ASK_RX.test(lastText)
-    || (LINK_ASK_RX.test(lastText) && flightIdx >= 0 && flightIdx >= lodgeIdx);
-  if (!wantsFlights) return null;
+  const flightRecent = flightIdx >= 0 && flightIdx >= lodgeIdx;
+  if (!flightRecent) return null;
 
   // Ultimo messaggio = nuova tratta? leggi tutto da lì (no leak). Altrimenti
   // follow-up → topic corrente (ultima città citata), non l'itinerario stale.
@@ -224,6 +225,11 @@ function buildFlightBlock(messages, itinerary) {
 
   const dates = coherentDates(parseItalianDates(ctx));
   const pax = parsePax(ctx);
+
+  // CHIEDI PRIMA: link solo con partenza/date note o se richiesti esplicitamente.
+  const explicitLink = LINK_ASK_RX.test(lastText);
+  if (!explicitLink && !origin && dates.length === 0) return null;
+
   const q = [
     "flights", origin ? `from ${origin}` : null, `to ${dest}`,
     dates[0] ? `on ${dates[0]}` : null,
@@ -245,12 +251,12 @@ function buildLodgingBlock(messages, itinerary) {
     .map(m => typeof m.content === "string" ? m.content : "");
   const lastText = (userMsgs[userMsgs.length - 1] || "").trim();
   const fullText = userMsgs.join(" ");
-  // Alloggi (hotel/b&b/ostello O campeggio), o "dammi i link" se è l'intento più recente.
+  // Alloggi = tema più recente? (anche se l'utente risponde "rifugio, medio" senza
+  // ripetere "hotel"). La readiness (tipo/budget o link) decide se generare.
   const flightIdx = lastIdx(userMsgs, FLIGHT_ASK_RX);
   const lodgeIdx = Math.max(lastIdx(userMsgs, LODGING_ASK_RX), lastIdx(userMsgs, CAMP_ASK_RX));
-  const wantsLodging = LODGING_ASK_RX.test(lastText) || CAMP_ASK_RX.test(lastText)
-    || (LINK_ASK_RX.test(lastText) && lodgeIdx >= 0 && lodgeIdx >= flightIdx);
-  if (!wantsLodging) return null;
+  const lodgingRecent = lodgeIdx >= 0 && lodgeIdx >= flightIdx;
+  if (!lodgingRecent) return null;
 
   // Città fresca nell'ultimo messaggio → usa quella + le sue date (no leak);
   // altrimenti follow-up → itinerario in chat o contesto completo.
@@ -264,6 +270,10 @@ function buildLodgingBlock(messages, itinerary) {
     datesText = t.city ? t.text : fullText;
   }
   if (!dest) return null;
+
+  // CHIEDI PRIMA: link solo dopo che l'utente ha dato tipo/budget o chiede i link.
+  const explicitLink = LINK_ASK_RX.test(lastText);
+  if (!explicitLink && !LODGING_DETAIL_RX.test(fullText)) return null;
 
   const dates = coherentDates(parseItalianDates(datesText));
   const pax = parsePax(fullText) || 2;
