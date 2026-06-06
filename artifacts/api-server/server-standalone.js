@@ -121,8 +121,10 @@ const FLIGHT_ASK_RX = /\b(vol[oi]|aere[oi]|flight|biglietti?\s+aere)/i;
 const LINK_ASK_RX   = /\b(link|links|risultat|dammi|mostrami|fammi vedere|dove sono|non vedo)\b/i;
 // Intento "dove dormire": hotel/b&b/ostelli/airbnb/camping. Stesso problema dei voli:
 // l'AI annuncia ("ecco dove dormire") e poi non emette alcun link → lo aggiungiamo noi.
-const LODGING_ASK_RX = /\b(dormire|allogg|hotel|b&b|bnb|ostell|hostel|airbnb|pensione|sistemazion|dove\s+stare|dove\s+alloggiare|posto\s+dove\s+dormire)\b/i;
-const CAMP_ASK_RX    = /\b(campegg|camping|glamping|tenda|in\s+tenda|piazzola)\b/i;
+// NB: gli stem troncati usano \w* (non solo \b) altrimenti "alloggio"/"ostello"/
+// "campeggio" NON matcherebbero (\bcampegg\b fallisce su "campegg-io").
+const LODGING_ASK_RX = /\b(dormire|allogg\w*|hotel|b&b|bnb|ostell\w*|hostel|airbnb|pensione|sistemazion\w*|dove\s+stare|dove\s+alloggiare|posto\s+dove\s+dormire)\b/i;
+const CAMP_ASK_RX    = /\b(campegg\w*|camping|glamping|tenda|piazzola)\b/i;
 
 function parseItalianDates(text) {
   const today = new Date(); today.setHours(0,0,0,0);
@@ -154,6 +156,32 @@ function cityFromText(text) {
   return m ? tidyCity(m[1]) : null;
 }
 
+// Aggancia il contesto al TOPIC corrente: scorre i messaggi dall'ultimo all'indietro
+// finché trova una città citata e ritorna { city, text } dove text = quel messaggio
+// + i successivi. Così date/tratta NON colano da un argomento precedente (es. una
+// vecchia richiesta su Istanbul mentre ora si parla di Berlino).
+function topicContext(userMsgs) {
+  for (let i = userMsgs.length - 1; i >= 0; i--) {
+    const c = cityFromText(userMsgs[i]);
+    if (c) return { city: c, text: userMsgs.slice(i).join(" ") };
+  }
+  return { city: null, text: (userMsgs || []).join(" ") };
+}
+
+// Scarta una data di ritorno/checkout incoerente (<= andata/checkin): sintomo di
+// date prese da topic diversi. Meglio una sola data che un intervallo assurdo.
+function coherentDates(dates) {
+  const d = (dates || []).filter(Boolean);
+  return (d.length >= 2 && d[1] <= d[0]) ? [d[0]] : d;
+}
+
+// Indice dell'ultimo messaggio che matcha rx (-1 se nessuno). Serve a capire quale
+// intento (voli vs alloggi) è il più RECENTE quando l'utente dice solo "dammi i link".
+function lastIdx(userMsgs, rx) {
+  for (let i = (userMsgs || []).length - 1; i >= 0; i--) if (rx.test(userMsgs[i])) return i;
+  return -1;
+}
+
 function parseRoute(fullText, itinerary) {
   let origin = null, dest = null;
   const m = fullText.match(/\bda\s+([\p{L}][\p{L}'’ .-]{1,28}?)\s+a\s+([\p{L}][\p{L}'’ .-]{1,28}?)(?=[\s,.;!?]|$| il | per | dal | a giugno)/iu);
@@ -176,29 +204,34 @@ function buildFlightBlock(messages, itinerary) {
     .map(m => typeof m.content === "string" ? m.content : "");
   const lastText = (userMsgs[userMsgs.length - 1] || "").trim();
   const fullText = userMsgs.join(" ");
-  // Intento voli: la parola "volo" nell'ultimo messaggio, oppure una richiesta di
-  // link/risultati quando i voli erano già il tema della conversazione.
+  // Indici dell'ultimo intento voli vs alloggi (hotel O campeggio): chi è più
+  // recente "vince" un generico "dammi i link". Evita di rispondere coi voli
+  // quando l'utente, dopo i voli, ha chiesto un hotel e poi "dammi i link".
+  const flightIdx = lastIdx(userMsgs, FLIGHT_ASK_RX);
+  const lodgeIdx = Math.max(lastIdx(userMsgs, LODGING_ASK_RX), lastIdx(userMsgs, CAMP_ASK_RX));
   const wantsFlights = FLIGHT_ASK_RX.test(lastText)
-    || (LINK_ASK_RX.test(lastText) && FLIGHT_ASK_RX.test(fullText));
+    || (LINK_ASK_RX.test(lastText) && flightIdx >= 0 && flightIdx >= lodgeIdx);
   if (!wantsFlights) return null;
 
   // Se l'ultimo messaggio apre una NUOVA tratta/destinazione, leggi tutto da lì
   // (non far colare tratta/date di una richiesta precedente). Se invece è un
-  // follow-up ("dammi i link"), assembla dal contesto completo + itinerario.
+  // follow-up, aggancia al topic corrente (ultima città citata), non all'itinerario.
   const lastRoute = parseRoute(lastText, null);
-  const fresh = !!(lastRoute.dest || cityFromText(lastText));
   let origin, dest, ctx;
-  if (fresh) {
+  if (lastRoute.dest || cityFromText(lastText)) {
     origin = lastRoute.origin;
     dest = lastRoute.dest || cityFromText(lastText);
     ctx = lastText;
   } else {
-    const r = parseRoute(fullText, itinerary);
-    origin = r.origin; dest = r.dest; ctx = fullText;
+    const t = topicContext(userMsgs);
+    const r = parseRoute(t.text, null);
+    origin = r.origin || (itinerary?.departure ? String(itinerary.departure).split(",")[0].trim() : null);
+    dest = r.dest || t.city || (itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : null);
+    ctx = t.text;
   }
   if (!dest) return null; // senza destinazione non costruiamo nulla
 
-  const dates = parseItalianDates(ctx);
+  const dates = coherentDates(parseItalianDates(ctx));
   const pax = parsePax(ctx);
 
   // Query Google Flights in inglese (il parser NL di Google è anglo-centrico).
@@ -226,10 +259,12 @@ function buildLodgingBlock(messages, itinerary) {
     .map(m => typeof m.content === "string" ? m.content : "");
   const lastText = (userMsgs[userMsgs.length - 1] || "").trim();
   const fullText = userMsgs.join(" ");
-  // Intento alloggi nell'ultimo messaggio, oppure richiesta di link/risultati
-  // ("dammi i link", "non vedo nulla") quando dormire era già il tema.
-  const wantsLodging = LODGING_ASK_RX.test(lastText)
-    || (LINK_ASK_RX.test(lastText) && LODGING_ASK_RX.test(fullText));
+  // Intento alloggi (hotel/b&b/ostello O campeggio) nell'ultimo messaggio, oppure
+  // "dammi i link"/"non vedo" SE dormire è l'intento più recente (non voli dopo).
+  const flightIdx = lastIdx(userMsgs, FLIGHT_ASK_RX);
+  const lodgeIdx = Math.max(lastIdx(userMsgs, LODGING_ASK_RX), lastIdx(userMsgs, CAMP_ASK_RX));
+  const wantsLodging = LODGING_ASK_RX.test(lastText) || CAMP_ASK_RX.test(lastText)
+    || (LINK_ASK_RX.test(lastText) && lodgeIdx >= 0 && lodgeIdx >= flightIdx);
   if (!wantsLodging) return null;
 
   // Se l'ultimo messaggio nomina una città esplicita è una richiesta FRESCA: usa
@@ -240,12 +275,14 @@ function buildLodgingBlock(messages, itinerary) {
   if (cityInLast) {
     dest = cityInLast; datesText = lastText;
   } else {
-    dest = itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : cityFromText(fullText);
-    datesText = fullText;
+    // Follow-up: ultima città citata (con le sue date) → poi itinerario in chat.
+    const t = topicContext(userMsgs);
+    dest = t.city || (itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : null);
+    datesText = t.city ? t.text : fullText;
   }
   if (!dest) return null; // senza destinazione non costruiamo nulla
 
-  const dates = parseItalianDates(datesText);
+  const dates = coherentDates(parseItalianDates(datesText));
   const sp = new URLSearchParams({ address: dest, adults: "2" });
   if (dates[0]) sp.set("checkin", dates[0]);
   if (dates[1]) sp.set("checkout", dates[1]);
