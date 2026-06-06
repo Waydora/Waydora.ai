@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, Fragment, type ReactNode } fr
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  useListSuggestions, useChat, useSaveItinerary,
+  useListSuggestions, useChat, useSaveItinerary, fetchChatChunk,
   type ChatMessage, type ItineraryData,
 } from "@/hooks/api";
 import { useAuth } from "@/hooks/auth";
@@ -618,6 +618,30 @@ function LandingNavActions({ onLoginClick, onEnterChat }: { onLoginClick: () => 
   );
 }
 
+// ── Generazione progressiva ─────────────────────────────────────────────────
+// Per viaggi lunghi (≥ soglia) mostriamo subito i primi giorni e prefetchiamo il
+// resto in background, così "Aggiungi gli altri giorni" è istantaneo.
+const PROGRESSIVE_THRESHOLD = 5; // da 5 giorni in su
+const FIRST_CHUNK_DAYS = 2;      // "un paio di giorni" subito
+
+// Estrae il numero di giorni richiesto dal testo (es. "6 giorni", "una settimana").
+function parseRequestedDays(text: string): number {
+  if (!text) return 0;
+  const t = text.toLowerCase();
+  if (/\bsettiman/.test(t)) {
+    const w = t.match(/(\d+)\s*settiman/);
+    return w ? Math.min(parseInt(w[1], 10) * 7, 21) : 7;
+  }
+  const m = t.match(/(\d+)\s*(giorni|giorno|gg|notti|notte|days?)/);
+  return m ? Math.min(parseInt(m[1], 10), 21) : 0;
+}
+
+type MoreDays = {
+  status: "loading" | "ready" | "error";
+  range: { from: number; to: number };
+  days: any[] | null;
+};
+
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function Home() {
   const [turns,            setTurns]            = useState<ChatTurn[]>([]);
@@ -627,6 +651,10 @@ export default function Home() {
   // Storico itinerari per "Annulla modifica": ogni edit salva la versione precedente
   // (max 10) così l'utente può tornare indietro se l'AI stravolge il viaggio.
   const [itineraryHistory, setItineraryHistory] = useState<ItineraryData[]>([]);
+  // Giorni restanti prefetchati in background (generazione progressiva).
+  const [moreDays, setMoreDays] = useState<MoreDays | null>(null);
+  const [appendPending, setAppendPending] = useState(false); // click "Aggiungi" mentre il prefetch è in corso
+  const appendRequestedRef = useRef(false); // mirror di appendPending leggibile nelle callback async
   const [apiMessages,      setApiMessages]      = useState<ChatMessage[]>([]);
   const [sidebarOpen,      setSidebarOpen]      = useState(true);
   const [mobileSidebarOpen,setMobileSidebarOpen]= useState(false);
@@ -730,6 +758,54 @@ export default function Home() {
     sessionStorage.setItem("waydora_in_app", "1");
   }, []);
 
+  // ── Generazione progressiva: gestione dei giorni restanti ──────────────────
+  const moreDaysReqRef = useRef<any>(null);
+
+  // Accoda i giorni prefetchati all'itinerario corrente e alla card del turno.
+  const applyMoreDays = useCallback((extra: any[]) => {
+    setCurrentItinerary(prev => prev ? { ...prev, days: [...((prev as any).days || []), ...extra] } as ItineraryData : prev);
+    setTurns(prev => {
+      // aggiorna l'ultima card itinerario presente
+      let idx = -1;
+      for (let i = prev.length - 1; i >= 0; i--) { if (prev[i].itinerary) { idx = i; break; } }
+      if (idx === -1) return prev;
+      return prev.map((t, i) => (i === idx && t.itinerary)
+        ? { ...t, itinerary: { ...t.itinerary, days: [...((t.itinerary as any).days || []), ...extra] } as ItineraryData }
+        : t);
+    });
+    setMapReady(false);
+  }, []);
+
+  // Lancia (o rilancia) il prefetch in background dei giorni restanti.
+  const startMoreDaysPrefetch = useCallback((req: any) => {
+    moreDaysReqRef.current = req;
+    setMoreDays({ status: "loading", range: { from: req.progressive.from, to: req.progressive.to }, days: null });
+    fetchChatChunk(req, true)
+      .then(res => {
+        const extra = res.itinerary?.days as any[] | undefined;
+        if (Array.isArray(extra) && extra.length > 0) {
+          if (appendRequestedRef.current) { applyMoreDays(extra); setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false; }
+          else setMoreDays(m => m ? { ...m, status: "ready", days: extra } : m);
+        } else {
+          setMoreDays(m => m ? { ...m, status: "error" } : m);
+        }
+      })
+      .catch(() => setMoreDays(m => m ? { ...m, status: "error" } : m));
+  }, [applyMoreDays]);
+
+  // Click su "Aggiungi gli altri giorni": se pronti → istantaneo; se in corso →
+  // accoda appena arrivano; se errore → riprova.
+  const handleAddMoreDays = useCallback(() => {
+    if (!moreDays) return;
+    if (moreDays.status === "ready" && moreDays.days) {
+      applyMoreDays(moreDays.days); setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false;
+    } else if (moreDays.status === "loading") {
+      appendRequestedRef.current = true; setAppendPending(true);
+    } else if (moreDays.status === "error" && moreDaysReqRef.current) {
+      appendRequestedRef.current = true; setAppendPending(true); startMoreDaysPrefetch(moreDaysReqRef.current);
+    }
+  }, [moreDays, applyMoreDays, startMoreDaysPrefetch]);
+
   const handleSubmit = useCallback((overridePrompt?: string, fromSuggestion = false) => {
     const promptText = (overridePrompt ?? input).trim();
     if ((!promptText && !mediaContent) || chatMutation.isPending) return;
@@ -764,10 +840,20 @@ export default function Home() {
     const mediaForBackend = mediaContent ? { mediaType: mediaContent.mediaType, data: mediaContent.data } : undefined;
     setMediaContent(null);
 
+    // Generazione progressiva: solo su CREAZIONE di un viaggio lungo (≥ soglia) e
+    // senza media. Mostriamo prima i primi giorni, poi prefetchiamo il resto.
+    const reqDays = parseRequestedDays(`${promptText} ${apiMessages.map(m => typeof m.content === "string" ? m.content : "").join(" ")}`);
+    const useProgressive = !currentItinerary && !mediaForBackend && reqDays >= PROGRESSIVE_THRESHOLD;
+    setMoreDays(null); appendRequestedRef.current = false;
+    const userTier = user ? "free" : "guest";
+
     chatMutation.mutate(
       {
-        data: { messages: newMsgs, existingItinerary: currentItinerary, mediaContent: mediaForBackend, userTier: user ? "free" : "guest" } as any,
-        useRailway: shouldUseRailway(promptText, !!currentItinerary),
+        data: {
+          messages: newMsgs, existingItinerary: currentItinerary, mediaContent: mediaForBackend, userTier,
+          progressive: useProgressive ? { totalDays: reqDays, from: 1, to: FIRST_CHUNK_DAYS } : undefined,
+        } as any,
+        useRailway: shouldUseRailway(promptText, !!currentItinerary) || useProgressive,
       },
       {
         onSuccess: async (data) => {
@@ -777,6 +863,24 @@ export default function Home() {
             // precedente nello storico così "Annulla" può ripristinarla.
             if (currentItinerary) setItineraryHistory(prev => [...prev, currentItinerary].slice(-10));
             setCurrentItinerary(data.itinerary);
+
+            // Generazione progressiva: se abbiamo mostrato solo i primi giorni,
+            // prefetcha in background i restanti così "Aggiungi" è istantaneo.
+            const total = data.itinerary.durationDays || reqDays;
+            const have = data.itinerary.days?.length || 0;
+            if (useProgressive && have > 0 && have < total) {
+              const from = have + 1;
+              startMoreDaysPrefetch({
+                messages: [
+                  ...newMsgs,
+                  { role: "assistant", content: data.reply },
+                  { role: "user", content: `Perfetto. Ora continua l'itinerario: genera i giorni da ${from} a ${total}.` },
+                ],
+                existingItinerary: data.itinerary,
+                userTier,
+                progressive: { totalDays: total, from, to: total },
+              });
+            }
           }
           const updatedTurns = [...turns.filter(t => t.id !== turnId), { id: turnId, userMessage: promptText || "📎 Media allegato", assistantReply: data.reply, itinerary: data.itinerary ?? undefined, mediaPreview }];
           setTurns(updatedTurns);
@@ -805,7 +909,7 @@ export default function Home() {
         },
       }
     );
-  }, [input, mediaContent, apiMessages, currentItinerary, turns, currentSessionId, chatMutation, toast, persistSession, enterApp, user]);
+  }, [input, mediaContent, apiMessages, currentItinerary, turns, currentSessionId, chatMutation, toast, persistSession, enterApp, user, startMoreDaysPrefetch]);
 
   const handleSave = async () => {
     if (!currentItinerary) return;
@@ -841,6 +945,7 @@ export default function Home() {
     setInput(""); setMediaContent(null); setCurrentSessionId(undefined);
     setActiveView("chat"); setMobileScreen("chat");
     setMapReady(false); setMapNotifShown(false);
+    setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false;
     // Reset stato analytics di sessione: nuova chat = nuovo funnel.
     sessionStartedRef.current = false;
     firstItineraryDoneRef.current = false;
@@ -856,12 +961,14 @@ export default function Home() {
     }
     if (currentSessionId && String(currentSessionId) === String(id)) {
       setTurns([]); setApiMessages([]); setCurrentItinerary(undefined); setCurrentSessionId(undefined); setItineraryHistory([]);
+      setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false;
     }
   }, [user, removeDbSession, localSessions, currentSessionId]);
 
   const handleLoadSession = (s: any) => {
     setTurns(s.turns ?? []); setApiMessages(s.apiMessages ?? s.api_messages ?? []);
     setCurrentItinerary(s.itinerary); setCurrentSessionId(s.id?.toString()); setItineraryHistory([]);
+    setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false;
     enterApp(); setActiveView("chat"); setMobileScreen("chat");
     // Sessione già avviata in passato: non rilanciare chat_started / AHA.
     sessionStartedRef.current = true;
@@ -892,6 +999,7 @@ export default function Home() {
       { role: "assistant", content: reply },
     ]);
     setCurrentItinerary(it); setItineraryHistory([]);
+    setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false;
     setCurrentSessionId(undefined);
     enterApp(); setActiveView("chat"); setMobileScreen("chat");
     sessionStartedRef.current = true;
@@ -1002,6 +1110,20 @@ export default function Home() {
       <div className="lg:hidden">{mobileHeader}</div>
       <div ref={chatScrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "20px" }}>
         {turns.length === 0 ? <WelcomeMessage userName={user?.name} onPrompt={p => handleSubmit(p, true)} /> : turns.map(turn => <ChatTurnView key={turn.id} turn={turn} />)}
+        {moreDays && (
+          <div style={{ display: "flex", justifyContent: "center", padding: "4px 0 8px" }}>
+            <button onClick={handleAddMoreDays} disabled={appendPending}
+              style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "13px", fontWeight: 700, padding: "10px 18px", borderRadius: "9999px", cursor: appendPending ? "default" : "pointer",
+                background: moreDays.status === "error" ? "rgba(255,255,255,0.09)" : "var(--wd-grad-warm)",
+                color: "#fff", border: "none", opacity: appendPending ? 0.8 : 1 }}>
+              {moreDays.status === "error"
+                ? <>↻ Riprova a generare gli altri giorni</>
+                : (moreDays.status === "loading" || appendPending)
+                  ? <><Loader2 className="animate-spin" style={{ width: "14px", height: "14px" }} />{appendPending ? "Aggiungo gli altri giorni…" : "Preparo gli altri giorni in background…"}</>
+                  : <><Plus style={{ width: "14px", height: "14px" }} />Aggiungi gli altri giorni ({moreDays.range.to - moreDays.range.from + 1})</>}
+            </button>
+          </div>
+        )}
       </div>
       <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
         <QuickSuggestions onSelect={p => handleSubmit(p, true)} visible={hasItinerary && !chatMutation.isPending} />

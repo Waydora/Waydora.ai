@@ -135,10 +135,34 @@ export function getGetSharedItineraryQueryKey(slug: string) {
   return ["itinerary", slug];
 }
 
+// Generazione progressiva: per viaggi lunghi si chiede prima un chunk di giorni
+// (es. 1-2), poi il resto in background. `progressive` indica il range richiesto.
+export type ProgressiveRange = { totalDays: number; from: number; to: number };
+export type ChatData = {
+  messages: ChatMessage[];
+  existingItinerary?: ItineraryData;
+  mediaContent?: any;
+  userTier?: string;
+  progressive?: ProgressiveRange;
+};
+
+// Chiamata singola (senza retry/stato mutation): usata per il prefetch in background
+// dei giorni restanti, in parallelo al turno principale gestito da useChat.
+export async function fetchChatChunk(data: ChatData, useRailway?: boolean): Promise<{ reply: string; itinerary?: ItineraryData }> {
+  const url = useRailway ? `${API_BASE}/chat` : `${CHAT_BASE}/api/chat`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error(`chunk ${response.status}`);
+  return response.json() as Promise<{ reply: string; itinerary?: ItineraryData }>;
+}
+
 export function useChat() {
   return useMutation({
     mutationFn: async ({ data, useRailway }: {
-      data: { messages: ChatMessage[]; existingItinerary?: ItineraryData; mediaContent?: any; userTier?: string };
+      data: ChatData;
       useRailway?: boolean;
     }) => {
       // useRailway=true → endpoint Railway (Sonnet, no timeout 60s, max qualità)

@@ -647,8 +647,15 @@ async function enrichWithTikTok(messages) {
 // l'ultimo turno utente è cortissimo ("medio") e isolato sembrerebbe una chat banale.
 // Senza guardare la storia, il router instraderebbe al modello cheap con 1200 token,
 // troppo pochi per emettere l'itinerario completo che l'AI vuole generare.
-function routeRequest({ messages, existingItinerary, hasMedia, tier }) {
+function routeRequest({ messages, existingItinerary, hasMedia, tier, progressive }) {
   const cap = TIER_TOKENS[tier] ?? TIER_TOKENS.guest;
+
+  // Generazione progressiva → SEMPRE Sonnet (qualità POI/coords), token dimensionati
+  // sul numero di giorni del chunk richiesto (più piccolo = più veloce).
+  if (progressive && progressive.totalDays > 0) {
+    const n = Math.max(1, progressive.to - progressive.from + 1);
+    return { model: M.SONNET, maxTokens: Math.min(cap, Math.max(4000, n * 2200 + 2500)), kind: `progressive-${progressive.from}-${progressive.to}`, days: n };
+  }
   const userMsgs = (messages || []).filter(m => m.role === "user");
   const lastMsg = userMsgs[userMsgs.length - 1]?.content || "";
   const lastText = (typeof lastMsg === "string" ? lastMsg : "").toLowerCase().trim();
@@ -766,16 +773,26 @@ async function callOpenRouter({ model, system, messages, maxTokens }) {
 }
 
 // Wrapper compat: gestisce routing + fallback automatico su Sonnet
-async function callAI(messages, existingItinerary, mediaContent, userTier = "guest") {
+async function callAI(messages, existingItinerary, mediaContent, userTier = "guest", progressive = null) {
   // Iniettiamo la data corrente: senza, il modello hallucina date passate negli URL Skyscanner/Booking → 404.
   const today = new Date().toISOString().slice(0, 10);
   const dateHint = `\n\n━━━ DATA OGGI ━━━\nOggi è ${today}. TUTTE le date che metti in URL (Skyscanner, Booking, Airbnb, etc) DEVONO essere uguali o successive a oggi. NON usare mai date passate. Se l'utente non ha dato date esatte, usa il primo mese plausibile da oggi in avanti.`;
   const baseSystem = SYSTEM_PROMPT + dateHint;
-  const systemPrompt = existingItinerary
+  let systemPrompt = existingItinerary
     ? `${baseSystem}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`
     : baseSystem;
 
-  const route = routeRequest({ messages, existingItinerary, hasMedia: !!mediaContent, tier: userTier });
+  // Generazione progressiva: chiede SOLO un sottoinsieme di giorni per mostrare
+  // subito qualcosa all'utente; il resto arriva con una seconda chiamata.
+  if (progressive && progressive.totalDays > 0) {
+    const cont = progressive.from > 1;
+    systemPrompt += `\n\n━━━ GENERAZIONE PARZIALE (mostra-subito) ━━━\nL'utente vuole un viaggio di ${progressive.totalDays} giorni. Per mostrarglielo subito SENZA attesa, genera ORA SOLO i giorni da ${progressive.from} a ${progressive.to}.\n- Imposta "durationDays": ${progressive.totalDays} (il TOTALE reale del viaggio).\n- "days" deve contenere ESCLUSIVAMENTE i giorni da ${progressive.from} a ${progressive.to} (campo "day" numerato ${progressive.from}, ${progressive.from + 1}, …).\n- Pianifica mentalmente l'intero viaggio di ${progressive.totalDays} giorni (basi/città coerenti) ma emetti solo questi giorni.` +
+      (cont
+        ? `\n- CONTINUAZIONE: i giorni 1..${progressive.from - 1} ESISTONO GIÀ (vedi "Itinerario attuale"). NON ripeterli e NON duplicare attività; prosegui in piena continuità (stesse città/logica di spostamento).\n- Ometti packingList e tripPhotos (già presenti): metti packingList: [] e niente tripPhotos.`
+        : `\n- Includi normalmente title, destination, vibe, bestSeason, packingList e tripPhotos del viaggio intero.`);
+  }
+
+  const route = routeRequest({ messages, existingItinerary, hasMedia: !!mediaContent, tier: userTier, progressive });
   const orMessages = buildORMessages(messages, mediaContent);
 
   console.log(`[callAI] kind=${route.kind} model=${route.model} days=${route.days} maxTokens=${route.maxTokens}`);
@@ -1034,10 +1051,10 @@ const server = http.createServer(async (req, res) => {
     req.on("data", c => { body += c; });
     req.on("end", async () => {
       try {
-        const { messages, existingItinerary, mediaContent, userTier } = JSON.parse(body);
-        console.log(`[chat] msgs=${messages?.length}, tier=${userTier}, hasItinerary=${!!existingItinerary}`);
+        const { messages, existingItinerary, mediaContent, userTier, progressive } = JSON.parse(body);
+        console.log(`[chat] msgs=${messages?.length}, tier=${userTier}, hasItinerary=${!!existingItinerary}, progressive=${progressive ? `${progressive.from}-${progressive.to}/${progressive.totalDays}` : "no"}`);
         const enrichedMessages = await enrichWithTikTok(messages);
-        let aiResult = await callAI(enrichedMessages, existingItinerary, mediaContent, userTier);
+        let aiResult = await callAI(enrichedMessages, existingItinerary, mediaContent, userTier, progressive);
         let raw = aiResult.text;
         let stopReason = aiResult.stopReason;
 
