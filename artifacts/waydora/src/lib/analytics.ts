@@ -44,7 +44,8 @@ export type AnalyticsEvent =
   | "start_page_viewed"
   | "start_destination_submitted"
   | "start_activation"
-  | "template_forked";
+  | "template_forked"
+  | "ready_trip_opened";
 
 // Proprietà: solo valori non-PII (id tecnici, enum, bool, conteggi, hash).
 export type AnalyticsProps = Record<string, string | number | boolean | null | undefined>;

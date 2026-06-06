@@ -8,14 +8,30 @@ type MapActivity = {
   title: string;
   time: string;
   category: string;
+  transportMode?: string | null;
   coordinates?: { lat: number; lng: number } | null;
 };
 type MapDay = {
   day: number;
+  city?: string | null;
   activities: MapActivity[];
 };
 type ItineraryData = {
   days: MapDay[];
+  departure?: string | null;
+  departureCoords?: { lat: number; lng: number } | null;
+};
+
+// Mezzi che seguono le strade → tracciamo un percorso reale (linea piena).
+const ROAD_MODES = ["car", "taxi", "bus"];
+// Mezzi "in linea d'aria" o su rotaia → linea tratteggiata diretta.
+const DASHED_MODES = ["flight", "train", "ferry"];
+const CONNECTOR_COLOR = "#334155"; // slate-700, distinto dalle route a piedi colorate per giorno
+
+type Connector = {
+  from: google.maps.LatLngLiteral;
+  to: google.maps.LatLngLiteral;
+  mode: "road" | "dashed";
 };
 
 const DAY_COLORS = [
@@ -28,15 +44,32 @@ function getDayColor(dayIndex: number): string {
   return DAY_COLORS[dayIndex % DAY_COLORS.length]!;
 }
 
+// Distanza in km tra due coordinate (Haversine) — decide auto vs aereo quando
+// il mezzo non è esplicito.
+function haversineKm(a: google.maps.LatLngLiteral, b: google.maps.LatLngLiteral): number {
+  const R = 6371;
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 type MarkerData = {
   key: string; lat: number; lng: number;
   day: number; dayIndex: number;
   title: string; time: string; category: string;
 };
 
-// Rileva se siamo su mobile (viewport < 1024px)
-function isMobileViewport(): boolean {
-  return typeof window !== "undefined" && window.innerWidth < 1024;
+// Rileva un dispositivo touch (non la larghezza viewport): su un laptop 13-15"
+// con scaling Windows la larghezza CSS scende sotto 1024px pur essendo desktop,
+// e i controlli zoom sparivano. Su touch usiamo gesture "greedy" e niente zoom UI;
+// su non-touch (qualsiasi desktop) mostriamo sempre i controlli zoom.
+function isTouchDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia?.("(pointer: coarse)").matches
+    || "ontouchstart" in window
+    || navigator.maxTouchPoints > 0;
 }
 
 export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
@@ -45,15 +78,22 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
   const markersRef = useRef<google.maps.Marker[]>([]);
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
 
-  const { markers, polylinesByDay } = useMemo(() => {
+  const { markers, polylinesByDay, connectors } = useMemo(() => {
     const out: MarkerData[] = [];
     const byDay: Record<number, google.maps.LatLngLiteral[]> = {};
+    // Anagrafica per-giorno per costruire i collegamenti tra città/tappe.
+    const dayInfo: { first: google.maps.LatLngLiteral; last: google.maps.LatLngLiteral; city: string; mode: string | null }[] = [];
 
     itinerary.days.forEach((day: MapDay, dayIndex: number) => {
       let actIdx = 0;
       const dayPoints: google.maps.LatLngLiteral[] = [];
+      // Mezzo di spostamento dichiarato dall'AI per questo giorno (prima attività transport).
+      let dayMode: string | null = null;
       for (const a of day.activities) {
         actIdx++;
+        if ((a.category || "").toLowerCase() === "transport" && a.transportMode && !dayMode) {
+          dayMode = a.transportMode.toLowerCase();
+        }
         if (a.coordinates?.lat && a.coordinates?.lng) {
           out.push({
             key: `${day.day}-${actIdx}`,
@@ -65,16 +105,50 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
         }
       }
       if (dayPoints.length > 1) byDay[dayIndex] = dayPoints;
+      if (dayPoints.length > 0) {
+        dayInfo[dayIndex] = {
+          first: dayPoints[0]!,
+          last: dayPoints[dayPoints.length - 1]!,
+          city: (day.city || "").toLowerCase().trim(),
+          mode: dayMode,
+        };
+      }
     });
 
-    return { markers: out, polylinesByDay: byDay };
+    // Classifica un mezzo in stile linea: strada (piena) vs tratteggiata.
+    // Senza mezzo esplicito: < 200km in auto (piena), oltre → tratteggiata (volo).
+    const classify = (mode: string | null, from: google.maps.LatLngLiteral, to: google.maps.LatLngLiteral): "road" | "dashed" => {
+      if (mode && ROAD_MODES.includes(mode)) return "road";
+      if (mode && DASHED_MODES.includes(mode)) return "dashed";
+      return haversineKm(from, to) <= 200 ? "road" : "dashed";
+    };
+
+    const conns: Connector[] = [];
+
+    // Tragitto di andata: città di partenza → prima tappa del giorno 1.
+    const firstDay = dayInfo.find(Boolean);
+    if (itinerary.departureCoords?.lat && itinerary.departureCoords?.lng && firstDay) {
+      const from = { lat: itinerary.departureCoords.lat, lng: itinerary.departureCoords.lng };
+      conns.push({ from, to: firstDay.first, mode: classify(firstDay.mode, from, firstDay.first) });
+    }
+
+    // Collegamenti tra giorni consecutivi quando cambia città (o c'è un salto > 25km).
+    for (let i = 0; i < dayInfo.length - 1; i++) {
+      const a = dayInfo[i]; const b = dayInfo[i + 1];
+      if (!a || !b) continue;
+      const cityChanged = a.city && b.city ? a.city !== b.city : haversineKm(a.last, b.first) > 25;
+      if (!cityChanged) continue;
+      conns.push({ from: a.last, to: b.first, mode: classify(b.mode, a.last, b.first) });
+    }
+
+    return { markers: out, polylinesByDay: byDay, connectors: conns };
   }, [itinerary]);
 
   useEffect(() => {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
     if (!apiKey || !mapRef.current) return;
 
-    const mobile = isMobileViewport();
+    const mobile = isTouchDevice();
 
     const loadMap = () => {
       if (!mapRef.current) return;
@@ -90,9 +164,11 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
 
         // Su mobile: greedy = un dito per muovere la mappa, nessuno zoom controls
         gestureHandling: mobile ? "greedy" : "cooperative",
-        zoomControl: !mobile,          // ← nasconde + e - su mobile
+        zoomControl: !mobile,          // ← nasconde + e - solo su touch
         zoomControlOptions: mobile ? undefined : {
-          position: google.maps.ControlPosition.RIGHT_BOTTOM,
+          // RIGHT_TOP: sempre visibile anche su colonna mappa stretta (15"),
+          // non collide con la legenda giorni in basso a sinistra.
+          position: google.maps.ControlPosition.RIGHT_TOP,
         },
 
         clickableIcons: false,
@@ -186,8 +262,58 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
         );
       });
 
+      // Collegamenti tra città / tragitto di andata.
+      // Auto/bus/taxi → percorso reale su strada (linea piena).
+      // Volo/treno/traghetto o lunga distanza → linea tratteggiata diretta.
+      const dashSymbol = {
+        path: "M 0,-1 0,1",
+        strokeOpacity: 1,
+        strokeWeight: 3,
+        scale: 3,
+      };
+      connectors.forEach((c) => {
+        bounds.extend(c.from);
+        bounds.extend(c.to);
+
+        if (c.mode === "road") {
+          const ds = new google.maps.DirectionsService();
+          const dr = new google.maps.DirectionsRenderer({
+            suppressMarkers: true,
+            preserveViewport: true,
+            polylineOptions: { strokeColor: CONNECTOR_COLOR, strokeOpacity: 0.85, strokeWeight: 4 },
+          });
+          dr.setMap(googleMapRef.current!);
+          ds.route(
+            { origin: c.from, destination: c.to, travelMode: google.maps.TravelMode.DRIVING },
+            (result, status) => {
+              if (status === "OK" && result) {
+                dr.setDirections(result);
+              } else {
+                // Fallback: linea retta tratteggiata se Directions fallisce.
+                const pl = new google.maps.Polyline({
+                  path: [c.from, c.to], geodesic: true, strokeOpacity: 0,
+                  icons: [{ icon: dashSymbol, offset: "0", repeat: "14px" }],
+                  map: googleMapRef.current!,
+                });
+                polylinesRef.current.push(pl);
+              }
+            }
+          );
+        } else {
+          const pl = new google.maps.Polyline({
+            path: [c.from, c.to],
+            geodesic: true,
+            strokeColor: CONNECTOR_COLOR,
+            strokeOpacity: 0,
+            icons: [{ icon: { ...dashSymbol, strokeColor: CONNECTOR_COLOR }, offset: "0", repeat: "14px" }],
+            map: googleMapRef.current!,
+          });
+          polylinesRef.current.push(pl);
+        }
+      });
+
       // Fit bounds
-      if (markers.length > 1) {
+      if (markers.length > 1 || connectors.length > 0) {
         googleMapRef.current.fitBounds(bounds, 80);
       }
     };
@@ -201,7 +327,7 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
       script.onload = loadMap;
       document.head.appendChild(script);
     }
-  }, [markers, polylinesByDay]);
+  }, [markers, polylinesByDay, connectors]);
 
   if (markers.length === 0) {
     return (

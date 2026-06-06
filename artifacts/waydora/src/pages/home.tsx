@@ -13,7 +13,7 @@ import { InspirePage } from "@/components/inspire-page";
 import { CreateTripPage } from "@/components/create-trip-page";
 import { SavedTripsPage } from "@/components/saved-trips-page";
 import { useChatSessions, useUserTrips, useSavedTrips, useLocalSessions } from "@/hooks/trips";
-import { shouldUseRailway } from "@/lib/affiliates";
+import { shouldUseRailway, buildActivityAffiliate } from "@/lib/affiliates";
 import { track, destinationCountry, isGroupHint, hashSlug } from "@/lib/analytics";
 import {
   Send, Loader2, Save, PlusCircle, Map, ChevronLeft, ChevronRight,
@@ -312,7 +312,8 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
       <div style={{ padding: isMobile ? "10px 14px" : "8px 12px", display: "flex", flexDirection: "column", gap: "4px" }}>
         {([
           { id: "inspire", label: "Lasciati ispirare", icon: Compass },
-          { id: "create",  label: "Crea un viaggio",   icon: Edit3 },
+          // Nascosto temporaneamente — riattivare per future funzionalità (componente e routing restano attivi)
+          // { id: "create",  label: "Crea un viaggio",   icon: Edit3 },
           { id: "saved",   label: "Viaggi salvati",    icon: BookMarked },
         ] as const).map(item => {
           const Icon = item.icon;
@@ -846,6 +847,37 @@ export default function Home() {
     firstItineraryDoneRef.current = !!s.itinerary;
   };
 
+  // Carica un itinerario PRONTO (curato) direttamente, senza chiamare l'AI →
+  // zero token. L'utente può comunque editarlo dopo (handleSubmit passerà
+  // currentItinerary come existingItinerary). Persistenza on-demand al primo edit/Salva.
+  const handleSelectReadyTrip = useCallback((raw: any) => {
+    // Arricchisce lato client (zero token) i link affiliati mancanti, così anche
+    // i viaggi pronti restano monetizzati come quelli generati dall'AI.
+    const it = {
+      ...raw,
+      days: (raw.days ?? []).map((d: any) => ({
+        ...d,
+        activities: (d.activities ?? []).map((a: any) => ({
+          ...a,
+          affiliate: a.affiliate ?? buildActivityAffiliate(a, raw.destination),
+        })),
+      })),
+    };
+    const reply = `Ecco un itinerario già pronto per ${it.destination}. Guarda la mappa e i giorni — se vuoi posso adattarlo a te (date, budget, ritmo). ✨`;
+    const turn: ChatTurn = { id: Date.now(), userMessage: it.title, assistantReply: reply, itinerary: it };
+    setTurns([turn]);
+    setApiMessages([
+      { role: "user", content: `Mostrami un itinerario per ${it.destination}` },
+      { role: "assistant", content: reply },
+    ]);
+    setCurrentItinerary(it);
+    setCurrentSessionId(undefined);
+    enterApp(); setActiveView("chat"); setMobileScreen("chat");
+    sessionStartedRef.current = true;
+    firstItineraryDoneRef.current = true;
+    track("ready_trip_opened", { is_authenticated: !!user, destination_country: destinationCountry(it.destination), duration_days: it.durationDays });
+  }, [enterApp, user]);
+
   const handleChangeView = (view: ActiveView) => {
     setActiveView(view); enterApp();
     if (view === "inspire") setMobileScreen("inspire");
@@ -911,10 +943,10 @@ export default function Home() {
         {currentItinerary && (
           <button onClick={() => { setMobileScreen("map"); setMapReady(false); }}
             style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "13px", fontWeight: 600, padding: "7px 13px", borderRadius: "9999px", cursor: "pointer", transition: "all 0.2s",
-              background: mapReady ? "var(--wd-grad-warm)" : "rgba(255,255,255,0.07)",
-              color: mapReady ? "#fff" : "rgba(255,255,255,0.7)",
-              border: mapReady ? "none" : "1px solid rgba(255,255,255,0.12)",
-              boxShadow: mapReady ? "0 0 16px rgba(249,115,22,0.4)" : "none" }}>
+              background: "var(--wd-grad-warm)",
+              color: "#fff",
+              border: "none",
+              boxShadow: mapReady ? "0 0 16px rgba(249,115,22,0.4)" : "0 0 10px rgba(249,115,22,0.25)" }}>
             <Map style={{ width: "14px", height: "14px" }} />Mappa
           </button>
         )}
@@ -967,13 +999,13 @@ export default function Home() {
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewTrip={handleNewTrip}
           sessions={sidebarSessions} onLoadSession={handleLoadSession} onDeleteSession={handleDeleteSession}
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} />
-        {activeView === "inspire" && <div className="flex-1 min-h-0 overflow-hidden"><InspirePage onSelectTrip={p => handleSubmit(p, true)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} /></div>}
+        {activeView === "inspire" && <div className="flex-1 min-h-0 overflow-hidden"><InspirePage onSelectTrip={p => handleSubmit(p, true)} onSelectReady={handleSelectReadyTrip} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} /></div>}
         {activeView === "create"  && <div className="flex-1 min-h-0 overflow-hidden"><CreateTripPage userId={user?.id} trips={userTrips} onSaveDraft={async d => await upsertTrip(d)} onPublish={async id => await publishTrip(id)} onDelete={removeTrip} /></div>}
         {activeView === "saved"   && <div className="flex-1 min-h-0 overflow-hidden"><SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onSetPublic={setTripPublic} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} /></div>}
         {activeView === "chat" && (
           <>
-            <section className="flex flex-col min-h-0 shrink-0" style={{ width: "38vw", borderRight: "1px solid rgba(255,255,255,0.07)" }}>{chatSection}</section>
-            <aside className="flex flex-col min-h-0 flex-1">
+            <section className="flex flex-col min-h-0 shrink-0" style={{ width: "clamp(360px, 36vw, 480px)", borderRight: "1px solid rgba(255,255,255,0.07)" }}>{chatSection}</section>
+            <aside className="flex flex-col min-h-0 flex-1" style={{ minWidth: 0 }}>
               <MapToolbar active={activeTool} onChange={setActiveTool} />
               <div className="flex-1 min-h-0">
                 <ToolContent tool={activeTool} itinerary={currentItinerary}
@@ -1081,7 +1113,7 @@ export default function Home() {
           <div className="flex-1 min-h-0 flex flex-col">
             <MobilePageHeader title="Lasciati ispirare" onBack={() => setMobileScreen("chat")} />
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-              <InspirePage onSelectTrip={p => handleSubmit(p, true)} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} />
+              <InspirePage onSelectTrip={p => handleSubmit(p, true)} onSelectReady={handleSelectReadyTrip} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} />
             </div>
           </div>
         )}

@@ -1,9 +1,18 @@
 // src/components/inspire-page.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Heart, MapPin, Clock, Users, Sparkles } from "lucide-react";
+import { Heart, MapPin, Clock, Users, Sparkles, Zap } from "lucide-react";
 import { fetchPhoto } from "@/lib/photos";
 import type { UserTripRow } from "@/hooks/trips";
+import { CURATED_TRIPS, type CuratedItinerary } from "@/lib/curated-trips";
+
+// Normalizza una destinazione per il match featured ↔ curated (es. "Santorini, Grecia" → "santorini").
+const destKey = (d: string) => (d || "").split(",")[0].trim().toLowerCase();
+
+// Indice dei viaggi pronti (con itinerario completo) per destinazione.
+const READY_BY_DEST: Record<string, CuratedItinerary> = Object.fromEntries(
+  CURATED_TRIPS.map(t => [destKey(t.itinerary.destination), t.itinerary]),
+);
 
 const FALLBACK = "https://images.pexels.com/photos/346885/pexels-photo-346885.jpeg";
 
@@ -21,11 +30,13 @@ export const FEATURED_TRIPS = [
 const ALL_FILTERS = ["Tutti", "Cultura", "Beach", "City Break", "Romantico", "Avventura", "Lusso", "Natura", "Cibo"];
 
 // ── TripCard ──────────────────────────────────────────────────────────────
-function TripCard({ trip, liked, onLike, onSelect }: {
+function TripCard({ trip, liked, onLike, onSelect, readyItinerary, onSelectReady }: {
   trip: any;
   liked: boolean;
   onLike: () => void;
   onSelect: (prompt: string) => void;
+  readyItinerary?: CuratedItinerary | null;
+  onSelectReady: (it: CuratedItinerary) => void;
 }) {
   const [photo, setPhoto] = useState(FALLBACK);
   const [likedLocal, setLikedLocal] = useState(liked);
@@ -100,10 +111,17 @@ function TripCard({ trip, liked, onLike, onSelect }: {
             {tags.map(tag => <span key={tag} style={{ fontSize: "10px", fontWeight: 600, padding: "2px 8px", borderRadius: "9999px", background: "rgba(249,115,22,0.12)", color: "rgba(249,115,22,0.9)", border: "1px solid rgba(249,115,22,0.2)" }}>{tag}</span>)}
           </div>
         )}
-        <button onClick={() => onSelect(prompt)}
-          style={{ width: "100%", padding: "9px", borderRadius: "11px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
-          <Sparkles style={{ width: "13px", height: "13px" }} />Pianifica con Waydora
-        </button>
+        {readyItinerary ? (
+          <button onClick={() => onSelectReady(readyItinerary)}
+            style={{ width: "100%", padding: "9px", borderRadius: "11px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
+            <Zap style={{ width: "13px", height: "13px" }} />Vedi itinerario
+          </button>
+        ) : (
+          <button onClick={() => onSelect(prompt)}
+            style={{ width: "100%", padding: "9px", borderRadius: "11px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
+            <Sparkles style={{ width: "13px", height: "13px" }} />Pianifica con Waydora
+          </button>
+        )}
       </div>
     </motion.div>
   );
@@ -112,17 +130,41 @@ function TripCard({ trip, liked, onLike, onSelect }: {
 // ── InspirePage ───────────────────────────────────────────────────────────
 interface InspirePageProps {
   onSelectTrip: (prompt: string) => void;
+  onSelectReady: (itinerary: CuratedItinerary) => void;
   onLikeFeatured: (id: string, title: string) => void;
   isFeaturedLiked: (id: string) => boolean;
   publishedUserTrips?: UserTripRow[];
 }
 
-export function InspirePage({ onSelectTrip, onLikeFeatured, isFeaturedLiked, publishedUserTrips = [] }: InspirePageProps) {
+export function InspirePage({ onSelectTrip, onSelectReady, onLikeFeatured, isFeaturedLiked, publishedUserTrips = [] }: InspirePageProps) {
   const [filter, setFilter] = useState("Tutti");
 
+  // Unisce le card featured con i viaggi PRONTI (curati). I curati senza una
+  // card featured corrispondente compaiono in cima come card "pronte" (no AI).
+  const cards = useMemo(() => {
+    const featuredKeys = new Set(FEATURED_TRIPS.map(t => destKey(t.destination)));
+    const base = FEATURED_TRIPS.map(t => ({ ...t, readyItinerary: READY_BY_DEST[destKey(t.destination)] ?? null }));
+    const extra = CURATED_TRIPS
+      .filter(c => !featuredKeys.has(destKey(c.itinerary.destination)))
+      .map(c => ({
+        id: `curated-${destKey(c.itinerary.destination)}`,
+        title: c.itinerary.title,
+        destination: c.itinerary.destination,
+        days: c.itinerary.durationDays,
+        vibe: c.itinerary.vibe,
+        emoji: c.itinerary.heroEmoji,
+        budget: c.itinerary.totalBudget,
+        tags: [] as string[],
+        photoQuery: `${destKey(c.itinerary.destination)} travel landmark`,
+        prompt: `Crea un itinerario per ${c.itinerary.destination}`,
+        readyItinerary: c.itinerary,
+      }));
+    return [...extra, ...base];
+  }, []);
+
   const filtered = filter === "Tutti"
-    ? FEATURED_TRIPS
-    : FEATURED_TRIPS.filter(t => t.tags.includes(filter));
+    ? cards
+    : cards.filter(t => (t.tags ?? []).includes(filter));
 
   return (
     <div style={{ height: "100%", overflowY: "auto", background: "var(--wd-bg)" }}>
@@ -136,7 +178,7 @@ export function InspirePage({ onSelectTrip, onLikeFeatured, isFeaturedLiked, pub
             <h1 style={{ fontSize: "clamp(1.3rem,3vw,2rem)", fontWeight: 900, color: "#fff", letterSpacing: "-0.02em" }}>Lasciati ispirare</h1>
           </div>
           <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.45)", maxWidth: "480px" }}>
-            Metti il cuore ❤️ per salvarli nei preferiti, poi pianificali con l'AI.
+            I viaggi con <strong style={{ color: "rgba(255,255,255,0.7)" }}>⚡ Vedi itinerario</strong> sono già pronti e si aprono all'istante. Metti il cuore ❤️ per salvarli.
           </p>
         </motion.div>
 
@@ -156,7 +198,9 @@ export function InspirePage({ onSelectTrip, onLikeFeatured, isFeaturedLiked, pub
             <TripCard key={trip.id} trip={trip}
               liked={isFeaturedLiked(trip.id)}
               onLike={() => onLikeFeatured(trip.id, trip.title)}
-              onSelect={onSelectTrip} />
+              onSelect={onSelectTrip}
+              readyItinerary={(trip as any).readyItinerary ?? null}
+              onSelectReady={onSelectReady} />
           ))}
         </div>
 
@@ -172,21 +216,24 @@ export function InspirePage({ onSelectTrip, onLikeFeatured, isFeaturedLiked, pub
                 <TripCard key={trip.id} trip={trip}
                   liked={isFeaturedLiked(trip.id)}
                   onLike={() => onLikeFeatured(trip.id, trip.title)}
-                  onSelect={() => onSelectTrip(`Crea un itinerario per ${trip.destination} ispirato a: ${trip.description ?? trip.title}`)} />
+                  onSelect={() => onSelectTrip(`Crea un itinerario per ${trip.destination} ispirato a: ${trip.description ?? trip.title}`)}
+                  onSelectReady={onSelectReady} />
               ))}
             </div>
           </div>
         )}
 
-        {/* Footer community */}
-        <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "18px", padding: "24px", textAlign: "center" }}>
-          <div style={{ fontSize: "2rem", marginBottom: "10px" }}>👥</div>
-          <h2 style={{ fontSize: "17px", fontWeight: 800, color: "#fff", marginBottom: "6px" }}>Vuoi condividere un viaggio?</h2>
-          <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", maxWidth: "360px", margin: "0 auto" }}>
-            Vai su "Crea un viaggio", crea il tuo itinerario e pubblicalo — apparirà qui.
-          </p>
-        </motion.div>
+        {/* Footer community — nascosto finché "Crea un viaggio" è disattivato (riattivare insieme alla feature) */}
+        {false && (
+          <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "18px", padding: "24px", textAlign: "center" }}>
+            <div style={{ fontSize: "2rem", marginBottom: "10px" }}>👥</div>
+            <h2 style={{ fontSize: "17px", fontWeight: 800, color: "#fff", marginBottom: "6px" }}>Vuoi condividere un viaggio?</h2>
+            <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.4)", maxWidth: "360px", margin: "0 auto" }}>
+              Vai su "Crea un viaggio", crea il tuo itinerario e pubblicalo — apparirà qui.
+            </p>
+          </motion.div>
+        )}
       </div>
     </div>
   );

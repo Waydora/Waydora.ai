@@ -114,6 +114,111 @@ function fixPastDatesInReply(text) {
 // Enforcement affiliati: riscrive nella reply i link "nudi" (Booking, Airbnb,
 // Skyscanner, Viator, TheFork, GetYourGuide senza partner_id) verso gli affiliati
 // monetizzati. Rete di sicurezza nel caso l'AI ignori le istruzioni del prompt.
+// ── Voli: link generati LATO CODICE (vedi server-standalone.js per la logica) ─
+// L'AI non emette/allucina i link voli → li costruiamo noi: Google Flights
+// (risultati reali, query NL) + Kiwi affiliato. Date PARSATE, mai inventate.
+const IT_MONTHS = { gennaio:1, febbraio:2, marzo:3, aprile:4, maggio:5, giugno:6, luglio:7, agosto:8, settembre:9, ottobre:10, novembre:11, dicembre:12 };
+const FLIGHT_ASK_RX = /\b(vol[oi]|aere[oi]|flight|biglietti?\s+aere)/i;
+const LINK_ASK_RX   = /\b(link|links|risultat|dammi|mostrami|fammi vedere|dove sono|non vedo)\b/i;
+// Intento alloggi: stesso fix dei voli (l'AI annuncia e non emette il link).
+const LODGING_ASK_RX = /\b(dormire|allogg|hotel|b&b|bnb|ostell|hostel|airbnb|pensione|sistemazion|dove\s+stare|dove\s+alloggiare|posto\s+dove\s+dormire)\b/i;
+const CAMP_ASK_RX    = /\b(campegg|camping|glamping|tenda|in\s+tenda|piazzola)\b/i;
+
+function parseItalianDates(text) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const rx = /(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)/gi;
+  const out = []; let m;
+  while ((m = rx.exec(text))) {
+    const day = parseInt(m[1], 10);
+    const mon = IT_MONTHS[m[2].toLowerCase()];
+    if (!mon || day < 1 || day > 31) continue;
+    let year = today.getFullYear();
+    if (new Date(year, mon - 1, day) < today) year++;
+    out.push(`${year}-${String(mon).padStart(2,"0")}-${String(day).padStart(2,"0")}`);
+  }
+  return out;
+}
+
+function tidyCity(s) {
+  return (s || "").trim().replace(/\s+/g, " ").replace(/[.,;!?]+$/, "")
+    .replace(/\b(il|lo|la|i|gli|le|per|circa)\b\s*$/i, "").trim();
+}
+
+function parseRoute(fullText, itinerary) {
+  let origin = null, dest = null;
+  const m = fullText.match(/\bda\s+([\p{L}][\p{L}'’ .-]{1,28}?)\s+a\s+([\p{L}][\p{L}'’ .-]{1,28}?)(?=[\s,.;!?]|$| il | per | dal )/iu);
+  if (m) { origin = tidyCity(m[1]); dest = tidyCity(m[2]); }
+  if (!dest && itinerary?.destination) dest = String(itinerary.destination).split(",")[0].trim();
+  if (!origin && itinerary?.departure) origin = String(itinerary.departure).split(",")[0].trim();
+  return { origin, dest };
+}
+
+function parsePax(fullText) {
+  const m = fullText.match(/(\d{1,2})\s+person/i)
+    || fullText.match(/(?:siamo\s+in|in)\s+(\d{1,2})\b/i)
+    || fullText.match(/per\s+(\d{1,2})\b/i);
+  return m ? Math.min(parseInt(m[1], 10), 9) : null;
+}
+
+function buildFlightBlock(messages, itinerary) {
+  const userMsgs = (messages || []).filter(m => m.role === "user")
+    .map(m => typeof m.content === "string" ? m.content : "");
+  const lastText = (userMsgs[userMsgs.length - 1] || "").trim();
+  const fullText = userMsgs.join(" ");
+  const wantsFlights = FLIGHT_ASK_RX.test(lastText)
+    || (LINK_ASK_RX.test(lastText) && FLIGHT_ASK_RX.test(fullText));
+  if (!wantsFlights) return null;
+
+  const { origin, dest } = parseRoute(fullText, itinerary);
+  if (!dest) return null;
+
+  const dates = parseItalianDates(fullText);
+  const pax = parsePax(fullText);
+  const q = [
+    "flights", origin ? `from ${origin}` : null, `to ${dest}`,
+    dates[0] ? `on ${dates[0]}` : null,
+    dates[1] ? `returning ${dates[1]}` : null,
+    pax ? `for ${pax} adults` : null,
+  ].filter(Boolean).join(" ");
+  const gf = `https://www.google.com/travel/flights?q=${encodeURIComponent(q)}`;
+  const tratta = origin ? `da ${origin} a ${dest}` : `per ${dest}`;
+  const when = dates[0] ? ` (andata ${dates[0]}${dates[1] ? `, ritorno ${dates[1]}` : ""})` : "";
+  return `\n\n✈️ Voli ${tratta}${when}:\n• Vedi voli e prezzi: ${gf}\n• Prenota su Kiwi: ${AFF.KIWI_URL}`;
+}
+
+// ── Alloggi: link generati LATO CODICE (vedi server-standalone.js per i dettagli) ─
+// L'AI dice "ecco dove dormire 🏕️" e non emette il link → lo costruiamo noi:
+// Stay22 affiliato (hotel/b&b/ostelli + date se note) + campeggi via Google Maps.
+function buildLodgingBlock(messages, itinerary) {
+  const userMsgs = (messages || []).filter(m => m.role === "user")
+    .map(m => typeof m.content === "string" ? m.content : "");
+  const lastText = (userMsgs[userMsgs.length - 1] || "").trim();
+  const fullText = userMsgs.join(" ");
+  const wantsLodging = LODGING_ASK_RX.test(lastText)
+    || (LINK_ASK_RX.test(lastText) && LODGING_ASK_RX.test(fullText));
+  if (!wantsLodging) return null;
+
+  let dest = itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : null;
+  if (!dest) {
+    const m = fullText.match(/\b(?:a|in|per|verso)\s+([\p{Lu}][\p{L}'’ -]{2,28}?)(?=[\s,.;!?]|$)/u);
+    if (m) dest = tidyCity(m[1]);
+  }
+  if (!dest) return null;
+
+  const dates = parseItalianDates(fullText);
+  const sp = new URLSearchParams({ address: dest, adults: "2" });
+  if (dates[0]) sp.set("checkin", dates[0]);
+  if (dates[1]) sp.set("checkout", dates[1]);
+  const stay = `${AFF.STAY22_URL}?${sp.toString()}`;
+
+  let block = `\n\n🏨 Dove dormire a ${dest}:\n• Hotel, B&B e ostelli: ${stay}`;
+  if (CAMP_ASK_RX.test(fullText)) {
+    const camp = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`campeggi ${dest}`)}`;
+    block += `\n• Campeggi in zona: ${camp}`;
+  }
+  return block;
+}
+
 function rewriteAffiliateLinks(text) {
   if (typeof text !== "string" || !text) return text;
   const STAY22 = "https://booking.stay22.com/waydora/5DPoKS60Cy";
@@ -205,6 +310,7 @@ ECCEZIONE: se esiste già un itinerario in chat → NON entrare in discovery, ge
   "itinerary": {
     "title": "titolo viaggio",
     "destination": "nome inglese internazionale, Paese (es. Milan, Italy)",
+    "departure": "città di partenza dell'utente se nota dal contesto chat (es. Isernia, Italy), altrimenti ometti il campo",
     "durationDays": 3,
     "vibe": "atmosfera",
     "totalBudget": "€800 a persona",
@@ -240,15 +346,17 @@ ECCEZIONE: se esiste già un itinerario in chat → NON entrare in discovery, ge
 }
 
 ━━━ HOTEL E ALLOGGI — chiedi SEMPRE prima ━━━
-Se l'utente chiede dove dormire, hotel, b&b, airbnb o sistemazioni:
+Se l'utente chiede dove dormire, hotel, b&b, airbnb, campeggi o sistemazioni:
 1. NON aggiungere alloggi nell'itinerario automaticamente.
-2. CHIEDI SEMPRE: "Per trovare l'alloggio perfetto, dimmi: che tipo preferisci? (hotel, B&B, Airbnb, hostel, resort) E la fascia di prezzo per notte? (budget <€60, medio €60–130, comfort €130–220, lusso >€220)"
-3. Solo dopo, rispondi in MODALITÀ TESTO con 3–4 opzioni specifiche.
+2. CHIEDI SEMPRE: "Per trovare l'alloggio perfetto, dimmi: che tipo preferisci? (hotel, B&B, Airbnb, hostel, campeggio, resort) E la fascia di prezzo per notte? (budget <€60, medio €60–130, comfort €130–220, lusso >€220)"
+3. Quando hai tipo + budget: rispondi in MODALITÀ TESTO conversazionale (consigli su zone/quartieri), confermando destinazione e tipo.
+   ⚠️ NON scrivere TU alcun URL di alloggi: il link di ricerca (e campeggi se richiesti) lo aggiunge automaticamente Waydora in coda al messaggio.
 
 ━━━ VOLI — chiedi SEMPRE prima ━━━
 Se l'utente chiede voli, come arrivare, biglietti aerei:
-1. CHIEDI SEMPRE: da quale città parti? Le date? Quante persone?
-2. Solo dopo, rispondi in MODALITÀ TESTO con link Skyscanner.
+1. CHIEDI SEMPRE (se mancano): da quale città parti? Le date? Quante persone?
+2. Quando hai partenza, destinazione e date: rispondi in MODALITÀ TESTO conversazionale, confermando tratta e date.
+   ⚠️ NON scrivere TU alcun URL di voli: i link (risultati reali + prenotazione) li aggiunge automaticamente Waydora in coda al messaggio.
 
 ━━━ CONSIGLI E RACCOMANDAZIONI — REGOLE STRICT (vale per TUTTO: ristoranti, hotel, attività, voli, treni, traghetti, bus, biglietti) ━━━
 
@@ -328,6 +436,8 @@ Per OGNI activity compila il campo "affiliate" usando ESATTAMENTE questi formati
     "url": "https://www.google.com/maps/search/?api=1&query=<NOME+POSTO>+<DESTINAZIONE>"
   }
 - category "transport" → AGGIUNGI SEMPRE il campo "transportMode" con uno tra: "flight" (aereo), "train" (treno), "ferry" (traghetto/aliscafo), "bus" (autobus/pullman/FlixBus), "taxi" (taxi/Uber/Bolt), "car" (auto/noleggio).
+  Il "title" di un transport deve descrivere lo SPOSTAMENTO (es. "Volo Napoli → Istanbul", "Trasferimento in auto a Tropea", "Treno per Firenze"), MAI il nome di un'agenzia viaggi, tour operator o compagnia: sono tragitti, non luoghi da mettere sulla mappa.
+  Se la partenza ("departure") e la destinazione sono raggiungibili in auto in modo sensato (stessa area/regione/nazione, es. Isernia → Calabria), usa transportMode "car" per il primo spostamento; usa "flight" solo per tratte lunghe/intercontinentali o via mare obbligata.
   Il backend sceglierà link e label coerenti (es. traghetto → Direct Ferries "Cerca traghetti", treno → Trainline, bus → FlixBus, volo → Kiwi). NON forzare mai "Cerca voli" su un traghetto/treno/bus.
   Lascia placeholder: {
     "provider": "auto",
@@ -605,6 +715,11 @@ function enrichWithGooglePlaces(itinerary) {
     await Promise.all(uniqueCities.map(ensureCityCoords));
 
     const enrichOne = async (activity, dayCity) => {
+      // I trasporti sono tragitti, non luoghi: NON geocodificarli (il Text Search
+      // può matchare un'agenzia viaggi → pin sbagliato). Restano nei dati per
+      // transportMode ma senza coordinate, così la mappa non li disegna come pin.
+      if ((activity.category || "").toLowerCase() === "transport") return;
+
       const cityCoords = await ensureCityCoords(dayCity);
       const cityLabel = dayCity || "";
 
@@ -637,6 +752,14 @@ function enrichWithGooglePlaces(itinerary) {
       for (const activity of (day.activities ?? [])) {
         tasks.push(enrichOne(activity, dayCity));
       }
+    }
+
+    // Geocodifica la città di partenza (se nota) per il tragitto di andata.
+    if (itinerary.departure) {
+      tasks.push((async () => {
+        const dep = await geocodeAddress(itinerary.departure, apiKey);
+        if (dep) itinerary.departureCoords = dep;
+      })());
     }
 
     await Promise.race([
@@ -752,6 +875,10 @@ export default async function handler(req, res) {
     if (typeof payload.reply === "string") {
       payload.reply = rewriteAffiliateLinks(payload.reply);
       payload.reply = fixPastDatesInReply(payload.reply);
+      const flightBlock = buildFlightBlock(messages, existingItinerary || payload.itinerary);
+      if (flightBlock) payload.reply += flightBlock;
+      const lodgingBlock = buildLodgingBlock(messages, existingItinerary || payload.itinerary);
+      if (lodgingBlock) payload.reply += lodgingBlock;
     }
 
     return res.status(200).json(payload);
