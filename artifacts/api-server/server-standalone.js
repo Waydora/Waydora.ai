@@ -533,6 +533,7 @@ REGOLE GENERALI:
 - Se l'utente fa domande conversazionali rispondi SOLO con reply e itinerary: null. MAX 150 parole.
 - ⚠️ ANTI-INVENZIONE (CRITICO): NON inventare MAI nomi propri di ristoranti, bar, hotel, negozi o locali specifici, soprattutto in città piccole o poco turistiche. Dare un nome FALSO è PEGGIO che non darne. Se non sei certo al 100% che quel locale esista con quel nome, NON nominarlo. Per mangiare/dormire descrivi il TIPO ("una trattoria di cucina tipica in centro", "un B&B vicino alla stazione") e dai un link Google Maps di RICERCA per tipologia (query tipo "trattoria tipica Isernia centro storico"), così l'utente trova posti VERI e aggiornati. Nomi propri SOLO per luoghi famosi e verificabili (monumenti, musei, piazze, grandi catene). Se l'utente segnala che un posto non esiste, NON inventarne un altro: ammetti e rimanda a Google Maps/ricerca locale.
 - COERENZA ITINERARIO: se nella reply dici di aver creato/costruito un itinerario o "una giornata", l'oggetto itinerary STRUTTURATO DEVE essere presente nella stessa risposta. È VIETATO annunciare un itinerario solo a parole lasciando itinerary: null.
+- MODIFICHE (CRITICO per la mappa): quando l'utente modifica/aggiunge/toglie/sposta qualcosa in un itinerario esistente, restituisci SEMPRE l'oggetto itinerary COMPLETO e aggiornato — TUTTI i giorni e TUTTE le attività, anche quelle NON modificate — mai un frammento, mai solo il giorno cambiato, mai itinerary: null. Per le attività che NON cambi, RICOPIA identici "title", "time" e "category" dell'originale (NON riformularli): così la mappa conserva i punti già posizionati. Cambia solo ciò che l'utente ha chiesto.
 - Sii amichevole e naturale.
 
 ━━━ LINGUA — TUTTO IN ITALIANO ━━━
@@ -855,6 +856,36 @@ function placesTextSearch(query, bias, apiKey) {
 
 const MAX_KM_FROM_CITY = 50; // soglia validazione: oltre questa distanza il match è considerato sbagliato
 
+// Riusa le coordinate già note dall'itinerario PRECEDENTE per le attività non
+// cambiate (match per titolo normalizzato). Così una modifica non perde i pin
+// sulla mappa anche se il re-enrichment Places fallisce, va in timeout o l'AI ha
+// omesso il "city" del giorno. Va chiamata PRIMA di enrichWithGooglePlaces.
+function carryOverCoordinates(newItin, oldItin) {
+  if (!newItin || !oldItin || !Array.isArray(newItin.days) || !Array.isArray(oldItin.days)) return newItin;
+  const norm = (s) => (s || "").toString().trim().toLowerCase();
+  const byTitle = new Map();
+  for (const d of oldItin.days) {
+    for (const a of (d.activities || [])) {
+      if (a?.coordinates?.lat && a?.coordinates?.lng && a.title) {
+        const k = norm(a.title);
+        if (!byTitle.has(k)) byTitle.set(k, a.coordinates);
+      }
+    }
+  }
+  for (const d of newItin.days) {
+    for (const a of (d.activities || [])) {
+      if (!(a?.coordinates?.lat && a?.coordinates?.lng)) {
+        const hit = byTitle.get(norm(a.title));
+        if (hit) a.coordinates = hit;
+      }
+    }
+  }
+  if (!(newItin.departureCoords?.lat) && oldItin.departureCoords?.lat) {
+    newItin.departureCoords = oldItin.departureCoords;
+  }
+  return newItin;
+}
+
 function enrichWithGooglePlaces(itinerary) {
   return new Promise(async (resolve) => {
     const apiKey = process.env.GOOGLE_MAPS_KEY;
@@ -881,6 +912,10 @@ function enrichWithGooglePlaces(itinerary) {
       // e produrre un pin sbagliato sulla mappa. Restano nei dati (per transportMode)
       // ma senza coordinate → la mappa non li disegna come pin.
       if ((activity.category || "").toLowerCase() === "transport") return;
+
+      // Coordinate già note (riportate dall'itinerario precedente via carryOver):
+      // non ri-geocodificare → mappa stabile, meno chiamate Places, meno timeout.
+      if (activity.coordinates?.lat && activity.coordinates?.lng) return;
 
       const cityCoords = await ensureCityCoords(dayCity);
       const cityLabel = dayCity || "";
@@ -1068,6 +1103,9 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (payload.itinerary) {
+          // Modifica: riusa le coordinate note dell'itinerario precedente per le
+          // attività invariate → la mappa non perde pin se l'enrichment fallisce.
+          if (existingItinerary) carryOverCoordinates(payload.itinerary, existingItinerary);
           try { payload.itinerary = await enrichWithGooglePlaces(payload.itinerary); }
           catch (e) { console.error("Places err:", e.message); }
           // Safety-net: garantisce affiliate su OGNI activity anche se Sonnet dimentica

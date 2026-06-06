@@ -21,7 +21,7 @@ import {
   Lightbulb, CheckSquare, LogOut, LogIn, User,
   Mic, MicOff, ImagePlus, X, Link, ExternalLink,
   Navigation, Download, Plus, MessageSquare, Edit3, ArrowLeft,
-  Sparkles, Bell,
+  Sparkles, Bell, Undo2,
 } from "lucide-react";
 import { Layout, Logo } from "@/components/layout";
 import { ItineraryResults, PackingList } from "@/components/itinerary-results";
@@ -624,6 +624,9 @@ export default function Home() {
   const [input,            setInput]            = useState("");
   const [mediaContent,     setMediaContent]     = useState<MediaContent | null>(null);
   const [currentItinerary, setCurrentItinerary] = useState<ItineraryData | undefined>();
+  // Storico itinerari per "Annulla modifica": ogni edit salva la versione precedente
+  // (max 10) così l'utente può tornare indietro se l'AI stravolge il viaggio.
+  const [itineraryHistory, setItineraryHistory] = useState<ItineraryData[]>([]);
   const [apiMessages,      setApiMessages]      = useState<ChatMessage[]>([]);
   const [sidebarOpen,      setSidebarOpen]      = useState(true);
   const [mobileSidebarOpen,setMobileSidebarOpen]= useState(false);
@@ -769,7 +772,12 @@ export default function Home() {
       {
         onSuccess: async (data) => {
           setApiMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
-          if (data.itinerary) setCurrentItinerary(data.itinerary);
+          if (data.itinerary) {
+            // Era una MODIFICA (esisteva già un itinerario): salva la versione
+            // precedente nello storico così "Annulla" può ripristinarla.
+            if (currentItinerary) setItineraryHistory(prev => [...prev, currentItinerary].slice(-10));
+            setCurrentItinerary(data.itinerary);
+          }
           const updatedTurns = [...turns.filter(t => t.id !== turnId), { id: turnId, userMessage: promptText || "📎 Media allegato", assistantReply: data.reply, itinerary: data.itinerary ?? undefined, mediaPreview }];
           setTurns(updatedTurns);
           if (data.itinerary) {
@@ -814,9 +822,22 @@ export default function Home() {
     } else toast({ title: "Errore salvataggio", variant: "destructive" });
   };
 
+  // Annulla l'ultima modifica: ripristina l'itinerario precedente dallo storico.
+  // Utile quando l'AI fraintende e stravolge il viaggio.
+  const handleUndoItinerary = useCallback(() => {
+    setItineraryHistory(prev => {
+      if (prev.length === 0) return prev;
+      const previous = prev[prev.length - 1];
+      setCurrentItinerary(previous);
+      setMapReady(false);
+      toast({ title: "Modifica annullata ↩️", description: "Itinerario ripristinato alla versione precedente." });
+      return prev.slice(0, -1);
+    });
+  }, [toast]);
+
   const handleNewTrip = useCallback(async () => {
     if (turns.length > 0) await persistSession(turns, currentItinerary, apiMessages, currentSessionId);
-    setTurns([]); setApiMessages([]); setCurrentItinerary(undefined);
+    setTurns([]); setApiMessages([]); setCurrentItinerary(undefined); setItineraryHistory([]);
     setInput(""); setMediaContent(null); setCurrentSessionId(undefined);
     setActiveView("chat"); setMobileScreen("chat");
     setMapReady(false); setMapNotifShown(false);
@@ -834,13 +855,13 @@ export default function Home() {
       setLocalSessionsList(localSessions.load());
     }
     if (currentSessionId && String(currentSessionId) === String(id)) {
-      setTurns([]); setApiMessages([]); setCurrentItinerary(undefined); setCurrentSessionId(undefined);
+      setTurns([]); setApiMessages([]); setCurrentItinerary(undefined); setCurrentSessionId(undefined); setItineraryHistory([]);
     }
   }, [user, removeDbSession, localSessions, currentSessionId]);
 
   const handleLoadSession = (s: any) => {
     setTurns(s.turns ?? []); setApiMessages(s.apiMessages ?? s.api_messages ?? []);
-    setCurrentItinerary(s.itinerary); setCurrentSessionId(s.id?.toString());
+    setCurrentItinerary(s.itinerary); setCurrentSessionId(s.id?.toString()); setItineraryHistory([]);
     enterApp(); setActiveView("chat"); setMobileScreen("chat");
     // Sessione già avviata in passato: non rilanciare chat_started / AHA.
     sessionStartedRef.current = true;
@@ -870,7 +891,7 @@ export default function Home() {
       { role: "user", content: `Mostrami un itinerario per ${it.destination}` },
       { role: "assistant", content: reply },
     ]);
-    setCurrentItinerary(it);
+    setCurrentItinerary(it); setItineraryHistory([]);
     setCurrentSessionId(undefined);
     enterApp(); setActiveView("chat"); setMobileScreen("chat");
     sessionStartedRef.current = true;
@@ -935,6 +956,12 @@ export default function Home() {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        {itineraryHistory.length > 0 && (
+          <button onClick={handleUndoItinerary} aria-label="Annulla modifica" title="Annulla l'ultima modifica"
+            style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "13px", fontWeight: 600, padding: "7px 13px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)", cursor: "pointer" }}>
+            <Undo2 style={{ width: "14px", height: "14px" }} />Annulla
+          </button>
+        )}
         {currentItinerary && (
           <button onClick={handleSave} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "13px", fontWeight: 600, padding: "7px 13px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)", cursor: "pointer" }}>
             <Save style={{ width: "14px", height: "14px" }} />Salva
@@ -967,6 +994,7 @@ export default function Home() {
           <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>Waydora</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {itineraryHistory.length > 0 && <button onClick={handleUndoItinerary} title="Annulla l'ultima modifica" style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)", cursor: "pointer" }}><Undo2 style={{ width: "12px", height: "12px" }} />Annulla</button>}
           {currentItinerary && <button onClick={handleSave} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)", cursor: "pointer" }}><Save style={{ width: "12px", height: "12px" }} />Salva</button>}
           <button onClick={handleNewTrip} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", fontWeight: 600, padding: "6px 12px", borderRadius: "9999px", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", background: "transparent" }}><PlusCircle style={{ width: "12px", height: "12px" }} />Nuovo</button>
         </div>
