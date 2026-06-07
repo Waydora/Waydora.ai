@@ -54,13 +54,20 @@ function chanId(prefix: string): string {
 }
 
 // ── CSS-only Drawer ───────────────────────────────────────────────────────
-function Drawer({ open, onClose, children }: {
-  open: boolean; onClose: () => void; children: React.ReactNode;
+// glass=true → bottom-sheet glassmorfismo (superficie traslucida + blur). Le sezioni
+// interne diventano trasparenti così il TripChat (anch'esso glass) si fonde col blur.
+function Drawer({ open, onClose, children, glass = false }: {
+  open: boolean; onClose: () => void; children: React.ReactNode; glass?: boolean;
 }) {
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [open]);
+
+  const sheetBg: React.CSSProperties = glass
+    ? { background: "var(--wd-glass)", backdropFilter: "blur(28px) saturate(170%)", WebkitBackdropFilter: "blur(28px) saturate(170%)" }
+    : { backgroundColor: "#0d0a18" };
+  const innerBg = glass ? "transparent" : "#0d0a18";
 
   return (
     <>
@@ -74,7 +81,7 @@ function Drawer({ open, onClose, children }: {
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
         height: "82vh",
-        backgroundColor: "#0d0a18",
+        ...sheetBg,
         borderTop: "1px solid rgba(255,255,255,0.15)",
         borderRadius: "20px 20px 0 0",
         display: "flex", flexDirection: "column",
@@ -83,10 +90,10 @@ function Drawer({ open, onClose, children }: {
         transition: "transform 0.32s cubic-bezier(0.32,0.72,0,1)",
         willChange: "transform",
       }}>
-        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px", flexShrink: 0, backgroundColor: "#0d0a18" }}>
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px", flexShrink: 0, backgroundColor: innerBg }}>
           <div style={{ width: "40px", height: "4px", borderRadius: "2px", background: "rgba(255,255,255,0.3)" }} />
         </div>
-        <div style={{ flex: 1, minHeight: 0, backgroundColor: "#0d0a18" }}>
+        <div style={{ flex: 1, minHeight: 0, backgroundColor: innerBg }}>
           {children}
         </div>
       </div>
@@ -1094,7 +1101,7 @@ export default function Trip() {
         {!isTemplate && activeTool === "itinerary" && (
           <div style={{ position: "fixed", bottom: `${TOOLBAR_H}px`, left: 0, right: 0, zIndex: 31, display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "rgba(13,10,24,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
             <button onClick={() => setAiOpen(true)}
-              style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", padding: "9px 14px", borderRadius: "14px", background: "rgba(168,85,247,0.14)", border: "1px solid rgba(168,85,247,0.35)", color: "rgba(255,255,255,0.6)", fontSize: "13px", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+              style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", padding: "9px 14px", borderRadius: "14px", background: "var(--wd-glass)", backdropFilter: "blur(18px) saturate(160%)", WebkitBackdropFilter: "blur(18px) saturate(160%)", border: "1px solid rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.6)", fontSize: "13px", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
               <span style={{ fontSize: "15px" }}>✨</span>
               <span style={{ flex: 1 }}>Modifica con l'AI…</span>
             </button>
@@ -1110,10 +1117,10 @@ export default function Trip() {
           </div>
         )}
 
-        {/* Drawer modifiche AI (bottom sheet) — solo viaggio definitivo */}
+        {/* Drawer modifiche AI (bottom sheet) — solo viaggio definitivo, glassmorfismo */}
         {!isTemplate && (
-          <Drawer open={aiOpen} onClose={() => setAiOpen(false)}>
-            <TripChat mode="ai" slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onClose={() => setAiOpen(false)} />
+          <Drawer open={aiOpen} onClose={() => setAiOpen(false)} glass>
+            <TripChat mode="ai" glass slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onClose={() => setAiOpen(false)} />
           </Drawer>
         )}
 

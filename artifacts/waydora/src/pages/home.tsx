@@ -950,6 +950,15 @@ export default function Home() {
       const previous = prev[prev.length - 1];
       setCurrentItinerary(previous);
       setMapReady(false);
+      // Togli anche la CARD itinerario stravolto dalla chat: rimuovila dall'ultimo
+      // turno che ne ha una (è la modifica appena annullata). Senza questo la chat
+      // continuava a mostrare l'itinerario nuovo mentre la mappa tornava indietro.
+      setTurns(ts => {
+        let idx = -1;
+        for (let i = ts.length - 1; i >= 0; i--) { if (ts[i].itinerary) { idx = i; break; } }
+        if (idx === -1) return ts;
+        return ts.map((t, i) => (i === idx ? { ...t, itinerary: undefined } : t));
+      });
       toast({ title: "Modifica annullata ↩️", description: "Itinerario ripristinato alla versione precedente." });
       return prev.slice(0, -1);
     });
@@ -1074,12 +1083,16 @@ export default function Home() {
             <rect y="11.8" width="15" height="2.2" rx="1.1" fill="#fff" />
           </svg>
         </button>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--wd-grad-warm)" }} />
-          <span style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Waydora</span>
-        </div>
+        {/* Brand: nascosto quando c'è un itinerario, altrimenti i pulsanti azione
+            (Annulla/Salva/Mappa/+) verrebbero tagliati su schermi stretti. */}
+        {!currentItinerary && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--wd-grad-warm)" }} />
+            <span style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Waydora</span>
+          </div>
+        )}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flexShrink: 1 }}>
         {itineraryHistory.length > 0 && (
           <button onClick={handleUndoItinerary} aria-label="Annulla modifica" title="Annulla l'ultima modifica"
             style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "13px", fontWeight: 600, padding: "7px 13px", borderRadius: "9999px", background: "rgba(255,255,255,0.09)", color: "#fff", border: "1px solid rgba(255,255,255,0.18)", cursor: "pointer" }}>
