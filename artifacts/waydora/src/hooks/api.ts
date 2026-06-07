@@ -33,6 +33,15 @@ export type PackingCategory = {
   items: string[];
 };
 
+// Voce di budget PIANIFICATO (spesa "in programma"). Vive dentro l'itinerario
+// (quindi condivisa col link e impostabile già in fase di creazione).
+export type BudgetItem = {
+  id: string;
+  category: "food" | "transport" | "stay" | "activity" | "shopping" | "other";
+  label: string;
+  amount: number;
+};
+
 export type ItineraryData = {
   title: string;
   destination: string;
@@ -43,6 +52,7 @@ export type ItineraryData = {
   heroEmoji: string;
   days: ItineraryDay[];
   packingList: PackingCategory[];
+  budgetPlan?: BudgetItem[];
 };
 
 export type Suggestion = {

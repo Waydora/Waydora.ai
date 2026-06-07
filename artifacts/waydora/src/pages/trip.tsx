@@ -9,6 +9,7 @@ import {
 import { Layout } from "@/components/layout";
 import { ItineraryResults } from "@/components/itinerary-results";
 import { TripMap } from "@/components/trip-map";
+import { ExpensesPanel } from "@/components/expenses-panel";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { fetchWeather, type WeatherData } from "@/lib/weather";
@@ -650,7 +651,7 @@ function ToolbarDesktop({ active, onChange }: { active: string; onChange: (id: s
   );
 }
 
-function renderTool(tool: string, itinerary: any, slug: string, isMobile = false) {
+function renderTool(tool: string, itinerary: any, slug: string, isMobile = false, expensesOpts?: { onItineraryUpdate: (it: any) => void; userTier: "guest" | "free" | "paid"; authorName?: string }) {
   if (tool === "itinerary") return <div style={{ padding: isMobile ? "16px" : "28px 32px", maxWidth: isMobile ? "none" : "680px", margin: "0 auto", paddingBottom: isMobile ? `${TOOLBAR_H + 16}px` : "48px" }}><ItineraryResults itinerary={itinerary} /></div>;
   if (tool === "map")       return <MapPanel itinerary={itinerary} toolbarH={isMobile ? TOOLBAR_H : 0} />;
   if (tool === "calendar")  return <CalendarPanel itinerary={itinerary} />;
@@ -659,11 +660,10 @@ function renderTool(tool: string, itinerary: any, slug: string, isMobile = false
   if (tool === "bagaglio")  return <BaggagePanel packingList={itinerary.packingList ?? []} destination={itinerary.destination} />;
   if (tool === "media")     return <MediaPanel slug={slug} />;
   if (tool === "expenses")  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: "12px", textAlign: "center", padding: "32px" }}>
-      <div style={{ fontSize: "2.8rem" }}>💰</div>
-      <div style={{ fontSize: "15px", fontWeight: 700, color: "#fff" }}>Gestione spese</div>
-      <div style={{ fontSize: "12px", padding: "6px 16px", borderRadius: "9999px", background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.12)" }}>Prossimamente</div>
-    </div>
+    <ExpensesPanel itinerary={itinerary} slug={slug}
+      onItineraryUpdate={expensesOpts?.onItineraryUpdate ?? (() => {})}
+      userTier={expensesOpts?.userTier ?? "guest"}
+      authorName={expensesOpts?.authorName} />
   );
   return null;
 }
@@ -920,6 +920,14 @@ export default function Trip() {
     }
   }, [itinerary, forking, slug, tripTitle, user, toast, setLocation]);
 
+  // Sezione Spese: il budget pianificato vive in itinerary.budgetPlan → salvarlo su
+  // saved_trips (condiviso col gruppo) e aggiornare lo stato locale.
+  const onBudgetUpdate = useCallback(async (it: any) => {
+    setItinerary(it);
+    await supabase.from("saved_trips").update({ itinerary: it, updated_at: new Date().toISOString() }).eq("share_slug", slug);
+  }, [slug]);
+  const expensesOpts = { onItineraryUpdate: onBudgetUpdate, userTier: (user ? "free" : "guest") as "guest" | "free" | "paid", authorName: user?.name };
+
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/trip/${slug}` : "";
   const copy = async () => {
     await navigator.clipboard.writeText(shareUrl);
@@ -1027,7 +1035,7 @@ export default function Trip() {
               {/* Nei template, le tool "ideas" vengono bloccate — reindirizza all'itinerary */}
               {renderTool(
                 isTemplate && activeTool === "ideas" ? "itinerary" : activeTool,
-                itinerary, slug, false
+                itinerary, slug, false, expensesOpts
               )}
             </div>
             {/* Chat modifiche AI in basso — solo viaggio definitivo e solo nella scheda Itinerario.
@@ -1073,7 +1081,7 @@ export default function Trip() {
           {/* Nei template, blocca "ideas" — mostra itinerary al posto */}
           {renderTool(
             isTemplate && activeTool === "ideas" ? "itinerary" : activeTool,
-            itinerary, slug, true
+            itinerary, slug, true, expensesOpts
           )}
         </div>
 

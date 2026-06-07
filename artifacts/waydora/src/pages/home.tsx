@@ -26,6 +26,7 @@ import {
 import { Layout, Logo } from "@/components/layout";
 import { ItineraryResults, PackingList } from "@/components/itinerary-results";
 import { TripMap } from "@/components/trip-map";
+import { ExpensesPanel } from "@/components/expenses-panel";
 import {
   TripCounter, Partners, Reviews, Faq, SiteFooter, HeroLanding, StickyLandingHeader,
   SuggestedTrips, AnimatedRoadmap, WorldGallery, AppShowcase,
@@ -236,10 +237,11 @@ function PlaceholderTool({ emoji, title, desc }: { emoji: string; title: string;
   );
 }
 
-function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFiles, onUploadMedia, onRemoveMedia }: {
+function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFiles, onUploadMedia, onRemoveMedia, onItineraryUpdate, userTier, authorName }: {
   tool: string; itinerary?: ItineraryData;
   ideas: string[]; onAddIdea: (i: string) => void; onRemoveIdea: (idx: number) => void;
   mediaFiles: Array<{ name: string; preview: string }>; onUploadMedia: (f: Array<{ name: string; preview: string }>) => void; onRemoveMedia: (idx: number) => void;
+  onItineraryUpdate: (it: ItineraryData) => void; userTier: "guest" | "free" | "paid"; authorName?: string;
 }) {
   if (tool === "map")      return <MapTool itinerary={itinerary} />;
   if (tool === "calendar") return <CalendarTool itinerary={itinerary} />;
@@ -247,7 +249,9 @@ function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFil
   if (tool === "bagaglio") return <PackingList list={itinerary?.packingList ?? []} destination={itinerary?.destination} />;
   if (tool === "ideas")    return <IdeasTool ideas={ideas} onAdd={onAddIdea} onRemove={onRemoveIdea} />;
   if (tool === "media")    return <MediaTool files={mediaFiles} onUpload={onUploadMedia} onRemove={onRemoveMedia} />;
-  if (tool === "expenses") return <PlaceholderTool emoji="💰" title="Gestione spese" desc="Tieni traccia del budget e dividi con il gruppo" />;
+  // Spese: in home niente slug → solo budget pianificato (le spese reali con scontrini
+  // arrivano nel viaggio salvato). Il budget vive in itinerary.budgetPlan, condiviso al salvataggio.
+  if (tool === "expenses") return <ExpensesPanel itinerary={itinerary} onItineraryUpdate={onItineraryUpdate as (it: any) => void} userTier={userTier} authorName={authorName} />;
   return null;
 }
 
@@ -1189,7 +1193,8 @@ export default function Home() {
               <div className="flex-1 min-h-0">
                 <ToolContent tool={activeTool} itinerary={currentItinerary}
                   ideas={ideas} onAddIdea={i => setIdeas(prev => [...prev, i])} onRemoveIdea={idx => setIdeas(prev => prev.filter((_, i) => i !== idx))}
-                  mediaFiles={mediaFiles} onUploadMedia={f => setMediaFiles(prev => [...prev, ...f])} onRemoveMedia={idx => setMediaFiles(prev => prev.filter((_, i) => i !== idx))} />
+                  mediaFiles={mediaFiles} onUploadMedia={f => setMediaFiles(prev => [...prev, ...f])} onRemoveMedia={idx => setMediaFiles(prev => prev.filter((_, i) => i !== idx))}
+                  onItineraryUpdate={setCurrentItinerary} userTier={user ? "free" : "guest"} authorName={user?.name} />
               </div>
             </aside>
           </>
@@ -1268,7 +1273,8 @@ export default function Home() {
             <div style={{ flex: 1, minHeight: 0, overflowY: activeTool === "map" ? "hidden" : "auto" }}>
               <ToolContent tool={activeTool} itinerary={currentItinerary}
                 ideas={ideas} onAddIdea={i => setIdeas(prev => [...prev, i])} onRemoveIdea={idx => setIdeas(prev => prev.filter((_, i) => i !== idx))}
-                mediaFiles={mediaFiles} onUploadMedia={f => setMediaFiles(prev => [...prev, ...f])} onRemoveMedia={idx => setMediaFiles(prev => prev.filter((_, i) => i !== idx))} />
+                mediaFiles={mediaFiles} onUploadMedia={f => setMediaFiles(prev => [...prev, ...f])} onRemoveMedia={idx => setMediaFiles(prev => prev.filter((_, i) => i !== idx))}
+                  onItineraryUpdate={setCurrentItinerary} userTier={user ? "free" : "guest"} authorName={user?.name} />
             </div>
             {/* Toolbar bassa — nessun swipe listener qui, il problema era nel window listener */}
             <div style={{ flexShrink: 0, padding: "10px 12px 20px", display: "flex", justifyContent: "center", ...glassDark, borderTop: "1px solid rgba(255,255,255,0.08)" }}>

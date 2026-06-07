@@ -1143,6 +1143,80 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── Lettura scontrino con AI (vision) — funzione Premium ───────────────
+  // Riceve la foto di uno scontrino e ne estrae importo/categoria/data in JSON,
+  // così l'utente non deve digitarli a mano. Gated agli utenti loggati (non guest);
+  // quando ci sarà il billing Premium, stringere a userTier === "paid".
+  if (req.url === "/api/receipt" && req.method === "POST") {
+    const clientIP = getClientIP(req);
+    const rateCheck = checkRateLimit(clientIP);
+    if (!rateCheck.allowed) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: `Troppe richieste. Riprova tra ${rateCheck.waitMin} minuti.` }));
+      return;
+    }
+    let body = "";
+    req.on("data", c => { body += c; });
+    req.on("end", async () => {
+      try {
+        const { image, mediaType, userTier } = JSON.parse(body);
+        // Gate Premium: per ora basta essere loggati (free/paid); i guest no.
+        if (!userTier || userTier === "guest") {
+          res.writeHead(402, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "La scansione automatica degli scontrini è una funzione Premium. Inserisci l'importo a mano." }));
+          return;
+        }
+        if (!image || typeof image !== "string") {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Immagine mancante." }));
+          return;
+        }
+        const today = new Date().toISOString().slice(0, 10);
+        const sys = `Sei un estrattore di dati da scontrini/ricevute. Ti viene data la FOTO di uno scontrino. Restituisci SOLO JSON valido (nessun testo fuori, niente markdown) con questa forma:
+{ "amount": number, "currency": string, "category": "food"|"transport"|"stay"|"activity"|"shopping"|"other", "title": string, "date": string|null }
+Regole:
+- "amount": il TOTALE pagato (il totale finale, non i singoli articoli). Numero con punto decimale, senza simbolo valuta.
+- "currency": codice ISO (EUR, USD, GBP…). Se non chiaro, "EUR".
+- "category": deduci dal tipo di esercente — ristorante/bar/supermercato→"food", taxi/treno/bus/benzina/pedaggio→"transport", hotel/b&b→"stay", musei/tour/biglietti→"activity", negozi/abbigliamento→"shopping", altrimenti "other".
+- "title": nome esercente o breve descrizione (max 40 caratteri).
+- "date": data dello scontrino in formato YYYY-MM-DD se leggibile, altrimenti null. Oggi è ${today}.
+Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
+        const orMessages = buildORMessages(
+          [{ role: "user", content: "Estrai i dati di spesa da questo scontrino." }],
+          { mediaType: mediaType || "image/jpeg", data: image },
+        );
+        const result = await callOpenRouter({ model: M.HAIKU, system: sys, messages: orMessages, maxTokens: 500 });
+        let txt = (result.text || "").replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+        let data;
+        try { data = JSON.parse(txt); }
+        catch {
+          const s = txt.indexOf("{"), e = txt.lastIndexOf("}");
+          if (s !== -1 && e !== -1) { try { data = JSON.parse(txt.substring(s, e + 1)); } catch {} }
+        }
+        if (!data || typeof data.amount === "undefined") {
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Non sono riuscito a leggere lo scontrino. Inserisci l'importo a mano." }));
+          return;
+        }
+        const VALID_CAT = ["food", "transport", "stay", "activity", "shopping", "other"];
+        const out = {
+          amount: Math.max(0, Number(data.amount) || 0),
+          currency: typeof data.currency === "string" ? data.currency.toUpperCase().slice(0, 3) : "EUR",
+          category: VALID_CAT.includes(data.category) ? data.category : "other",
+          title: typeof data.title === "string" ? data.title.slice(0, 60) : "",
+          date: typeof data.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(data.date) ? data.date : null,
+        };
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(out));
+      } catch (err) {
+        console.error("[receipt] err:", err.message);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Errore nella lettura dello scontrino." }));
+      }
+    });
+    return;
+  }
+
   // ── Chat con rate limiting ────────────────────────────────────────────
   if (req.url === "/api/chat" && req.method === "POST") {
     const clientIP = getClientIP(req);
