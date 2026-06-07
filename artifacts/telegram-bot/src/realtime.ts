@@ -52,10 +52,16 @@ export function startRealtimeBridge() {
         if (!binding) return;
         // Evita echo: i messaggi creati dal bot stesso hanno author='telegram'
         if (row.author === "telegram") return;
+        // NON notificare le modifiche AI fatte dalla webapp: la chat "Modifica con
+        // l'AI" dentro il viaggio salvato scrive righe ai_request (✨ richiesta utente)
+        // e ai_update (risposta AI) in trip_messages. Sono azioni del proprietario
+        // sul SUO viaggio, non messaggi dei compagni → rispedirgliele su Telegram è
+        // solo rumore (vedi feedback utente). Il bridge notifica solo collaborazione
+        // reale: messaggi dei compagni, idee e media.
+        if (row.type === "ai_request" || row.type === "ai_update") return;
         const preview = String(row.text ?? "").slice(0, 200);
         const label =
           row.type === "idea" ? "💡 Idea" :
-          row.type === "ai_update" ? "🤖 Aggiornamento AI" :
           row.type === "media" ? "📸 Media" :
           "💬 Messaggio";
         await bot.api

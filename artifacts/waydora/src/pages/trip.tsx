@@ -109,11 +109,18 @@ function WaydoraLogo() {
 // ── TripChat ──────────────────────────────────────────────────────────────
 // mode="ai"        → chat di modifica itinerario (✨), input in basso, limite 50
 // mode="companions"→ messaggi tra i compagni di viaggio (💬), separati dall'AI
-function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mode = "ai" }: {
+function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mode = "ai", glass = false }: {
   slug: string; itinerary: any; onItineraryUpdate: (i: any) => void; onClose?: () => void;
-  onCollapse?: () => void; mode?: "ai" | "companions";
+  onCollapse?: () => void; mode?: "ai" | "companions"; glass?: boolean;
 }) {
   const isAi = mode === "ai";
+  // Variante glassmorfismo (usata su desktop): superficie traslucida + blur così si
+  // intravede lo sfondo gradiente della pagina. Su mobile (Drawer) resta il fondo
+  // pieno scuro. Le sezioni interne diventano trasparenti per non coprire il blur.
+  const surfaceBg = glass ? "transparent" : "#0d0a18";
+  const rootStyle: React.CSSProperties = glass
+    ? { background: "var(--wd-glass)", backdropFilter: "blur(24px) saturate(160%)", WebkitBackdropFilter: "blur(24px) saturate(160%)" }
+    : { backgroundColor: "#0d0a18" };
   const { user } = useAuth();
   const { toast } = useToast();
   const [messages,    setMessages]    = useState<TripMessage[]>([]);
@@ -203,6 +210,18 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mod
     if (!input.trim() || aiPending) return;
     if (!incAi()) { toast({ title: "Limite raggiunto", variant: "destructive" }); return; }
     const prompt = input.trim(); setInput(""); setAiPending(true);
+    // Costruisci lo STORICO della conversazione prima di inserire la nuova richiesta.
+    // Senza questo, l'Ai riceveva solo il messaggio singolo e perdeva il contesto
+    // (es. "e c'è un sito?" dopo "orari navette?", o chiedeva "in quale città?"
+    // pur avendo l'itinerario). Mappiamo ai_request→user / ai_update→assistant e
+    // togliamo i prefissi emoji. Ultimi 8 turni per non gonfiare i token.
+    const history = messages
+      .filter(m => m.type === "ai_request" || m.type === "ai_update")
+      .slice(-8)
+      .map(m => ({
+        role: (m.type === "ai_request" ? "user" : "assistant") as "user" | "assistant",
+        content: m.text.replace(/^[✨✅🤖]\s*/, ""),
+      }));
     await sendMsg(`✨ ${prompt}`, "ai_request");
     try {
       // Modifica pesante (aggiungi giorno, rigenera, cambia destinazione) → Railway+Sonnet
@@ -212,7 +231,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mod
       const res = await fetch(url, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [{ role: "user", content: prompt }],
+          messages: [...history, { role: "user", content: prompt }],
           existingItinerary: itinerary,
           userTier: user ? "free" : "guest",
         }),
@@ -250,7 +269,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mod
       toast({ title: e?.message ?? "Connessione persa. Riprova.", variant: "destructive" });
     }
     setAiPending(false);
-  }, [input, aiPending, itinerary, slug, user, toast]);
+  }, [input, aiPending, itinerary, slug, user, toast, messages]);
 
   const msgBg = (t: TripMessage["type"]): React.CSSProperties => {
     // Richiesta di modifica dell'utente → stile "bolla utente" caldo (come la chat principale)
@@ -269,9 +288,9 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mod
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", backgroundColor: "#0d0a18" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...rootStyle }}>
       {/* Header */}
-      <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "#0d0a18" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: surfaceBg }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "15px" }}>{isAi ? "✨" : "💬"}</span>
           <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{isAi ? "Modifica con l'AI" : "Messaggi compagni"}</span>
@@ -287,7 +306,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mod
       </div>
 
       {!user && (
-        <div style={{ padding: "8px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, backgroundColor: "#0d0a18" }}>
+        <div style={{ padding: "8px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, backgroundColor: surfaceBg }}>
           <input value={name} onChange={e => { setName(e.target.value); localStorage.setItem("waydora_guest_name", e.target.value); }}
             placeholder="Il tuo nome (opzionale)"
             style={{ width: "100%", background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", padding: "7px 12px", color: "#fff", fontSize: "13px", outline: "none" }} />
@@ -296,12 +315,12 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mod
 
       {isAi && (
         <div style={{ padding: "7px 16px", background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-          <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>✨ Le modifiche aggiornano l'itinerario per tutti i compagni</span>
+          <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.5)" }}>✨ Le modifiche aggiornano l'itinerario per tutti i compagni · ⚠️ non si possono annullare</span>
         </div>
       )}
 
       {/* Messaggi */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px", backgroundColor: "#0d0a18" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "8px", backgroundColor: surfaceBg }}>
         {displayMessages.length === 0
           ? <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", color: "rgba(255,255,255,0.3)", textAlign: "center", padding: "60px 20px" }}>
               <span style={{ fontSize: "32px", opacity: 0.4 }}>{isAi ? "✨" : "💬"}</span>
@@ -319,7 +338,7 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mod
       </div>
 
       {/* Input */}
-      <div style={{ padding: "10px 14px 14px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0, backgroundColor: "#0d0a18" }}>
+      <div style={{ padding: "10px 14px 14px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0, backgroundColor: surfaceBg }}>
         <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
           <textarea value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => {
@@ -822,11 +841,14 @@ export default function Trip() {
       });
   }, [slug, user]);
 
-  // Conteggio messaggi — canale univoco (saltato per i template: non hanno messaggi propri)
+  // Conteggio messaggi — canale univoco (saltato per i template: non hanno messaggi propri).
+  // Il badge sta sul pulsante "messaggi compagni", quindi conta SOLO i messaggi dei
+  // compagni (type "message"): le richieste/risposte AI (ai_request/ai_update) vivono
+  // nella chat AI separata e non devono gonfiare questo contatore.
   useEffect(() => {
     if (!slug || isTemplate) return;
     supabase.from("trip_messages").select("id", { count: "exact", head: true })
-      .eq("share_slug", slug).in("type", ["message","ai_request","ai_update"])
+      .eq("share_slug", slug).eq("type", "message")
       .then(({ count }) => { if (count) setMsgCount(count); });
 
     const id = chanId("cnt");
@@ -835,7 +857,7 @@ export default function Trip() {
         event: "INSERT", schema: "public",
         table: "trip_messages", filter: `share_slug=eq.${slug}`,
       }, p => {
-        if (["message","ai_request","ai_update"].includes((p.new as TripMessage).type))
+        if ((p.new as TripMessage).type === "message")
           setMsgCount(v => v + 1);
       })
       .subscribe();
@@ -1006,14 +1028,14 @@ export default function Trip() {
             {!isTemplate && activeTool === "itinerary" && (
               aiCollapsed ? (
                 <button onClick={() => setAiCollapsed(false)}
-                  style={{ flexShrink: 0, width: "100%", display: "flex", alignItems: "center", gap: "8px", padding: "12px 16px", background: "rgba(13,10,24,0.97)", border: "none", borderTop: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.72)", fontSize: "13px", fontWeight: 700, cursor: "pointer" }}>
+                  style={{ flexShrink: 0, width: "100%", display: "flex", alignItems: "center", gap: "8px", padding: "12px 16px", background: "var(--wd-glass)", backdropFilter: "blur(24px) saturate(160%)", WebkitBackdropFilter: "blur(24px) saturate(160%)", border: "none", borderTop: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.72)", fontSize: "13px", fontWeight: 700, cursor: "pointer" }}>
                   <span style={{ fontSize: "15px" }}>✨</span>
                   <span style={{ flex: 1, textAlign: "left" }}>Modifica con l'AI</span>
                   <ChevronUp style={{ width: "16px", height: "16px" }} />
                 </button>
               ) : (
                 <div style={{ height: "300px", flexShrink: 0, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                  <TripChat mode="ai" slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onCollapse={() => setAiCollapsed(true)} />
+                  <TripChat mode="ai" glass slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} onCollapse={() => setAiCollapsed(true)} />
                 </div>
               )
             )}
@@ -1022,7 +1044,7 @@ export default function Trip() {
           <div style={{ width: "360px", flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", minHeight: 0 }}>
             {isTemplate
               ? <TemplateLockedPanel onFork={forkTemplate} forking={forking} />
-              : <TripChat mode="companions" slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />
+              : <TripChat mode="companions" glass slug={slug} itinerary={itinerary} onItineraryUpdate={setItinerary} />
             }
           </div>
         </div>

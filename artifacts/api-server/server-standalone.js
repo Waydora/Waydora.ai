@@ -131,7 +131,12 @@ const LODGING_DETAIL_RX = /\b(rifugi\w*|hotel|hostel|ostell\w*|b&b|bnb|airbnb|re
 // Segnali che l'AI ha appena CHIESTO una domanda su alloggi / voli (per capire se
 // l'ultimo messaggio utente è una RISPOSTA a quella domanda). Richiede un "?".
 const LODGING_ASKED_RX = /(allogg\w*|dormir|rifugi|hotel|b&b|ostell\w*|hostel|airbnb|resort|camer[ae]|fascia di prezzo|per notte|tipo preferisci)/i;
-const FLIGHT_ASKED_RX  = /(vol[oi]|aere|partenz|da dove parti|da quale citt|che date|quando (parti|torni|vuoi|pensavi)|quante persone|periodo)/i;
+// SOLO segnali davvero VOLI-specifici. NON includere termini di onboarding generico
+// (periodo / quante persone / che date / quando vai): la prima domanda standard
+// dell'AI ("con chi vai e che periodo?") li conterrebbe e, se l'utente risponde con
+// una data, farebbe partire i link voli su un viaggio che magari è in auto (es.
+// Isernia→Vietri). La vera domanda voli del prompt contiene "da quale città parti".
+const FLIGHT_ASKED_RX  = /(vol[oi]|aere|aeroport|partenz|da dove parti|da quale citt|citt[aà]\s+di\s+partenza|scal[oi])/i;
 
 // Testo dell'ultimo messaggio assistant (per capire se ha posto una domanda).
 function lastAssistantText(messages) {
@@ -857,6 +862,69 @@ async function callAI(messages, existingItinerary, mediaContent, userTier = "gue
   }
 }
 
+// ── #5 Aggiunta giorni a basso consumo di token ────────────────────────────
+// Problema: "aggiungi un giorno" faceva rigenerare all'AI l'INTERO itinerario JSON
+// (input+output enormi) con rischio di stravolgere i giorni esistenti. Qui invece,
+// quando l'utente chiede di AGGIUNGERE uno o più GIORNI INTERI, chiediamo all'AI di
+// emettere SOLO i nuovi giorni ({reply, newDays}) e li uniamo lato server ai giorni
+// esistenti: meno token e zero drift sui giorni già presenti. Se il riconoscimento
+// non è sicuro (o l'output è malformato) si ricade sulla rigenerazione completa.
+function detectAppendDays(messages, itinerary) {
+  if (!itinerary || !Array.isArray(itinerary.days) || itinerary.days.length === 0) return null;
+  const userMsgs = (messages || []).filter(m => m.role === "user")
+    .map(m => (typeof m.content === "string" ? m.content : ""));
+  const last = (userMsgs[userMsgs.length - 1] || "").toLowerCase().trim();
+  if (!last) return null;
+
+  const addIntent = /\b(aggiung\w*|inseris\w*|metti|estend\w*|allung\w*|prolung\w*|un altro giorno|un giorno in più|una giornata in più|ancora un giorno|un'altra giornata)\b/.test(last);
+  const dayWord = /\b(giorn\w*|giornat\w*|nott\w*)\b/.test(last);
+  if (!addIntent || !dayWord) return null;
+
+  // Escludi le modifiche DENTRO un giorno esistente ("aggiungi una tappa al giorno 2",
+  // "metti una cena nel giorno 3"): lì serve la modifica normale, non un nuovo giorno.
+  if (/\b(a|al|all'|nel|nell'|del|dell'|sul|sull'|nello)\s*giorn\w*\s*\d/.test(last)) return null;
+  if (/giorn\w*\s+\d/.test(last) && !/\d+\s*(?:giorn|giornat|nott)/.test(last)) return null;
+
+  // Quanti giorni: cifra esplicita, poi parole comuni, default 1. Cap a 7 per sicurezza.
+  let count = 1;
+  const m = last.match(/(\d+)\s*(?:giorn|giornat|nott)/);
+  if (m) count = Math.min(parseInt(m[1], 10) || 1, 7);
+  else if (/\bdue\b/.test(last)) count = 2;
+  else if (/\btre\b/.test(last)) count = 3;
+  return { count };
+}
+
+async function callAppendDays(messages, itinerary, count, userTier) {
+  const today = new Date().toISOString().slice(0, 10);
+  const existingDays = Array.isArray(itinerary.days) ? itinerary.days.length : 0;
+  const startNum = existingDays + 1;
+  const endNum = existingDays + count;
+  // Riassunto COMPATTO dei giorni esistenti (no JSON pieno): basta per continuità
+  // e per non ripetere i luoghi. Risparmia token di input.
+  const brief = (itinerary.days || [])
+    .map(d => `G${d.day}: ${d.title || ""}${d.city ? ` (${d.city})` : ""}`)
+    .join(" · ")
+    .substring(0, 900);
+
+  const sys = `${SYSTEM_PROMPT}
+
+━━━ DATA OGGI ━━━
+Oggi è ${today}. Nessuna data passata negli URL.
+
+━━━ AGGIUNTA GIORNI (OUTPUT MINIMALE — RISPARMIO TOKEN) ━━━
+Stai AGGIUNGENDO ${count} nuovo/i giorno/i a un itinerario ESISTENTE di "${itinerary.destination || ""}" che ha GIÀ ${existingDays} giorni. NON riscrivere e NON ripetere i giorni esistenti.
+Rispondi SOLO con questo JSON: { "reply": "1-2 frasi in italiano che confermano cosa hai aggiunto", "newDays": [ ... ] }.
+"newDays" contiene ESCLUSIVAMENTE i ${count} nuovi giorni, ciascuno con la STESSA struttura del campo days[] dell'itinerario (day, title, summary, weather, activities[] con coordinates OBBLIGATORIE per ogni attività, e affiliate dove ha senso). Numera i nuovi giorni ${count > 1 ? `${startNum}…${endNum}` : `${startNum}`}.
+Continuità (NON ripetere questi luoghi già previsti): ${brief}.`;
+
+  const cap = TIER_TOKENS[userTier] ?? TIER_TOKENS.guest;
+  const maxTokens = Math.min(cap, Math.max(3500, count * 2600 + 1500));
+  const orMessages = buildORMessages(messages, null);
+  console.log(`[append-days] count=${count} model=${M.SONNET} maxTokens=${maxTokens} (vs regen completa)`);
+  const result = await callOpenRouter({ model: M.SONNET, system: sys, messages: orMessages, maxTokens });
+  return { ...result, model: M.SONNET };
+}
+
 // ── Google Places ─────────────────────────────────────────────────────────
 
 // Geocodifica una città/destinazione per ottenere coordinate da usare come bias
@@ -1096,9 +1164,6 @@ const server = http.createServer(async (req, res) => {
         const { messages, existingItinerary, mediaContent, userTier, progressive } = JSON.parse(body);
         console.log(`[chat] msgs=${messages?.length}, tier=${userTier}, hasItinerary=${!!existingItinerary}, progressive=${progressive ? `${progressive.from}-${progressive.to}/${progressive.totalDays}` : "no"}`);
         const enrichedMessages = await enrichWithTikTok(messages);
-        let aiResult = await callAI(enrichedMessages, existingItinerary, mediaContent, userTier, progressive);
-        let raw = aiResult.text;
-        let stopReason = aiResult.stopReason;
 
         // Estrae il JSON in modo robusto: trova il blocco {...} più esterno
         function extractJsonPayload(str) {
@@ -1120,11 +1185,52 @@ const server = http.createServer(async (req, res) => {
           return m ? { reply: m[1], itinerary: null } : null;
         }
 
-        let payload = extractJsonPayload(raw);
+        let payload = null;
+        let raw = "";
+        let stopReason = "end_turn";
+        let usedModel = null;
+
+        // #5: "aggiungi un giorno" → genera SOLO i nuovi giorni e fai il merge lato
+        // server (pochi token, nessun drift). Se fallisce → rigenerazione completa.
+        const appendReq = existingItinerary && !progressive && !mediaContent
+          ? detectAppendDays(enrichedMessages, existingItinerary) : null;
+        if (appendReq) {
+          try {
+            const ap = await callAppendDays(enrichedMessages, existingItinerary, appendReq.count, userTier);
+            stopReason = ap.stopReason; usedModel = ap.model;
+            const p = extractJsonPayload(ap.text);
+            if (p && Array.isArray(p.newDays) && p.newDays.length > 0) {
+              let dayNum = Array.isArray(existingItinerary.days) ? existingItinerary.days.length : 0;
+              const merged = p.newDays.filter(Boolean).map(d => ({ ...d, day: ++dayNum }));
+              payload = {
+                reply: (typeof p.reply === "string" && p.reply.trim()) ? p.reply : "Ho aggiunto i nuovi giorni al tuo itinerario ✨",
+                itinerary: {
+                  ...existingItinerary,
+                  days: [...(existingItinerary.days || []), ...merged],
+                  durationDays: dayNum,
+                },
+              };
+              console.log(`[chat] append-days OK: +${merged.length}gg (tot ${dayNum})`);
+            } else {
+              console.warn("[chat] append-days: newDays assente/vuoto → fallback regen completa");
+            }
+          } catch (e) {
+            console.warn("[chat] append-days errore → fallback regen completa:", e.message);
+          }
+        }
+
+        // Percorso normale (creazione / modifica / consulto / append fallito)
+        if (!payload) {
+          let aiResult = await callAI(enrichedMessages, existingItinerary, mediaContent, userTier, progressive);
+          raw = aiResult.text;
+          stopReason = aiResult.stopReason;
+          usedModel = aiResult.model;
+          payload = extractJsonPayload(raw);
+        }
 
         // Fallback su JSON invalido: retry con Sonnet se non già usato
-        if ((!payload || !payload.reply) && aiResult.model !== M.SONNET) {
-          console.warn(`[chat] JSON invalido da ${aiResult.model}, retry con Sonnet`);
+        if ((!payload || !payload.reply) && usedModel !== M.SONNET) {
+          console.warn(`[chat] JSON invalido da ${usedModel}, retry con Sonnet`);
           try {
             const systemPrompt = existingItinerary
               ? `${SYSTEM_PROMPT}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`

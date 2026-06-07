@@ -57,7 +57,7 @@ function haversineKm(a: google.maps.LatLngLiteral, b: google.maps.LatLngLiteral)
 
 type MarkerData = {
   key: string; lat: number; lng: number;
-  day: number; dayIndex: number;
+  day: number; dayIndex: number; seq: number;
   title: string; time: string; category: string;
 };
 
@@ -85,20 +85,24 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
     const dayInfo: { first: google.maps.LatLngLiteral; last: google.maps.LatLngLiteral; city: string; mode: string | null }[] = [];
 
     itinerary.days.forEach((day: MapDay, dayIndex: number) => {
-      let actIdx = 0;
+      // seq = numero progressivo delle tappe EFFETTIVAMENTE mappate del giorno, in
+      // ordine cronologico (le attività arrivano già ordinate mattino→sera). Così il
+      // marker mostra 1,2,3… per le tappe del giorno (non il numero del giorno ripetuto);
+      // il COLORE resta quello del giorno per distinguerli a colpo d'occhio.
+      let seq = 0;
       const dayPoints: google.maps.LatLngLiteral[] = [];
       // Mezzo di spostamento dichiarato dall'AI per questo giorno (prima attività transport).
       let dayMode: string | null = null;
       for (const a of day.activities) {
-        actIdx++;
         if ((a.category || "").toLowerCase() === "transport" && a.transportMode && !dayMode) {
           dayMode = a.transportMode.toLowerCase();
         }
         if (a.coordinates?.lat && a.coordinates?.lng) {
+          seq++;
           out.push({
-            key: `${day.day}-${actIdx}`,
+            key: `${day.day}-${seq}`,
             lat: a.coordinates.lat, lng: a.coordinates.lng,
-            day: day.day, dayIndex,
+            day: day.day, dayIndex, seq,
             title: a.title, time: a.time, category: a.category,
           });
           dayPoints.push({ lat: a.coordinates.lat, lng: a.coordinates.lng });
@@ -206,7 +210,7 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
             strokeWeight: 2,
           },
           label: {
-            text: String(m.day),
+            text: String(m.seq),
             color: "#ffffff",
             fontSize: "11px",
             fontWeight: "bold",
@@ -217,7 +221,7 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
           content: `
             <div style="font-family:Inter,sans-serif;padding:4px 2px;min-width:150px">
               <div style="font-size:10px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">
-                Giorno ${m.day} · ${m.time}
+                Giorno ${m.day} · Tappa ${m.seq} · ${m.time}
               </div>
               <div style="font-size:14px;font-weight:700;color:#0f172a">${m.title}</div>
               <div style="font-size:11px;color:#64748b;margin-top:2px">${m.category}</div>
