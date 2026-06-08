@@ -251,8 +251,12 @@ function buildFlightBlock(messages, itinerary) {
   } else {
     const t = topicContext(userMsgs);
     const r = parseRoute(t.text, null);
+    const itinDest = itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : null;
     origin = r.origin || (itinerary?.departure ? String(itinerary.departure).split(",")[0].trim() : null);
-    dest = r.dest || t.city || (itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : null);
+    // Se c'è un itinerario, la SUA destinazione è la fonte di verità: l'utente la sta
+    // guardando. Va preferita all'ultima città citata nello storico (topicContext),
+    // che può essere una meta vecchia poi abbandonata (es. "Cilento" → poi Cicladi).
+    dest = r.dest || itinDest || t.city;
     ctx = t.text;
   }
   if (!dest) return null; // senza destinazione non costruiamo nulla
@@ -1175,7 +1179,9 @@ const server = http.createServer(async (req, res) => {
         const sys = `Sei un estrattore di dati da scontrini/ricevute. Ti viene data la FOTO di uno scontrino. Restituisci SOLO JSON valido (nessun testo fuori, niente markdown) con questa forma:
 { "amount": number, "currency": string, "category": "food"|"transport"|"stay"|"activity"|"shopping"|"other", "title": string, "date": string|null }
 Regole:
-- "amount": il TOTALE pagato (il totale finale, non i singoli articoli). Numero con punto decimale, senza simbolo valuta.
+- "amount": il TOTALE DELLA SPESA (la riga "TOTALE" / "TOTALE COMPLESSIVO" / "TOTALE EURO" / "IMPORTO"), cioè quanto è costata la spesa. Numero con punto decimale, senza simbolo valuta.
+  IMPORTANTISSIMO: NON usare MAI l'importo del contante consegnato né il resto. Sullo scontrino righe come "CONTANTE", "CONTANTI", "PAGAMENTO CONTANTE", "IMPORTO PAGATO", "RICEVUTO", "RESTO", "CONTANTE EURO 20,00", "RESTO EURO 10,20" NON sono il totale: sono quanto hai dato e quanto ti hanno reso. Esempio: se il TOTALE è 9,80 ma hai pagato con 20,00 e il resto è 10,20 → amount = 9.80 (mai 20.00).
+- Se "TOTALE" e "CONTANTE/RICEVUTO" hanno valori diversi, l'importo corretto è il minore dei due (il totale), MAI il contante consegnato.
 - "currency": codice ISO (EUR, USD, GBP…). Se non chiaro, "EUR".
 - "category": deduci dal tipo di esercente — ristorante/bar/supermercato→"food", taxi/treno/bus/benzina/pedaggio→"transport", hotel/b&b→"stay", musei/tour/biglietti→"activity", negozi/abbigliamento→"shopping", altrimenti "other".
 - "title": nome esercente o breve descrizione (max 40 caratteri).

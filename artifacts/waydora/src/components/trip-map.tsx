@@ -122,9 +122,15 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
     // Classifica un mezzo in stile linea: strada (piena) vs tratteggiata.
     // Senza mezzo esplicito: < 200km in auto (piena), oltre → tratteggiata (volo).
     const classify = (mode: string | null, from: google.maps.LatLngLiteral, to: google.maps.LatLngLiteral): "road" | "dashed" => {
+      const km = haversineKm(from, to);
+      // Tratte molto lunghe (> 700km) = quasi sempre un VOLO: ignora un eventuale
+      // mode "car/bus/taxi" che di solito si riferisce alla tratta locale (es.
+      // casa→aeroporto). Senza questo, Google disegnava un assurdo percorso
+      // stradale + traghetto (es. Isernia→Bari→traghetto→Patrasso→Atene).
+      if (km > 700) return "dashed";
       if (mode && ROAD_MODES.includes(mode)) return "road";
       if (mode && DASHED_MODES.includes(mode)) return "dashed";
-      return haversineKm(from, to) <= 200 ? "road" : "dashed";
+      return km <= 200 ? "road" : "dashed";
     };
 
     const conns: Connector[] = [];
