@@ -227,6 +227,24 @@ export function useSavedTrips(userId: string | undefined) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Realtime: i viaggi creati FUORI dalla webapp (es. auto-save del bot Telegram)
+  // devono comparire senza ricaricare la pagina. + refetch al focus della finestra
+  // come rete di sicurezza se un evento realtime viene perso.
+  useEffect(() => {
+    if (!userId) return;
+    const ch = supabase
+      .channel(`saved_trips_live_${userId}_${Date.now()}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "saved_trips", filter: `user_id=eq.${userId}` }, (p: any) => {
+        if (p.eventType === "INSERT") setSaved(prev => prev.find(s => s.id === p.new.id) ? prev : [p.new as SavedTripRow, ...prev]);
+        else if (p.eventType === "DELETE") setSaved(prev => prev.filter(s => s.id !== p.old.id));
+        else if (p.eventType === "UPDATE") setSaved(prev => prev.map(s => s.id === p.new.id ? (p.new as SavedTripRow) : s));
+      })
+      .subscribe();
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    return () => { supabase.removeChannel(ch); window.removeEventListener("focus", onFocus); };
+  }, [userId, load]);
+
   // ── Salva un itinerario generato dall'AI ──────────────────────────────
   const saveItinerary = useCallback(async (itinerary: ItineraryData, title?: string) => {
     if (!userId) return null;
