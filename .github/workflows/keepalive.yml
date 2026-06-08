@@ -1,0 +1,30 @@
+name: Keep Railway warm
+
+# Tiene "sveglio" l'api-server su Railway pingando /api/health a intervalli, così
+# il primo messaggio dell'utente non paga il cold start (~10-20s di avvio).
+#
+# NOTE IMPORTANTI:
+# - GitHub Actions schedule ha granularità minima 5 min e PUÒ ritardare di diversi
+#   minuti sotto carico: non è un keep-alive perfetto. Per affidabilità migliore usa
+#   un monitor esterno gratuito (UptimeRobot 5 min, o cron-job.org fino a 1 min) che
+#   pinga lo stesso URL — non consuma minuti Actions.
+# - Su repo PRIVATO questo job consuma minuti Actions (~720 min/mese a 10 min).
+#   Se è un problema, alza l'intervallo o disabilita il workflow e usa il monitor esterno.
+# - Se l'api-server è su un piano Railway "always on", il keep-alive è superfluo.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # ogni 10 minuti
+  workflow_dispatch:           # esecuzione manuale dalla tab Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping api-server health
+        run: |
+          URL="https://waydoraai-production.up.railway.app/api/health"
+          echo "Ping $URL"
+          curl -fsS --max-time 40 "$URL" \
+            && echo "OK: server sveglio" \
+            || echo "Ping fallito (server forse in avvio): non blocco il workflow"
