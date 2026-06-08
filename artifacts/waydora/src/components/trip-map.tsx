@@ -22,10 +22,13 @@ type ItineraryData = {
   departureCoords?: { lat: number; lng: number } | null;
 };
 
-// Mezzi che seguono le strade → tracciamo un percorso reale (linea piena).
-const ROAD_MODES = ["car", "taxi", "bus"];
-// Mezzi "in linea d'aria" o su rotaia → linea tratteggiata diretta.
-const DASHED_MODES = ["flight", "train", "ferry"];
+// Mezzi su strada → Google Directions traccia il percorso REALE. Il traghetto è qui
+// perché un viaggio auto+traghetto (es. Bari→Patrasso) viene reso da Google come un
+// percorso continuo che include la tratta marittima. Per i traghetti tra isole senza
+// strade, Directions non trova rotta → fallback automatico a linea tratteggiata.
+const ROAD_MODES = ["car", "taxi", "bus", "ferry"];
+// Mezzi non guidabili (in linea d'aria / su rotaia) → linea tratteggiata diretta.
+const DASHED_MODES = ["flight", "train"];
 const CONNECTOR_COLOR = "#334155"; // slate-700, distinto dalle route a piedi colorate per giorno
 
 type Connector = {
@@ -91,11 +94,14 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
       // il COLORE resta quello del giorno per distinguerli a colpo d'occhio.
       let seq = 0;
       const dayPoints: google.maps.LatLngLiteral[] = [];
-      // Mezzo di spostamento dichiarato dall'AI per questo giorno (prima attività transport).
-      let dayMode: string | null = null;
+      // Raccoglie TUTTI i mezzi dichiarati nel giorno; il mezzo del connettore tra
+      // città viene poi scelto per PRIORITÀ (sotto). Così un giorno con "auto fino
+      // all'aeroporto + volo" usa il VOLO per la tratta lunga (non l'auto locale),
+      // mentre un giorno con "auto + traghetto" usa il traghetto (percorso reale).
+      const dayModes = new Set<string>();
       for (const a of day.activities) {
-        if ((a.category || "").toLowerCase() === "transport" && a.transportMode && !dayMode) {
-          dayMode = a.transportMode.toLowerCase();
+        if ((a.category || "").toLowerCase() === "transport" && a.transportMode) {
+          dayModes.add(a.transportMode.toLowerCase());
         }
         if (a.coordinates?.lat && a.coordinates?.lng) {
           seq++;
@@ -108,6 +114,15 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
           dayPoints.push({ lat: a.coordinates.lat, lng: a.coordinates.lng });
         }
       }
+      // Priorità: volo > treno > traghetto > auto > bus > taxi. Il mezzo a lunga
+      // percorrenza vince su quello locale per rappresentare la tratta tra città.
+      const dayMode: string | null =
+        dayModes.has("flight") ? "flight" :
+        dayModes.has("train")  ? "train"  :
+        dayModes.has("ferry")  ? "ferry"  :
+        dayModes.has("car")    ? "car"    :
+        dayModes.has("bus")    ? "bus"    :
+        dayModes.has("taxi")   ? "taxi"   : null;
       if (dayPoints.length > 1) byDay[dayIndex] = dayPoints;
       if (dayPoints.length > 0) {
         dayInfo[dayIndex] = {
@@ -122,15 +137,12 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
     // Classifica un mezzo in stile linea: strada (piena) vs tratteggiata.
     // Senza mezzo esplicito: < 200km in auto (piena), oltre → tratteggiata (volo).
     const classify = (mode: string | null, from: google.maps.LatLngLiteral, to: google.maps.LatLngLiteral): "road" | "dashed" => {
-      const km = haversineKm(from, to);
-      // Tratte molto lunghe (> 700km) = quasi sempre un VOLO: ignora un eventuale
-      // mode "car/bus/taxi" che di solito si riferisce alla tratta locale (es.
-      // casa→aeroporto). Senza questo, Google disegnava un assurdo percorso
-      // stradale + traghetto (es. Isernia→Bari→traghetto→Patrasso→Atene).
-      if (km > 700) return "dashed";
+      // Rispetta SEMPRE il mezzo dichiarato: volo/treno → tratteggiata; auto/bus/taxi/
+      // traghetto → percorso reale su strada (Google, traghetto incluso). Solo se il
+      // mezzo non è noto si stima dalla distanza (>200km → probabile volo).
       if (mode && ROAD_MODES.includes(mode)) return "road";
       if (mode && DASHED_MODES.includes(mode)) return "dashed";
-      return km <= 200 ? "road" : "dashed";
+      return haversineKm(from, to) <= 200 ? "road" : "dashed";
     };
 
     const conns: Connector[] = [];
