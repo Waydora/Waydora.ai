@@ -12,6 +12,7 @@ export type AIResponse = {
 async function callOnce(input: {
   messages: ChatMessage[];
   existingItinerary?: Itinerary | null;
+  userProfile?: string | null;
 }): Promise<AIResponse> {
   const res = await fetch(`${env.API_SERVER_URL}/api/chat`, {
     method: "POST",
@@ -21,6 +22,8 @@ async function callOnce(input: {
       existingItinerary: input.existingItinerary ?? undefined,
       // Il bot Telegram serve solo utenti Pro → tier paid (16k token cap)
       userTier: "paid",
+      // Profilo viaggiatore (auto dai viaggi) → suggerimenti personalizzati.
+      userProfile: input.userProfile ?? undefined,
     }),
   });
   if (!res.ok) {
@@ -34,6 +37,7 @@ export async function callAI(input: {
   messages: ChatMessage[];
   existingItinerary?: Itinerary | null;
   userTier: "free" | "paid";
+  userProfile?: string | null;
 }): Promise<AIResponse> {
   try {
     return await callOnce(input);

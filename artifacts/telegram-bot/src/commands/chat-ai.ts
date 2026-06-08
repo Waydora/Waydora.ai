@@ -3,6 +3,8 @@ import { InlineKeyboard } from "grammy";
 import type { BoundContext } from "../bot.js";
 import { callAI, type ChatMessage } from "../lib/chat-bridge.js";
 import { loadOrCreateSession, saveSession, trimHistory, upsertSavedTripFromSession } from "../lib/persistence.js";
+import { listTrips } from "../lib/trips.js";
+import { buildTravelProfile } from "../lib/travel-profile.js";
 import { summarizeItinerary, formatDay } from "../lib/format.js";
 import { getDone } from "../lib/done-set.js";
 import { track } from "../lib/analytics.js";
@@ -77,12 +79,23 @@ export function registerChatAI(bot: Composer<BoundContext>) {
     const userMsg: ChatMessage = { role: "user", content: text };
     const history = trimHistory([...session.api_messages, userMsg], 16);
 
+    // Profilo viaggiatore (auto dai viaggi salvati) → suggerimenti personalizzati.
+    // Non bloccare la chat se il fetch fallisce.
+    let userProfile: string | null = null;
+    try {
+      const trips = await listTrips(userId);
+      userProfile = buildTravelProfile(trips.map((t) => t.itinerary));
+    } catch (e) {
+      console.warn("[chat-ai] profilo viaggiatore non disponibile:", (e as Error)?.message);
+    }
+
     let resp;
     try {
       resp = await callAI({
         messages: history,
         existingItinerary: session.itinerary,
         userTier: ctx.binding.tier,
+        userProfile,
       });
     } catch (e: any) {
       await cleanupLoading();

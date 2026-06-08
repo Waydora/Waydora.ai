@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, Fragment, type ReactNode } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, Fragment, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -14,6 +14,7 @@ import { CreateTripPage } from "@/components/create-trip-page";
 import { SavedTripsPage } from "@/components/saved-trips-page";
 import { useChatSessions, useUserTrips, useSavedTrips, useLocalSessions } from "@/hooks/trips";
 import { shouldUseRailway, buildActivityAffiliate } from "@/lib/affiliates";
+import { buildTravelProfile } from "@/lib/travel-profile";
 import { track, destinationCountry, isGroupHint, hashSlug } from "@/lib/analytics";
 import {
   Send, Loader2, Save, PlusCircle, Map, ChevronLeft, ChevronRight,
@@ -714,6 +715,13 @@ export default function Home() {
   const sidebarSessions = user ? dbSessions : localSessionsList;
   const chatMutation = useChat();
 
+  // Profilo viaggiatore auto-costruito dai viaggi salvati → personalizza l'AI.
+  // Si ricalcola quando cambiano i viaggi salvati; vuoto se non ci sono viaggi.
+  const userProfile = useMemo(
+    () => buildTravelProfile((savedTrips ?? []).map((t: any) => t.itinerary)) ?? undefined,
+    [savedTrips],
+  );
+
   useEffect(() => { document.title = "Waydora — Travel simple, everywhere!"; }, []);
 
   // Analytics: landing_viewed quando si vede la landing (spec §3 · Acquisition).
@@ -872,6 +880,7 @@ export default function Home() {
         data: {
           messages: newMsgs, existingItinerary: currentItinerary, mediaContent: mediaForBackend, userTier,
           progressive: useProgressive ? { totalDays: reqDays, from: 1, to: FIRST_CHUNK_DAYS } : undefined,
+          userProfile,
         } as any,
         useRailway: shouldUseRailway(promptText, !!currentItinerary) || useProgressive,
       },
@@ -929,7 +938,7 @@ export default function Home() {
         },
       }
     );
-  }, [input, mediaContent, apiMessages, currentItinerary, turns, currentSessionId, chatMutation, toast, persistSession, enterApp, user, startMoreDaysPrefetch]);
+  }, [input, mediaContent, apiMessages, currentItinerary, turns, currentSessionId, chatMutation, toast, persistSession, enterApp, user, startMoreDaysPrefetch, userProfile]);
 
   const handleSave = async () => {
     if (!currentItinerary) return;

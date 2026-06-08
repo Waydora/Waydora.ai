@@ -154,6 +154,8 @@ export type ChatData = {
   mediaContent?: any;
   userTier?: string;
   progressive?: ProgressiveRange;
+  // Profilo viaggiatore (auto dai viaggi salvati) → personalizza i suggerimenti AI.
+  userProfile?: string;
 };
 
 // Chiamata singola (senza retry/stato mutation): usata per il prefetch in background

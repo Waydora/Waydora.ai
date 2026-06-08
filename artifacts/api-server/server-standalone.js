@@ -824,11 +824,16 @@ async function callOpenRouter({ model, system, messages, maxTokens }) {
 }
 
 // Wrapper compat: gestisce routing + fallback automatico su Sonnet
-async function callAI(messages, existingItinerary, mediaContent, userTier = "guest", progressive = null) {
+async function callAI(messages, existingItinerary, mediaContent, userTier = "guest", progressive = null, userProfile = null) {
   // Iniettiamo la data corrente: senza, il modello hallucina date passate negli URL Skyscanner/Booking → 404.
   const today = new Date().toISOString().slice(0, 10);
   const dateHint = `\n\n━━━ DATA OGGI ━━━\nOggi è ${today}. TUTTE le date che metti in URL (Skyscanner, Booking, Airbnb, etc) DEVONO essere uguali o successive a oggi. NON usare mai date passate. Se l'utente non ha dato date esatte, usa il primo mese plausibile da oggi in avanti.`;
-  const baseSystem = SYSTEM_PROMPT + dateHint;
+  // Profilo viaggiatore (auto dai viaggi salvati): personalizza i suggerimenti senza
+  // che il modello lo citi esplicitamente. Cap a 600 char per non gonfiare i token.
+  const profileHint = (typeof userProfile === "string" && userProfile.trim())
+    ? `\n\n━━━ PROFILO VIAGGIATORE (conosci già un po' questo viaggiatore — usalo per suggerire mete/attività su misura, MA non elencarlo né dire "dal tuo profilo"; rendilo naturale) ━━━\n${userProfile.trim().slice(0, 600)}`
+    : "";
+  const baseSystem = SYSTEM_PROMPT + dateHint + profileHint;
   let systemPrompt = existingItinerary
     ? `${baseSystem}\n\nItinerario attuale (modifica SOLO se esplicitamente richiesto):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`
     : baseSystem;
@@ -1241,7 +1246,7 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
     req.on("data", c => { body += c; });
     req.on("end", async () => {
       try {
-        const { messages, existingItinerary, mediaContent, userTier, progressive } = JSON.parse(body);
+        const { messages, existingItinerary, mediaContent, userTier, progressive, userProfile } = JSON.parse(body);
         console.log(`[chat] msgs=${messages?.length}, tier=${userTier}, hasItinerary=${!!existingItinerary}, progressive=${progressive ? `${progressive.from}-${progressive.to}/${progressive.totalDays}` : "no"}`);
         const enrichedMessages = await enrichWithTikTok(messages);
 
@@ -1301,7 +1306,7 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
 
         // Percorso normale (creazione / modifica / consulto / append fallito)
         if (!payload) {
-          let aiResult = await callAI(enrichedMessages, existingItinerary, mediaContent, userTier, progressive);
+          let aiResult = await callAI(enrichedMessages, existingItinerary, mediaContent, userTier, progressive, userProfile);
           raw = aiResult.text;
           stopReason = aiResult.stopReason;
           usedModel = aiResult.model;
