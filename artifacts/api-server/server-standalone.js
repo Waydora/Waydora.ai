@@ -1,9 +1,20 @@
 const http = require("http");
 const https = require("https");
+const crypto = require("crypto");
 
 // ── OpenRouter config ─────────────────────────────────────────────────────
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
+
+// ── Billing (Stripe) + Supabase admin ──────────────────────────────────────
+// Tutto via REST (fetch) + crypto: nessuna dipendenza npm, il server resta standalone.
+const STRIPE_SECRET_KEY        = process.env.STRIPE_SECRET_KEY || "";
+const STRIPE_WEBHOOK_SECRET    = process.env.STRIPE_WEBHOOK_SECRET || "";
+const STRIPE_PRICE_PRO_ANNUAL  = process.env.STRIPE_PRICE_PRO_ANNUAL || "";
+const STRIPE_PRICE_PRO_MONTHLY = process.env.STRIPE_PRICE_PRO_MONTHLY || "";
+const SUPABASE_URL             = process.env.SUPABASE_URL || "";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const APP_URL                  = process.env.APP_URL || "https://www.waydora.com";
 
 // ── Rate limiting per IP ──────────────────────────────────────────────────
 const WINDOW_MS    = 60 * 60 * 1000;
@@ -1110,12 +1121,139 @@ function enrichWithGooglePlaces(itinerary) {
   });
 }
 
+// ── Billing helpers (Stripe + Supabase) ────────────────────────────────────
+
+// Verifica un JWT Supabase e ritorna { id, email } dell'utente, o null.
+async function getSupabaseUser(jwt) {
+  if (!SUPABASE_URL || !jwt) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${jwt}` },
+    });
+    if (!r.ok) return null;
+    const u = await r.json();
+    return u?.id ? { id: u.id, email: u.email } : null;
+  } catch { return null; }
+}
+
+// Imposta app_metadata.tier dell'utente (merge lato GoTrue). 'paid' | 'free'.
+async function setUserTier(userId, tier) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !userId) return false;
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    method: "PUT",
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ app_metadata: { tier } }),
+  });
+  if (!r.ok) console.error("[billing] setUserTier fallito:", r.status, (await r.text().catch(() => "")).slice(0, 200));
+  return r.ok;
+}
+
+// Crea una Stripe Checkout Session (REST, x-www-form-urlencoded). Ritorna { url } o null.
+async function stripeCreateCheckout({ priceId, mode, email, userId }) {
+  if (!STRIPE_SECRET_KEY || !priceId) return null;
+  const form = new URLSearchParams();
+  form.set("mode", mode);
+  form.set("line_items[0][price]", priceId);
+  form.set("line_items[0][quantity]", "1");
+  if (email) form.set("customer_email", email);
+  form.set("client_reference_id", userId);
+  form.set("metadata[user_id]", userId);
+  // Propaga user_id anche sulla subscription → leggibile negli eventi futuri.
+  if (mode === "subscription") form.set("subscription_data[metadata][user_id]", userId);
+  form.set("success_url", `${APP_URL}/?billing=success`);
+  form.set("cancel_url", `${APP_URL}/?billing=cancel`);
+  form.set("allow_promotion_codes", "true");
+  const r = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body: form.toString(),
+  });
+  if (!r.ok) { console.error("[billing] checkout fallito:", r.status, (await r.text().catch(() => "")).slice(0, 200)); return null; }
+  const s = await r.json();
+  return s?.url ? { url: s.url } : null;
+}
+
+// Verifica la firma di un webhook Stripe (schema t=...,v1=...) con HMAC-SHA256.
+function stripeVerifySignature(rawBody, sigHeader, secret) {
+  if (!sigHeader || !secret) return false;
+  const parts = Object.fromEntries(sigHeader.split(",").map(kv => kv.split("=")));
+  const t = parts.t; const v1 = parts.v1;
+  if (!t || !v1) return false;
+  // Tolleranza 5 minuti contro replay.
+  if (Math.abs(Date.now() / 1000 - Number(t)) > 300) return false;
+  const expected = crypto.createHmac("sha256", secret).update(`${t}.${rawBody}`).digest("hex");
+  try { return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1)); }
+  catch { return false; }
+}
+
 // ── HTTP Server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") { res.writeHead(200); res.end(); return; }
+
+  // ── Billing: crea Checkout Session (Stripe) ───────────────────────────
+  if (req.url === "/api/billing/checkout" && req.method === "POST") {
+    const jwt = (req.headers["authorization"] || "").replace(/^Bearer\s+/i, "");
+    const user = await getSupabaseUser(jwt);
+    if (!user) { res.writeHead(401, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Devi accedere." })); return; }
+    let body = "";
+    req.on("data", c => { body += c; });
+    req.on("end", async () => {
+      try {
+        const { plan } = JSON.parse(body || "{}");
+        const priceId = plan === "monthly" ? STRIPE_PRICE_PRO_MONTHLY : STRIPE_PRICE_PRO_ANNUAL;
+        if (!priceId) { res.writeHead(500, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Prezzo non configurato." })); return; }
+        const out = await stripeCreateCheckout({ priceId, mode: "subscription", email: user.email, userId: user.id });
+        if (!out) { res.writeHead(502, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Impossibile avviare il pagamento." })); return; }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(out));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Errore checkout." }));
+      }
+    });
+    return;
+  }
+
+  // ── Billing: webhook Stripe (server-to-server, niente CORS) ────────────
+  if (req.url === "/api/billing/webhook" && req.method === "POST") {
+    let raw = "";
+    req.on("data", c => { raw += c; });
+    req.on("end", async () => {
+      const sig = req.headers["stripe-signature"];
+      if (!stripeVerifySignature(raw, sig, STRIPE_WEBHOOK_SECRET)) {
+        res.writeHead(400); res.end("invalid signature"); return;
+      }
+      let event;
+      try { event = JSON.parse(raw); } catch { res.writeHead(400); res.end("bad json"); return; }
+      try {
+        const obj = event.data?.object || {};
+        const userId = obj.client_reference_id || obj.metadata?.user_id || null;
+        if (event.type === "checkout.session.completed" && obj.mode === "subscription") {
+          if (userId) await setUserTier(userId, "paid");
+        } else if (event.type === "customer.subscription.updated") {
+          const uid = obj.metadata?.user_id;
+          const active = obj.status === "active" || obj.status === "trialing";
+          if (uid) await setUserTier(uid, active ? "paid" : "free");
+        } else if (event.type === "customer.subscription.deleted") {
+          const uid = obj.metadata?.user_id;
+          if (uid) await setUserTier(uid, "free");
+        }
+      } catch (e) {
+        console.error("[billing] webhook handler err:", e.message);
+      }
+      // Rispondi sempre 200 (Stripe non deve ritentare per errori applicativi nostri).
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ received: true }));
+    });
+    return;
+  }
 
   // ── Health check ─────────────────────────────────────────────────────
   if (req.url === "/api/health" && req.method === "GET") {
@@ -1169,8 +1307,8 @@ const server = http.createServer(async (req, res) => {
     req.on("end", async () => {
       try {
         const { image, mediaType, userTier } = JSON.parse(body);
-        // Gate Premium: per ora basta essere loggati (free/paid); i guest no.
-        if (!userTier || userTier === "guest") {
+        // Gate Premium: la scansione AI è solo per i Pro (userTier 'paid').
+        if (userTier !== "paid") {
           res.writeHead(402, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "La scansione automatica degli scontrini è una funzione Premium. Inserisci l'importo a mano." }));
           return;

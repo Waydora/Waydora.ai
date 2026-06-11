@@ -15,6 +15,9 @@ import { SavedTripsPage } from "@/components/saved-trips-page";
 import { useChatSessions, useUserTrips, useSavedTrips, useLocalSessions } from "@/hooks/trips";
 import { shouldUseRailway, buildActivityAffiliate } from "@/lib/affiliates";
 import { buildTravelProfile } from "@/lib/travel-profile";
+import { UpgradeModal } from "@/components/upgrade-modal";
+import { freeGenerationsLeft, incFreeGeneration, FREE_MONTHLY_GENERATIONS } from "@/lib/billing";
+import { supabase } from "@/lib/supabase";
 import { track, destinationCountry, isGroupHint, hashSlug } from "@/lib/analytics";
 import {
   Send, Loader2, Save, PlusCircle, Map, ChevronLeft, ChevronRight,
@@ -256,13 +259,13 @@ function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFil
   return null;
 }
 
-function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSession, activeView, onChangeView, onLoginClick, isMobile = false }: {
+function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSession, activeView, onChangeView, onLoginClick, onUpgrade, isPaid = false, isMobile = false }: {
   open: boolean; onClose: () => void; onNewTrip: () => void;
   sessions: Array<{ id: string | number; title: string; turns: any[]; itinerary?: any; apiMessages?: any[] }>;
   onLoadSession: (s: any) => void;
   onDeleteSession: (id: string | number) => void;
   activeView: ActiveView; onChangeView: (v: ActiveView) => void;
-  onLoginClick: () => void; isMobile?: boolean;
+  onLoginClick: () => void; onUpgrade?: () => void; isPaid?: boolean; isMobile?: boolean;
 }) {
   const { user, logout } = useAuth();
   const sidebarWidth = isMobile ? "310px" : "260px";
@@ -331,7 +334,17 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
         })}
       </div>
       {user && (
-        <div style={{ padding: isMobile ? "8px 16px 12px" : "8px 12px 10px", marginTop: "auto" }}>
+        <div style={{ padding: isMobile ? "8px 16px 12px" : "8px 12px 10px", marginTop: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+          {isPaid ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px", borderRadius: "10px", background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#fbbf24", fontSize: 12, fontWeight: 800 }}>
+              ✨ Waydora Pro
+            </div>
+          ) : (
+            <button onClick={() => { onUpgrade?.(); if (isMobile) onClose(); }}
+              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "7px", padding: "9px", borderRadius: "10px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>
+              ✨ Passa a Pro
+            </button>
+          )}
           <ConnectTelegramButton variant="sidebar" expanded={true} />
         </div>
       )}
@@ -722,6 +735,11 @@ export default function Home() {
     [savedTrips],
   );
 
+  // Freemium / upgrade a Pro
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<string | undefined>();
+  const isPaid = user?.tier === "paid";
+
   useEffect(() => { document.title = "Waydora — Travel simple, everywhere!"; }, []);
 
   // Analytics: landing_viewed quando si vede la landing (spec §3 · Acquisition).
@@ -744,6 +762,18 @@ export default function Home() {
     if (params.get("chat") === "1") {
       setShowLanding(false); setActiveView("chat"); setMobileScreen("chat");
       sessionStorage.setItem("waydora_in_app", "1");
+      window.history.replaceState({}, "", "/");
+    }
+    // Ritorno dal checkout Stripe: rinfresca la sessione per leggere il nuovo tier
+    // (il webhook ha aggiornato app_metadata.tier lato server) e conferma all'utente.
+    if (params.get("billing") === "success") {
+      setShowLanding(false); setActiveView("chat"); setMobileScreen("chat");
+      sessionStorage.setItem("waydora_in_app", "1");
+      supabase.auth.refreshSession().finally(() => {
+        toast({ title: "Benvenuto in Waydora Pro! ✨", description: "Itinerari illimitati e funzioni Premium sbloccate." });
+      });
+      window.history.replaceState({}, "", "/");
+    } else if (params.get("billing") === "cancel") {
       window.history.replaceState({}, "", "/");
     }
   }, []);
@@ -837,6 +867,13 @@ export default function Home() {
   const handleSubmit = useCallback((overridePrompt?: string, fromSuggestion = false) => {
     const promptText = (overridePrompt ?? input).trim();
     if ((!promptText && !mediaContent) || chatMutation.isPending) return;
+    // Freemium: i non-Pro hanno un tetto di GENERAZIONI di nuovi itinerari al mese.
+    // Le modifiche a un viaggio già aperto (currentItinerary) non contano.
+    if (!isPaid && !currentItinerary && freeGenerationsLeft(user?.id) <= 0) {
+      setUpgradeReason(`Hai usato i tuoi ${FREE_MONTHLY_GENERATIONS} viaggi gratis di questo mese. Passa a Pro per itinerari illimitati.`);
+      setUpgradeOpen(true);
+      return;
+    }
     if (!overridePrompt) setInput("");
     enterApp(); setActiveView("chat"); setMobileScreen("chat");
     setMapReady(false); setMapNotifShown(false);
@@ -873,7 +910,7 @@ export default function Home() {
     const reqDays = parseRequestedDays(`${promptText} ${apiMessages.map(m => typeof m.content === "string" ? m.content : "").join(" ")}`);
     const useProgressive = !currentItinerary && !mediaForBackend && reqDays >= PROGRESSIVE_THRESHOLD;
     setMoreDays(null); appendRequestedRef.current = false;
-    const userTier = user ? "free" : "guest";
+    const userTier = user ? (isPaid ? "paid" : "free") : "guest";
 
     chatMutation.mutate(
       {
@@ -888,6 +925,9 @@ export default function Home() {
         onSuccess: async (data) => {
           setApiMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
           if (data.itinerary) {
+            // Freemium: conta come "generazione" solo la CREAZIONE di un nuovo
+            // itinerario (non le modifiche) e solo per i non-Pro.
+            if (!currentItinerary && !isPaid) incFreeGeneration(user?.id);
             // Era una MODIFICA (esisteva già un itinerario): salva la versione
             // precedente nello storico così "Annulla" può ripristinarla.
             if (currentItinerary) setItineraryHistory(prev => [...prev, currentItinerary].slice(-10));
@@ -938,7 +978,7 @@ export default function Home() {
         },
       }
     );
-  }, [input, mediaContent, apiMessages, currentItinerary, turns, currentSessionId, chatMutation, toast, persistSession, enterApp, user, startMoreDaysPrefetch, userProfile]);
+  }, [input, mediaContent, apiMessages, currentItinerary, turns, currentSessionId, chatMutation, toast, persistSession, enterApp, user, startMoreDaysPrefetch, userProfile, isPaid]);
 
   const handleSave = async () => {
     if (!currentItinerary) return;
@@ -1074,6 +1114,7 @@ export default function Home() {
           <TripCounter /><Partners /><Reviews /><Faq /><SiteFooter />
         </div>
         <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
+        <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} reason={upgradeReason} />
       </Layout>
     );
   }
@@ -1190,7 +1231,8 @@ export default function Home() {
         {!sidebarOpen && <button onClick={() => setSidebarOpen(true)} className="absolute left-0 top-1/2 -translate-y-1/2 z-20 p-2 rounded-r-xl" style={{ background: "rgba(10,10,18,0.9)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)" }}><ChevronRight style={{ width: "16px", height: "16px" }} /></button>}
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewTrip={handleNewTrip}
           sessions={sidebarSessions} onLoadSession={handleLoadSession} onDeleteSession={handleDeleteSession}
-          activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} />
+          activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)}
+          isPaid={isPaid} onUpgrade={() => { setUpgradeReason(undefined); setUpgradeOpen(true); }} />
         {activeView === "inspire" && <div className="flex-1 min-h-0 overflow-hidden"><InspirePage onSelectTrip={p => handleSubmit(p, true)} onSelectReady={handleSelectReadyTrip} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} /></div>}
         {activeView === "create"  && <div className="flex-1 min-h-0 overflow-hidden"><CreateTripPage userId={user?.id} trips={userTrips} onSaveDraft={async d => await upsertTrip(d)} onPublish={async id => await publishTrip(id)} onDelete={removeTrip} /></div>}
         {activeView === "saved"   && <div className="flex-1 min-h-0 overflow-hidden"><SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onSetPublic={setTripPublic} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} /></div>}
@@ -1203,7 +1245,7 @@ export default function Home() {
                 <ToolContent tool={activeTool} itinerary={currentItinerary}
                   ideas={ideas} onAddIdea={i => setIdeas(prev => [...prev, i])} onRemoveIdea={idx => setIdeas(prev => prev.filter((_, i) => i !== idx))}
                   mediaFiles={mediaFiles} onUploadMedia={f => setMediaFiles(prev => [...prev, ...f])} onRemoveMedia={idx => setMediaFiles(prev => prev.filter((_, i) => i !== idx))}
-                  onItineraryUpdate={setCurrentItinerary} userTier={user ? "free" : "guest"} authorName={user?.name} />
+                  onItineraryUpdate={setCurrentItinerary} userTier={user ? (isPaid ? "paid" : "free") : "guest"} authorName={user?.name} />
               </div>
             </aside>
           </>
@@ -1260,7 +1302,8 @@ export default function Home() {
         )}
         <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} onNewTrip={handleNewTrip}
           sessions={sidebarSessions} onLoadSession={handleLoadSession} onDeleteSession={handleDeleteSession}
-          activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)} isMobile />
+          activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)}
+          isPaid={isPaid} onUpgrade={() => { setUpgradeReason(undefined); setUpgradeOpen(true); }} isMobile />
 
         {mobileScreen === "chat" && <div className="flex-1 min-h-0 flex flex-col">{chatSection}</div>}
 
@@ -1283,7 +1326,7 @@ export default function Home() {
               <ToolContent tool={activeTool} itinerary={currentItinerary}
                 ideas={ideas} onAddIdea={i => setIdeas(prev => [...prev, i])} onRemoveIdea={idx => setIdeas(prev => prev.filter((_, i) => i !== idx))}
                 mediaFiles={mediaFiles} onUploadMedia={f => setMediaFiles(prev => [...prev, ...f])} onRemoveMedia={idx => setMediaFiles(prev => prev.filter((_, i) => i !== idx))}
-                  onItineraryUpdate={setCurrentItinerary} userTier={user ? "free" : "guest"} authorName={user?.name} />
+                  onItineraryUpdate={setCurrentItinerary} userTier={user ? (isPaid ? "paid" : "free") : "guest"} authorName={user?.name} />
             </div>
             {/* Toolbar bassa — nessun swipe listener qui, il problema era nel window listener */}
             <div style={{ flexShrink: 0, padding: "10px 12px 20px", display: "flex", justifyContent: "center", ...glassDark, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
@@ -1334,6 +1377,7 @@ export default function Home() {
       </div>
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
+      <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} reason={upgradeReason} />
     </Layout>
   );
 }

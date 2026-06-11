@@ -926,7 +926,7 @@ export default function Trip() {
     setItinerary(it);
     await supabase.from("saved_trips").update({ itinerary: it, updated_at: new Date().toISOString() }).eq("share_slug", slug);
   }, [slug]);
-  const expensesOpts = { onItineraryUpdate: onBudgetUpdate, userTier: (user ? "free" : "guest") as "guest" | "free" | "paid", authorName: user?.name };
+  const expensesOpts = { onItineraryUpdate: onBudgetUpdate, userTier: (user ? (user.tier === "paid" ? "paid" : "free") : "guest") as "guest" | "free" | "paid", authorName: user?.name };
 
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/trip/${slug}` : "";
   const copy = async () => {

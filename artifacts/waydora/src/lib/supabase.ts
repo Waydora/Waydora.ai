@@ -14,6 +14,7 @@ export type UserProfile = {
   email: string | undefined;
   name: string | undefined;
   avatar: string | undefined;
+  tier: "free" | "paid";
 };
  
 export function toUserProfile(user: any): UserProfile {
@@ -22,6 +23,8 @@ export function toUserProfile(user: any): UserProfile {
     email: user.email,
     name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0],
     avatar: user.user_metadata?.avatar_url || user.user_metadata?.picture,
+    // tier impostato lato server (webhook Stripe → app_metadata.tier). Default free.
+    tier: user.app_metadata?.tier === "paid" ? "paid" : "free",
   };
 }
  

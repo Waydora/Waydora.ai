@@ -69,7 +69,7 @@ export function ExpensesPanel({ itinerary, onItineraryUpdate, slug, userTier = "
   authorName?: string;
 }) {
   const { toast } = useToast();
-  const isPremium = userTier === "free" || userTier === "paid"; // gating scansione AI (loggati)
+  const isPremium = userTier === "paid"; // scansione scontrini AI = solo Pro
   const budget: BudgetItem[] = Array.isArray(itinerary?.budgetPlan) ? itinerary.budgetPlan : [];
 
   // ── Budget pianificato (in itinerary.budgetPlan) ──────────────────────────
