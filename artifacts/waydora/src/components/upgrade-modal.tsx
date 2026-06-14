@@ -55,8 +55,11 @@ export function UpgradeModal({ open, onClose, reason }: { open: boolean; onClose
         <button onClick={() => go("annual")} disabled={!!loading}
           style={{ width: "100%", padding: "14px", borderRadius: "14px", marginBottom: "10px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", fontSize: "15px", fontWeight: 800, cursor: loading ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", position: "relative" }}>
           {loading === "annual" ? <Loader2 style={{ width: "16px", height: "16px", animation: "wd-spin 0.8s linear infinite" }} /> : null}
-          Annuale — €34,99/anno
-          <span style={{ position: "absolute", top: "-9px", right: "12px", fontSize: "10px", fontWeight: 800, padding: "2px 8px", borderRadius: "9999px", background: "#34d399", color: "#06281c" }}>2 MESI GRATIS</span>
+          <span style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.2 }}>
+            <span>Annuale — €34,99/anno</span>
+            <span style={{ fontSize: "11px", fontWeight: 600, opacity: 0.9 }}>solo €2,92/mese · risparmi il 51%</span>
+          </span>
+          <span style={{ position: "absolute", top: "-9px", right: "12px", fontSize: "10px", fontWeight: 800, padding: "2px 8px", borderRadius: "9999px", background: "#34d399", color: "#06281c" }}>−51%</span>
         </button>
 
         {/* Piano mensile */}
