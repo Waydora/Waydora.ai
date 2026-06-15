@@ -1123,7 +1123,7 @@ function enrichWithGooglePlaces(itinerary) {
 
 // ── Billing helpers (Stripe + Supabase) ────────────────────────────────────
 
-// Verifica un JWT Supabase e ritorna { id, email } dell'utente, o null.
+// Verifica un JWT Supabase e ritorna { id, email, appMeta } dell'utente, o null.
 async function getSupabaseUser(jwt) {
   if (!SUPABASE_URL || !jwt) return null;
   try {
@@ -1132,12 +1132,12 @@ async function getSupabaseUser(jwt) {
     });
     if (!r.ok) return null;
     const u = await r.json();
-    return u?.id ? { id: u.id, email: u.email } : null;
+    return u?.id ? { id: u.id, email: u.email, appMeta: u.app_metadata || {} } : null;
   } catch { return null; }
 }
 
-// Imposta app_metadata.tier dell'utente (merge lato GoTrue). 'paid' | 'free'.
-async function setUserTier(userId, tier) {
+// Aggiorna app_metadata dell'utente (merge lato GoTrue: le chiavi non passate restano).
+async function updateUserAppMetadata(userId, meta) {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !userId) return false;
   const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
     method: "PUT",
@@ -1146,10 +1146,42 @@ async function setUserTier(userId, tier) {
       Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ app_metadata: { tier } }),
+    body: JSON.stringify({ app_metadata: meta }),
   });
-  if (!r.ok) console.error("[billing] setUserTier fallito:", r.status, (await r.text().catch(() => "")).slice(0, 200));
+  if (!r.ok) console.error("[billing] updateUserAppMetadata fallito:", r.status, (await r.text().catch(() => "")).slice(0, 200));
   return r.ok;
+}
+
+// Imposta app_metadata.tier ('paid' | 'free').
+async function setUserTier(userId, tier) {
+  return updateUserAppMetadata(userId, { tier });
+}
+
+// Crea una sessione del Customer Portal Stripe (gestione/disdetta abbonamento).
+async function stripeCreatePortal(customerId) {
+  if (!STRIPE_SECRET_KEY || !customerId) return null;
+  const form = new URLSearchParams();
+  form.set("customer", customerId);
+  form.set("return_url", `${APP_URL}/?billing=portal`);
+  const r = await fetch("https://api.stripe.com/v1/billing_portal/sessions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body: form.toString(),
+  });
+  if (!r.ok) { console.error("[billing] portal fallito:", r.status, (await r.text().catch(() => "")).slice(0, 200)); return null; }
+  const s = await r.json();
+  return s?.url ? { url: s.url } : null;
+}
+
+// Fallback: trova il customer Stripe via email (se non l'abbiamo salvato).
+async function stripeFindCustomerByEmail(email) {
+  if (!STRIPE_SECRET_KEY || !email) return null;
+  const r = await fetch(`https://api.stripe.com/v1/customers?email=${encodeURIComponent(email)}&limit=1`, {
+    headers: { Authorization: `Bearer ${STRIPE_SECRET_KEY}` },
+  });
+  if (!r.ok) return null;
+  const d = await r.json();
+  return d?.data?.[0]?.id || null;
 }
 
 // Crea una Stripe Checkout Session (REST, x-www-form-urlencoded). Ritorna { url } o null.
@@ -1221,6 +1253,22 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── Billing: apri il Customer Portal (gestione/disdetta) ──────────────
+  if (req.url === "/api/billing/portal" && req.method === "POST") {
+    const jwt = (req.headers["authorization"] || "").replace(/^Bearer\s+/i, "");
+    const user = await getSupabaseUser(jwt);
+    if (!user) { res.writeHead(401, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Devi accedere." })); return; }
+    // customer_id: prima dall'app_metadata (salvato dal webhook), poi fallback via email.
+    let customerId = user.appMeta?.stripe_customer_id || null;
+    if (!customerId) customerId = await stripeFindCustomerByEmail(user.email);
+    if (!customerId) { res.writeHead(404, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Nessun abbonamento trovato." })); return; }
+    const out = await stripeCreatePortal(customerId);
+    if (!out) { res.writeHead(502, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "Impossibile aprire la gestione abbonamento." })); return; }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(out));
+    return;
+  }
+
   // ── Billing: webhook Stripe (server-to-server, niente CORS) ────────────
   if (req.url === "/api/billing/webhook" && req.method === "POST") {
     let raw = "";
@@ -1236,7 +1284,8 @@ const server = http.createServer(async (req, res) => {
         const obj = event.data?.object || {};
         const userId = obj.client_reference_id || obj.metadata?.user_id || null;
         if (event.type === "checkout.session.completed" && obj.mode === "subscription") {
-          if (userId) await setUserTier(userId, "paid");
+          // Salva anche il customer_id Stripe → serve per aprire il Customer Portal (disdetta).
+          if (userId) await updateUserAppMetadata(userId, { tier: "paid", stripe_customer_id: obj.customer || undefined });
         } else if (event.type === "customer.subscription.updated") {
           const uid = obj.metadata?.user_id;
           const active = obj.status === "active" || obj.status === "trialing";

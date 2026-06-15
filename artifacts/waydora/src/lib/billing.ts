@@ -39,3 +39,16 @@ export async function startCheckout(plan: "annual" | "monthly"): Promise<void> {
   if (!res.ok || !data?.url) throw new Error(data?.error || "Impossibile avviare il pagamento. Riprova.");
   window.location.href = data.url as string;
 }
+
+// Apre il Customer Portal Stripe (gestione metodo di pagamento / disdetta / fatture).
+export async function openBillingPortal(): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Devi accedere.");
+  const res = await fetch(`${API_BASE}/billing/portal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+  });
+  const data = await res.json().catch(() => ({} as any));
+  if (!res.ok || !data?.url) throw new Error(data?.error || "Impossibile aprire la gestione abbonamento.");
+  window.location.href = data.url as string;
+}

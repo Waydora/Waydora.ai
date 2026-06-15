@@ -16,7 +16,7 @@ import { useChatSessions, useUserTrips, useSavedTrips, useLocalSessions } from "
 import { shouldUseRailway, buildActivityAffiliate } from "@/lib/affiliates";
 import { buildTravelProfile } from "@/lib/travel-profile";
 import { UpgradeModal } from "@/components/upgrade-modal";
-import { freeGenerationsLeft, incFreeGeneration, FREE_MONTHLY_GENERATIONS } from "@/lib/billing";
+import { freeGenerationsLeft, incFreeGeneration, FREE_MONTHLY_GENERATIONS, openBillingPortal } from "@/lib/billing";
 import { supabase } from "@/lib/supabase";
 import { track, destinationCountry, isGroupHint, hashSlug } from "@/lib/analytics";
 import {
@@ -259,13 +259,13 @@ function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFil
   return null;
 }
 
-function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSession, activeView, onChangeView, onLoginClick, onUpgrade, isPaid = false, isMobile = false }: {
+function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSession, activeView, onChangeView, onLoginClick, onUpgrade, onManage, isPaid = false, isMobile = false }: {
   open: boolean; onClose: () => void; onNewTrip: () => void;
   sessions: Array<{ id: string | number; title: string; turns: any[]; itinerary?: any; apiMessages?: any[] }>;
   onLoadSession: (s: any) => void;
   onDeleteSession: (id: string | number) => void;
   activeView: ActiveView; onChangeView: (v: ActiveView) => void;
-  onLoginClick: () => void; onUpgrade?: () => void; isPaid?: boolean; isMobile?: boolean;
+  onLoginClick: () => void; onUpgrade?: () => void; onManage?: () => void; isPaid?: boolean; isMobile?: boolean;
 }) {
   const { user, logout } = useAuth();
   const sidebarWidth = isMobile ? "310px" : "260px";
@@ -336,9 +336,10 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
       {user && (
         <div style={{ padding: isMobile ? "8px 16px 12px" : "8px 12px 10px", marginTop: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
           {isPaid ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px", borderRadius: "10px", background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#fbbf24", fontSize: 12, fontWeight: 800 }}>
-              ✨ Waydora Pro
-            </div>
+            <button onClick={() => { onManage?.(); if (isMobile) onClose(); }} title="Gestisci o disdici l'abbonamento"
+              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px", borderRadius: "10px", background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#fbbf24", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
+              ✨ Waydora Pro · Gestisci
+            </button>
           ) : (
             <button onClick={() => { onUpgrade?.(); if (isMobile) onClose(); }}
               style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "7px", padding: "9px", borderRadius: "10px", background: "var(--wd-grad-warm)", border: "none", color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>
@@ -774,6 +775,10 @@ export default function Home() {
       });
       window.history.replaceState({}, "", "/");
     } else if (params.get("billing") === "cancel") {
+      window.history.replaceState({}, "", "/");
+    } else if (params.get("billing") === "portal") {
+      // Ritorno dal Customer Portal: rinfresca per riflettere eventuali cambi (disdetta).
+      supabase.auth.refreshSession();
       window.history.replaceState({}, "", "/");
     }
   }, []);
@@ -1232,7 +1237,8 @@ export default function Home() {
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onNewTrip={handleNewTrip}
           sessions={sidebarSessions} onLoadSession={handleLoadSession} onDeleteSession={handleDeleteSession}
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)}
-          isPaid={isPaid} onUpgrade={() => { setUpgradeReason(undefined); setUpgradeOpen(true); }} />
+          isPaid={isPaid} onUpgrade={() => { setUpgradeReason(undefined); setUpgradeOpen(true); }}
+          onManage={() => openBillingPortal().catch(e => toast({ title: e?.message || "Errore", variant: "destructive" }))} />
         {activeView === "inspire" && <div className="flex-1 min-h-0 overflow-hidden"><InspirePage onSelectTrip={p => handleSubmit(p, true)} onSelectReady={handleSelectReadyTrip} onLikeFeatured={handleLike} isFeaturedLiked={isFeaturedLiked} publishedUserTrips={publishedUserTrips} /></div>}
         {activeView === "create"  && <div className="flex-1 min-h-0 overflow-hidden"><CreateTripPage userId={user?.id} trips={userTrips} onSaveDraft={async d => await upsertTrip(d)} onPublish={async id => await publishTrip(id)} onDelete={removeTrip} /></div>}
         {activeView === "saved"   && <div className="flex-1 min-h-0 overflow-hidden"><SavedTripsPage saved={savedTrips} loading={false} onRemove={removeSaved} onSetPublic={setTripPublic} onLogin={() => setAuthOpen(true)} isLoggedIn={!!user} /></div>}
@@ -1303,7 +1309,8 @@ export default function Home() {
         <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} onNewTrip={handleNewTrip}
           sessions={sidebarSessions} onLoadSession={handleLoadSession} onDeleteSession={handleDeleteSession}
           activeView={activeView} onChangeView={handleChangeView} onLoginClick={() => setAuthOpen(true)}
-          isPaid={isPaid} onUpgrade={() => { setUpgradeReason(undefined); setUpgradeOpen(true); }} isMobile />
+          isPaid={isPaid} onUpgrade={() => { setUpgradeReason(undefined); setUpgradeOpen(true); }}
+          onManage={() => openBillingPortal().catch(e => toast({ title: e?.message || "Errore", variant: "destructive" }))} isMobile />
 
         {mobileScreen === "chat" && <div className="flex-1 min-h-0 flex flex-col">{chatSection}</div>}
 
