@@ -158,6 +158,76 @@ export type ChatData = {
   userProfile?: string;
 };
 
+// Decide se un messaggio è "semplice" (saluto, meteo, consiglio, domanda sul
+// viaggio) e quindi adatto allo streaming testuale, oppure se serve il flusso
+// JSON completo (creazione/modifica itinerario). Conservativo: nel dubbio → false.
+// Rispecchia i "kind" testuali del router server (weather/chat-cheap/consult);
+// il server ha comunque l'ultima parola e risponde 409 {fallback} se sbagliamo.
+export function isSimpleChat(prompt: string, hasItinerary: boolean): boolean {
+  const t = (prompt || "").toLowerCase().trim();
+  if (!t) return false;
+  const weatherRx = /\b(meteo|prevision\w*|che tempo|tempo (che )?(fa|farà)|temperatur\w*|piov\w*|grad[io]\b|clima|weather|fa(rà)? (caldo|freddo)|umidit|vento|nevic)/i;
+  if (weatherRx.test(t)) return true;
+  const editRx = /aggiungi|togli|sposta|rimuov|sostitu|cambia|modifica|elimina|metti|aggiorna|riordin|ottimizz/i;
+  const itineraryRx = /itinerar|viagg|pianifica|organizza|programm|gior(no|ni)\s|vacanz|weekend|\btrip\b|tour|cosa\s+(fare|vedere)|dove\s+(andare|visitare)|vado\s+a|andare\s+a|partir|destinazion/i;
+  if (hasItinerary) {
+    // Consulto su un viaggio già aperto: nessuna modifica né nuovo itinerario.
+    return !editRx.test(t) && !itineraryRx.test(t);
+  }
+  if (itineraryRx.test(t)) return false;
+  const greetRx = /^(ciao|salve|hey|ehi|grazie|prego|ok|sì|si|no|wow|bene|perfetto|fantastico|buongiorno|buonasera|chi sei|come stai|che fai)\b/i;
+  return greetRx.test(t) || t.length < 60;
+}
+
+// Streaming testuale per messaggi semplici: chiama /api/chat/stream (solo Railway)
+// e invoca onDelta(testoAccumulato) man mano che arrivano i token.
+// Ritorna { reply } a fine stream, oppure { fallback:true } se il server dice che
+// la richiesta non è semplice → il chiamante deve usare il flusso JSON normale.
+export async function streamSimpleChat(
+  data: ChatData,
+  onDelta: (fullText: string) => void,
+): Promise<{ reply?: string; fallback?: boolean }> {
+  const res = await fetch(`${API_BASE}/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (res.status === 409) return { fallback: true };
+  if (!res.ok || !res.body) {
+    const err = await res.json().catch(() => ({} as any));
+    if (res.status === 502 || res.status === 503) throw new Error(err.error || "Troppo traffico, riprova tra pochi secondi 🚀");
+    if (res.status === 429) throw new Error(err.error || "Hai raggiunto il limite orario di richieste. Riprova più tardi.");
+    throw new Error(err.error || "Errore chat");
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "", acc = "", finalReply = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buf.indexOf("\n\n")) !== -1) {
+      const line = buf.slice(0, sep).trim();
+      buf = buf.slice(sep + 2);
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      try {
+        const obj = JSON.parse(payload);
+        if (obj.error) throw new Error("Mi sono interrotta. Riprova fra un attimo.");
+        if (typeof obj.delta === "string") { acc += obj.delta; onDelta(acc); }
+        else if (obj.done) finalReply = typeof obj.reply === "string" ? obj.reply : acc;
+      } catch (e: any) {
+        if (e?.message && e.message !== "Unexpected end of JSON input") {
+          // errore reale segnalato dal server (non un parse parziale)
+          if (e.message.startsWith("Mi sono")) throw e;
+        }
+      }
+    }
+  }
+  return { reply: finalReply || acc };
+}
+
 // Chiamata singola (senza retry/stato mutation): usata per il prefetch in background
 // dei giorni restanti, in parallelo al turno principale gestito da useChat.
 export async function fetchChatChunk(data: ChatData, useRailway?: boolean): Promise<{ reply: string; itinerary?: ItineraryData }> {
@@ -210,10 +280,13 @@ export function useChat() {
         // Messaggio user-friendly per i casi tipici
         const baseMsg = err.error || "";
         let userMsg = baseMsg;
-        if (response.status === 502) {
+        if (response.status === 503) {
+          // Throttle di concorrenza lato server (troppe richieste in volo).
+          userMsg = baseMsg || "Troppo traffico, riprova tra pochi secondi 🚀";
+        } else if (response.status === 502) {
           userMsg = baseMsg.includes("troppo lungo")
             ? "L'itinerario richiesto è troppo lungo. Prova con meno giorni o sii più specifico (es. \"3 giorni a Roma\" invece di \"vacanza lunga in Europa\")."
-            : "Mi sono incartata sulla risposta. Riformula la richiesta in modo più semplice o riprova fra qualche secondo.";
+            : "Troppo traffico, riprova tra pochi secondi 🚀";
         } else if (response.status === 429) {
           userMsg = baseMsg || "Hai raggiunto il limite orario di richieste. Riprova più tardi.";
         }

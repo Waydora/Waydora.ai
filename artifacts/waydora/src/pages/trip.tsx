@@ -244,11 +244,17 @@ function TripChat({ slug, itinerary, onItineraryUpdate, onClose, onCollapse, mod
           userTier: user ? "free" : "guest",
         }),
       });
-      let data: any;
-      try { data = await res.json(); } catch { throw new Error("Risposta non valida dal server"); }
+      // Il 502 (Bad Gateway Railway) spesso NON è JSON: parse difensivo.
+      let data: any = null;
+      try { data = await res.json(); } catch {}
 
       if (res.status === 429) {
         toast({ title: data?.error ?? "Troppe richieste. Riprova più tardi.", variant: "destructive" });
+        setAiPending(false); return;
+      }
+      // Sovraccarico server / Bad Gateway → messaggio amichevole "troppo traffico".
+      if (res.status === 502 || res.status === 503) {
+        toast({ title: data?.error ?? "Troppo traffico, riprova tra pochi secondi 🚀", variant: "destructive" });
         setAiPending(false); return;
       }
       if (!res.ok || data?.error) {

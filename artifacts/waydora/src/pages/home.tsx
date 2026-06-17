@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   useListSuggestions, useChat, useSaveItinerary, fetchChatChunk,
+  streamSimpleChat, isSimpleChat,
   type ChatMessage, type ItineraryData,
 } from "@/hooks/api";
 import { useAuth } from "@/hooks/auth";
@@ -281,7 +282,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
           <X style={{ width: isMobile ? "22px" : "18px", height: isMobile ? "22px" : "18px" }} />
         </button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: isMobile ? "14px" : "12px" }}>
         <button onClick={() => { onNewTrip(); if (isMobile) onClose(); }}
           style={{ width: "100%", display: "flex", alignItems: "center", gap: "12px", padding: itemPadding, borderRadius: "14px", border: "none", cursor: "pointer", fontSize, fontWeight: 600, transition: "all 0.15s", ...(activeView === "chat" ? activeTabStyle : inactiveTabStyle) }}>
@@ -289,9 +290,9 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
         </button>
       </div>
       {sessions.length > 0 && (
-        <div style={{ padding: isMobile ? "0 14px 10px" : "0 12px 8px" }}>
-          <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(255,255,255,0.28)", padding: "4px 4px 8px" }}>Recenti</div>
-          <div style={{ maxHeight: isMobile ? "200px" : "180px", overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: "3px" }}>
+        <div style={{ padding: isMobile ? "0 14px 10px" : "0 12px 8px", display: "flex", flexDirection: "column", minHeight: 0, flex: "0 1 auto" }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(255,255,255,0.28)", padding: "4px 4px 8px", flexShrink: 0 }}>Recenti</div>
+          <div style={{ maxHeight: isMobile ? "200px" : "180px", minHeight: 0, flex: "1 1 auto", overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: "3px" }}>
               {sessions.map((s) => (
                 <div key={s.id} className="group" style={{ display: "flex", alignItems: "stretch", borderRadius: "12px", overflow: "hidden", transition: "background 0.12s" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
@@ -689,6 +690,7 @@ export default function Home() {
   // Giorni restanti prefetchati in background (generazione progressiva).
   const [moreDays, setMoreDays] = useState<MoreDays | null>(null);
   const [appendPending, setAppendPending] = useState(false); // click "Aggiungi" mentre il prefetch è in corso
+  const [streamPending, setStreamPending] = useState(false); // risposta semplice in streaming (testo che appare man mano)
   const appendRequestedRef = useRef(false); // mirror di appendPending leggibile nelle callback async
   const [apiMessages,      setApiMessages]      = useState<ChatMessage[]>([]);
   const [sidebarOpen,      setSidebarOpen]      = useState(true);
@@ -871,7 +873,7 @@ export default function Home() {
 
   const handleSubmit = useCallback((overridePrompt?: string, fromSuggestion = false) => {
     const promptText = (overridePrompt ?? input).trim();
-    if ((!promptText && !mediaContent) || chatMutation.isPending) return;
+    if ((!promptText && !mediaContent) || chatMutation.isPending || streamPending) return;
     // Freemium: i non-Pro hanno un tetto di GENERAZIONI di nuovi itinerari al mese.
     // Le modifiche a un viaggio già aperto (currentItinerary) non contano.
     if (!isPaid && !currentItinerary && freeGenerationsLeft(user?.id) <= 0) {
@@ -917,6 +919,12 @@ export default function Home() {
     setMoreDays(null); appendRequestedRef.current = false;
     const userTier = user ? (isPaid ? "paid" : "free") : "guest";
 
+    // ── Risposta SEMPLICE in streaming (saluti, meteo, consigli, domande sul
+    // viaggio): il testo appare man mano. La creazione/modifica di itinerari resta
+    // sul flusso JSON normale (runJsonChat). Niente streaming con media/progressive.
+    const trySimpleStream = !mediaForBackend && !useProgressive && isSimpleChat(promptText, !!currentItinerary);
+
+    const runJsonChat = () => {
     chatMutation.mutate(
       {
         data: {
@@ -978,12 +986,49 @@ export default function Home() {
         onError: (err: any) => {
           setTurns(prev => prev.filter(t => t.id !== turnId));
           setApiMessages(prev => prev.slice(0, -1));
-          const msg = err?.message?.includes("429") || err?.status === 429 ? "Hai raggiunto il limite orario. Riprova tra qualche minuto." : "Qualcosa è andato storto. Riprova.";
+          // useChat() lancia già messaggi user-friendly (limite orario, troppo traffico,
+          // itinerario troppo lungo…): usiamoli così come sono, generico solo se assente.
+          const m = typeof err?.message === "string" ? err.message.trim() : "";
+          const msg = (m && m !== "Errore chat") ? m : "Qualcosa è andato storto. Riprova.";
           toast({ title: msg, variant: "destructive" });
         },
       }
     );
-  }, [input, mediaContent, apiMessages, currentItinerary, turns, currentSessionId, chatMutation, toast, persistSession, enterApp, user, startMoreDaysPrefetch, userProfile, isPaid]);
+    }; // fine runJsonChat
+
+    if (!trySimpleStream) { runJsonChat(); return; }
+
+    // Streaming: aggiorna il testo del turno man mano che arrivano i token.
+    setStreamPending(true);
+    const updateReply = (full: string) =>
+      setTurns(prev => prev.map(t => (t.id === turnId ? { ...t, assistantReply: full } : t)));
+    streamSimpleChat(
+      { messages: newMsgs, existingItinerary: currentItinerary, userTier, userProfile } as any,
+      updateReply,
+    )
+      .then(async (r) => {
+        if (r.fallback) { setStreamPending(false); runJsonChat(); return; } // non era semplice → flusso JSON
+        const reply = r.reply || "";
+        updateReply(reply);
+        setApiMessages(prev => [...prev, { role: "assistant", content: reply }]);
+        const updatedTurns = [...turns.filter(t => t.id !== turnId), { id: turnId, userMessage: promptText || "📎 Media allegato", assistantReply: reply, mediaPreview }];
+        setTurns(updatedTurns);
+        // Salva il contesto solo se la sessione esiste già (o c'è un viaggio aperto):
+        // così un consulto continua la chat, ma un semplice "ciao" non crea sessioni vuote.
+        if (currentItinerary || currentSessionId) {
+          const sid = await persistSession(updatedTurns, currentItinerary ?? undefined, [...newMsgs, { role: "assistant" as const, content: reply }], currentSessionId);
+          if (sid) setCurrentSessionId(sid);
+        }
+        setStreamPending(false);
+      })
+      .catch((err: any) => {
+        setTurns(prev => prev.filter(t => t.id !== turnId));
+        setApiMessages(prev => prev.slice(0, -1));
+        const m = typeof err?.message === "string" ? err.message.trim() : "";
+        toast({ title: (m && m !== "Errore chat") ? m : "Qualcosa è andato storto. Riprova.", variant: "destructive" });
+        setStreamPending(false);
+      });
+  }, [input, mediaContent, apiMessages, currentItinerary, turns, currentSessionId, chatMutation, toast, persistSession, enterApp, user, startMoreDaysPrefetch, userProfile, isPaid, streamPending]);
 
   const handleSave = async () => {
     if (!currentItinerary) return;
@@ -1111,7 +1156,7 @@ export default function Home() {
       <Layout>
         <div className="flex-1 overflow-y-auto" style={{ background: "var(--wd-bg)", position: "relative" }}>
           <StickyLandingHeader right={<LandingNavActions onLoginClick={() => setAuthOpen(true)} onEnterChat={() => { enterApp(); setActiveView("chat"); }} />} />
-          <HeroLanding onSubmit={handleSubmit} isPending={chatMutation.isPending} />
+          <HeroLanding onSubmit={handleSubmit} isPending={chatMutation.isPending || streamPending} />
           <SuggestedTrips onSelect={p => handleSubmit(p, true)} />
           <AnimatedRoadmap />
           <WorldGallery />
@@ -1214,9 +1259,9 @@ export default function Home() {
         )}
       </div>
       <div style={{ padding: "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, ...glassDark }}>
-        <QuickSuggestions onSelect={p => handleSubmit(p, true)} visible={hasItinerary && !chatMutation.isPending} />
+        <QuickSuggestions onSelect={p => handleSubmit(p, true)} visible={hasItinerary && !chatMutation.isPending && !streamPending} />
         <div style={{ marginTop: hasItinerary ? "8px" : "0" }}>
-          <AdvancedChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()} isPending={chatMutation.isPending}
+          <AdvancedChatInput value={input} onChange={setInput} onSubmit={() => handleSubmit()} isPending={chatMutation.isPending || streamPending}
             onMediaAttach={setMediaContent} mediaContent={mediaContent} onMediaRemove={() => setMediaContent(null)}
             placeholder="Dimmi dove vuoi andare..." />
         </div>
