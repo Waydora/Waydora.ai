@@ -101,7 +101,9 @@ export function registerChatAI(bot: Composer<BoundContext>) {
       await cleanupLoading();
       const detail = String(e?.message ?? e);
       console.error("[chat-ai]", detail);
-      if (detail.includes("502") || detail.includes("Risposta non valida")) {
+      if (detail.includes("503") || detail.includes("Troppo traffico")) {
+        await ctx.reply("Troppo traffico, riprova tra pochi secondi 🚀");
+      } else if (detail.includes("502") || detail.includes("Risposta non valida")) {
         await ctx.reply("Non sono riuscito a costruire la risposta (errore temporaneo dell'AI). Riformula il messaggio piu' breve o riprova fra qualche secondo.");
       } else {
         await ctx.reply(`Errore AI: ${detail.slice(0, 200)}`);
