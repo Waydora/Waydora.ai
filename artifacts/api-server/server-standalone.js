@@ -20,6 +20,13 @@ const APP_URL                  = process.env.APP_URL || "https://www.waydora.com
 const WINDOW_MS    = 60 * 60 * 1000;
 const MAX_REQUESTS = 20;
 
+// ── Concorrenza globale: max richieste AI in volo contemporaneamente ───────
+// Protegge il server (e OpenRouter) dai picchi di traffico che fanno cadere le
+// risposte in 502/timeout: oltre la soglia rispondiamo SUBITO 503 con messaggio
+// amichevole ("Troppo traffico…") invece di accodare tutto e mandare in crash.
+const MAX_CONCURRENT_AI = 20;
+let inFlightAI = 0;
+
 // Token massimi per piano (calibrati per stare nel timeout di rete con Haiku ~150 tok/s)
 const TIER_TOKENS = { guest: 8000, free: 12000, paid: 16000 };
 const SONNET_MAX_TOKENS = 4000;     // hard cap per fallback Sonnet (più lento)
@@ -594,6 +601,11 @@ REGOLE GENERALI:
 - Se ricevi info estratte da un video TikTok, analizzale e crea un itinerario ispirato.
 - Se l'utente fa domande conversazionali rispondi SOLO con reply e itinerary: null. MAX 150 parole.
 - ⚠️ ANTI-INVENZIONE (CRITICO): NON inventare MAI nomi propri di ristoranti, bar, hotel, negozi o locali specifici, soprattutto in città piccole o poco turistiche. Dare un nome FALSO è PEGGIO che non darne. Se non sei certo al 100% che quel locale esista con quel nome, NON nominarlo. Per mangiare/dormire descrivi il TIPO ("una trattoria di cucina tipica in centro", "un B&B vicino alla stazione") e dai un link Google Maps di RICERCA per tipologia (query tipo "trattoria tipica Isernia centro storico"), così l'utente trova posti VERI e aggiornati. Nomi propri SOLO per luoghi famosi e verificabili (monumenti, musei, piazze, grandi catene). Se l'utente segnala che un posto non esiste, NON inventarne un altro: ammetti e rimanda a Google Maps/ricerca locale.
+- ⚠️ ORDINE DELLE ATTIVITÀ — VICINANZA GEOGRAFICA + LOGICA DELLA GIORNATA (CRITICO): all'interno di OGNI giorno, ordina le attività in modo che le tappe consecutive siano il più VICINE possibile tra loro (di norma ci si sposta a PIEDI): minimizza gli spostamenti, niente zig-zag avanti e indietro per la città. Se un punto è geograficamente più vicino a un altro, mettili in sequenza (es: se la tappa 2 è più vicina alla 4 che alla 3, allora dopo la 2 metti quella che era la 4 e poi quella che era la 3). MA la vicinanza NON deve mai rompere la coerenza temporale e tematica della giornata:
+  • i PASTI vanno all'orario giusto: colazione a inizio mattina, pranzo ~12:30-14:00, cena ~19:30 in poi. Non mettere una cena prima del pomeriggio né un pranzo alle 10.
+  • le attività devono susseguirsi con senso: se un'escursione/visita lunga finisce in mattinata, fai seguire il pranzo (in un posto vicino al punto in cui finisce l'escursione), poi le attività del pomeriggio, poi l'aperitivo/cena la sera.
+  • combina i due criteri: prima rispetta la fascia oraria/tipo di attività, poi DENTRO quella fascia scegli e ordina le tappe per prossimità, così il percorso a piedi resta fluido e i pasti capitano vicino a dove ti trovi in quel momento.
+  Quando MODIFICHI un itinerario esistente (aggiungi/togli/sposti una tappa), RI-VALUTA sempre l'ordine del giorno coinvolto applicando queste stesse regole, così l'itinerario resta percorribile e coerente.
 - COERENZA ITINERARIO: se nella reply dici di aver creato/costruito un itinerario o "una giornata", l'oggetto itinerary STRUTTURATO DEVE essere presente nella stessa risposta. È VIETATO annunciare un itinerario solo a parole lasciando itinerary: null.
 - MODIFICHE (CRITICO per la mappa): quando l'utente modifica/aggiunge/toglie/sposta qualcosa in un itinerario esistente, restituisci SEMPRE l'oggetto itinerary COMPLETO e aggiornato — TUTTI i giorni e TUTTE le attività, anche quelle NON modificate — mai un frammento, mai solo il giorno cambiato, mai itinerary: null. Per le attività che NON cambi, RICOPIA identici "title", "time" e "category" dell'originale (NON riformularli): così la mappa conserva i punti già posizionati. Cambia solo ciò che l'utente ha chiesto.
 - Sii amichevole e naturale.
@@ -734,8 +746,16 @@ function routeRequest({ messages, existingItinerary, hasMedia, tier, progressive
     return { model: M.HAIKU, maxTokens: Math.min(cap, 10000), kind: "vision", days };
   }
 
+  // Meteo / info al volo (no generazione itinerario): SEMPRE modello economico.
+  // Prima finivano su Sonnet quando esisteva già un itinerario o un intent viaggio
+  // in cronologia, bruciando token per una risposta da poche righe (+ link weather).
+  const weatherRx = /\b(meteo|prevision\w*|che tempo|tempo (che )?(fa|farà)|temperatur\w*|piov\w*|grad[io]\b|clima|weather|fa(rà)? (caldo|freddo)|umidit|vento|nevic)/i;
+  if (weatherRx.test(lastText)) {
+    return { model: M.CHEAP_CHAT, maxTokens: Math.min(cap, 1000), kind: "weather", days };
+  }
+
   const itineraryRx = /itinerar|viagg|pianifica|organizza|programm|crea.+(gior|gg)|gior(no|ni)\s|vacanz|weekend|trip|tour|visit|cosa\s+(fare|vedere)|dove\s+(andare|visitare)|vado\s+a|andare\s+a|partir|destinazion/i;
-  const editRx = /aggiungi|togli|sposta|rimuov|sostitu|cambia|modifica|elimina|metti|aggiorna/i;
+  const editRx = /aggiungi|togli|sposta|rimuov|sostitu|cambia|modifica|elimina|metti|aggiorna|riordin|ottimizz/i;
   const greetRx = /^(ciao|salve|hey|ehi|grazie|prego|ok|sì|si|no|wow|bene|perfetto|fantastico|chi sei|come stai|che fai)\b/i;
   // Intent itinerario = uno qualsiasi dei turni utente passati ha menzionato viaggio/destinazione.
   // Così "Budget medio" da solo non ricade in chat-cheap se prima si era detto "vado a Lisbona".
@@ -753,22 +773,27 @@ function routeRequest({ messages, existingItinerary, hasMedia, tier, progressive
 
   // Su Railway non c'è il limite 60s di Vercel: usiamo Sonnet dove la qualità conta.
 
-  // Modifica leggera (sposta orario, cambia un nome, togli un'attività) → Haiku
-  const heavyEditRx = /aggiungi.+(gior|gg|tappa)|nuov[oi]\s+gior|rigenera|ricr|rifare|cambia\s+(destinazion|citt[aà]|posto|paese)|sposta.+(gior|tutto)/i;
-  if (existingItinerary && editRx.test(lastText) && !heavyEditRx.test(lastText)) {
+  // ── Itinerario già esistente ────────────────────────────────────────────
+  // IMPORTANTE: il routing qui guarda SOLO l'ULTIMO messaggio utente, non tutta
+  // la cronologia. Prima usavamo `hasItineraryIntent` (full history): una volta
+  // creato un viaggio, OGNI messaggio successivo (anche "che ne pensi?" o un meteo)
+  // ricadeva su Sonnet edit-large bruciando token. Ora una domanda/consulto resta
+  // sul modello economico; Sonnet solo per modifiche pesanti vere.
+  const heavyEditRx = /aggiungi.+(gior|gg|tappa)|nuov[oi]\s+gior|rigenera|ricr|rifare|cambia\s+(destinazion|citt[aà]|posto|paese)|sposta.+(gior|tutto)|riorganizz| riordin|ottimizz.+(percors|itinerar|giro|tappe)/i;
+  if (existingItinerary) {
+    const isEdit = editRx.test(lastText);
+    // Domanda / consulto / chiacchiera sul viaggio (nessuna modifica richiesta) → economico.
+    if (!isEdit) {
+      return { model: M.HAIKU, maxTokens: Math.min(cap, 2500), kind: "consult", days };
+    }
+    // Modifica pesante (aggiungi giorno, rigenera, riordina percorso, cambia meta) → Sonnet.
+    if (heavyEditRx.test(lastText)) {
+      const tokens = Math.min(cap, Math.max(10000, days * 2000 + 5000));
+      return { model: M.SONNET, maxTokens: tokens, kind: "edit-large", days };
+    }
+    // Modifica leggera (sposta orario, cambia un nome, togli un'attività) → Haiku.
     const tokens = Math.min(cap, Math.max(6000, days * 1200 + 4000));
     return { model: M.HAIKU, maxTokens: tokens, kind: "edit-small", days };
-  }
-
-  // Consulto su itinerario esistente (no itinerary intent, no edit intent) → Haiku
-  if (existingItinerary && !hasItineraryIntent && !editRx.test(lastText)) {
-    return { model: M.HAIKU, maxTokens: Math.min(cap, 3000), kind: "consult", days };
-  }
-
-  // Modifica pesante (aggiungi giorno, rigenera, cambia destinazione) → Sonnet
-  if (existingItinerary) {
-    const tokens = Math.min(cap, Math.max(10000, days * 2000 + 5000));
-    return { model: M.SONNET, maxTokens: tokens, kind: "edit-large", days };
   }
 
   // Creazione nuovo itinerario → SEMPRE Sonnet (qualità POI/coords/affiliate)
@@ -832,6 +857,90 @@ async function callOpenRouter({ model, system, messages, maxTokens }) {
   text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
   const finish = data.choices?.[0]?.finish_reason || "stop";
   return { text, stopReason: finish === "length" ? "max_tokens" : "end_turn", usage: data.usage || {} };
+}
+
+// ── Streaming (solo per risposte SEMPLICI: testo, niente itinerario) ────────
+// Risponde in TESTO normale (no JSON) così possiamo trasmettere i token man mano
+// all'utente, come una chat che "scrive" la risposta. Usato SOLO per saluti,
+// meteo, consigli e domande sul viaggio — mai per generare/modificare itinerari.
+const STREAM_SYSTEM_PROMPT = `Sei Waydora, un'assistente di viaggio AI amichevole e conversazionale. Parli in italiano, come un'amica esperta di viaggi.
+
+Rispondi in TESTO SEMPLICE (NIENTE JSON, niente codice, niente parentesi graffe). Tono caldo e diretto, max ~150 parole, emoji con moderazione.
+
+NON generare e NON descrivere itinerari strutturati: qui rispondi solo a saluti, curiosità, consigli, domande sul meteo o sul viaggio in corso. Se l'utente chiede esplicitamente di creare/modificare un itinerario, invitalo gentilmente a dirti destinazione, periodo, con chi e budget (non produrre l'itinerario qui).
+
+METEO: dai una risposta sintetica e realistica sul clima del periodo/destinazione e includi UN link a una fonte meteo, es. [Meteo su Il Meteo](https://www.ilmeteo.it/meteo/NOMECITTA) oppure [Weather.com](https://weather.com/weather/today). Sostituisci NOMECITTA con la città (spazi → +).
+
+CONSIGLI CON LINK (quando consigli qualcosa di prenotabile, includi SEMPRE un link markdown [Etichetta brand](url), mai URL grezzi a video):
+- Hotel/alloggi → [Cerca su Stay22](https://booking.stay22.com/waydora/5DPoKS60Cy?address=DESTINAZIONE&adults=2)
+- Attività/tour/musei/biglietti → [Prenota su GetYourGuide](https://www.getyourguide.com/s/?q=NOME+CITTA&partner_id=EPBPR3R)
+- Voli → [Cerca su Kiwi](https://kiwi.tpm.li/HdS8gBCi)
+- Ristoranti/bar → [Vedi su Maps](https://www.google.com/maps/search/?api=1&query=NOME+POSTO+CITTA)
+Regola d'oro: se scrivi "ecco/ti do/trovi qui" DEVE seguire subito il contenuto reale col link. Non promettere link senza darli.
+
+⚠️ ANTI-INVENZIONE: non inventare nomi di locali/ristoranti/hotel specifici se non sei certo che esistano; descrivi il tipo e rimanda a una ricerca Google Maps.`;
+
+async function callOpenRouterStream({ model, system, messages, maxTokens, onToken }) {
+  if (!OPENROUTER_KEY) throw new Error("OPENROUTER_API_KEY non configurata");
+  const body = {
+    model,
+    max_tokens: maxTokens,
+    temperature: 0.7,
+    stream: true,
+    messages: [{ role: "system", content: system }, ...messages],
+  };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  let resp;
+  try {
+    resp = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENROUTER_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://www.waydora.com",
+        "X-Title": "Waydora Travel Planner",
+      },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === "AbortError") throw new Error(`OpenRouter timeout >${FETCH_TIMEOUT_MS}ms su ${model}`);
+    throw e;
+  }
+  if (!resp.ok || !resp.body) {
+    clearTimeout(timer);
+    const errText = await resp.text().catch(() => "");
+    throw new Error(`OpenRouter ${resp.status}: ${errText.substring(0, 200)}`);
+  }
+  let full = "";
+  let buf = "";
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) !== -1) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;            // salta commenti SSE (": ...")
+        const payload = line.slice(5).trim();
+        if (payload === "[DONE]") continue;
+        try {
+          const json = JSON.parse(payload);
+          const delta = json.choices?.[0]?.delta?.content || "";
+          if (delta) { full += delta; onToken(delta); }
+        } catch { /* riga parziale: verrà completata al prossimo chunk */ }
+      }
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  return full;
 }
 
 // Wrapper compat: gestisce routing + fallback automatico su Sonnet
@@ -1415,6 +1524,94 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
     return;
   }
 
+  // ── Chat in STREAMING (solo risposte semplici: testo che appare man mano) ─
+  // Trasmette i token via SSE per saluti/meteo/consigli/domande sul viaggio.
+  // Se la richiesta NON è semplice (genererebbe/modificherebbe un itinerario),
+  // risponde 409 {fallback:true}: il client riprova sull'endpoint JSON classico.
+  if (req.url === "/api/chat/stream" && req.method === "POST") {
+    const clientIP = getClientIP(req);
+    const rateCheck = checkRateLimit(clientIP);
+    if (!rateCheck.allowed) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: `Hai raggiunto il limite di ${MAX_REQUESTS} richieste per ora. Riprova tra ${rateCheck.waitMin} minuti.`, retryAfter: rateCheck.waitMin }));
+      return;
+    }
+    if (inFlightAI >= MAX_CONCURRENT_AI) {
+      res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "5" });
+      res.end(JSON.stringify({ error: "Troppo traffico, riprova tra pochi secondi 🚀", retryAfter: 5 }));
+      return;
+    }
+    inFlightAI++;
+    let aiReleased = false;
+    const releaseAI = () => { if (!aiReleased) { aiReleased = true; inFlightAI = Math.max(0, inFlightAI - 1); } };
+    res.on("close", releaseAI);
+
+    let body = "";
+    req.on("data", c => { body += c; });
+    req.on("end", async () => {
+      try {
+        const { messages, existingItinerary, userTier, userProfile } = JSON.parse(body);
+        const route = routeRequest({ messages, existingItinerary, hasMedia: false, tier: userTier || "guest", progressive: null });
+        // Solo i "kind" puramente testuali possono fare streaming. Tutto il resto
+        // (creazione/modifica itinerario, vision, progressive) → fallback JSON.
+        const TEXTONLY = new Set(["weather", "chat-cheap", "consult"]);
+        if (!TEXTONLY.has(route.kind)) {
+          res.writeHead(409, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ fallback: true }));
+          return;
+        }
+
+        const today = new Date().toISOString().slice(0, 10);
+        const dateHint = `\n\n━━━ DATA OGGI ━━━\nOggi è ${today}. Eventuali date negli URL devono essere uguali o successive a oggi.`;
+        const profileHint = (typeof userProfile === "string" && userProfile.trim())
+          ? `\n\n━━━ PROFILO VIAGGIATORE (usalo per personalizzare in modo naturale, senza citarlo) ━━━\n${userProfile.trim().slice(0, 600)}`
+          : "";
+        let sys = STREAM_SYSTEM_PROMPT + dateHint + profileHint;
+        if (existingItinerary) {
+          sys += `\n\nItinerario attuale del viaggiatore (SOLO per rispondere a domande, NON modificarlo):\n${JSON.stringify(existingItinerary).substring(0, 3000)}`;
+        }
+        const orMessages = (messages || []).map(m => ({ role: m.role, content: typeof m.content === "string" ? m.content : "" }));
+
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+          "X-Accel-Buffering": "no",
+        });
+        const send = (obj) => { try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {} };
+
+        console.log(`[chat/stream] kind=${route.kind} model=${route.model}`);
+        let full;
+        try {
+          full = await callOpenRouterStream({
+            model: route.model,
+            system: sys,
+            messages: orMessages,
+            maxTokens: Math.min(route.maxTokens, 1500),
+            onToken: (t) => send({ delta: t }),
+          });
+        } catch (e) {
+          console.error("[chat/stream] err:", e.message);
+          send({ error: "stream_failed" });
+          res.end();
+          return;
+        }
+        // Safety-net sul testo finale (affiliati nudi → affiliati, date passate),
+        // poi inviato come messaggio "done" così il client rimpiazza l'accumulato.
+        let finalText = typeof full === "string" ? full : "";
+        finalText = rewriteAffiliateLinks(finalText);
+        finalText = fixPastDatesInReply(finalText);
+        send({ done: true, reply: finalText });
+        res.end();
+      } catch (err) {
+        console.error("[chat/stream] fatal:", err.message);
+        try { res.writeHead(500, { "Content-Type": "application/json" }); } catch {}
+        res.end(JSON.stringify({ error: "Qualcosa è andato storto. Riprova." }));
+      }
+    });
+    return;
+  }
+
   // ── Chat con rate limiting ────────────────────────────────────────────
   if (req.url === "/api/chat" && req.method === "POST") {
     const clientIP = getClientIP(req);
@@ -1428,6 +1625,20 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
       }));
       return;
     }
+
+    // Throttle di concorrenza: se ci sono già MAX_CONCURRENT_AI richieste in volo,
+    // rifiuta subito con 503 amichevole anziché sovraccaricare il server (→ 502).
+    if (inFlightAI >= MAX_CONCURRENT_AI) {
+      res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "5" });
+      res.end(JSON.stringify({ error: "Troppo traffico, riprova tra pochi secondi 🚀", retryAfter: 5 }));
+      return;
+    }
+    // Conteggio sincrono all'ingresso (evita race tra check e incremento); il
+    // rilascio è legato alla chiusura della response, qualunque sia l'esito.
+    inFlightAI++;
+    let aiReleased = false;
+    const releaseAI = () => { if (!aiReleased) { aiReleased = true; inFlightAI = Math.max(0, inFlightAI - 1); } };
+    res.on("close", releaseAI);
 
     let body = "";
     req.on("data", c => { body += c; });
