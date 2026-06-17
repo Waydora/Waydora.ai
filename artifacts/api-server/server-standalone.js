@@ -66,6 +66,21 @@ function inferTransportMode(activity) {
   return "flight"; // default storico
 }
 
+// Modo di trasporto PRINCIPALE dell'itinerario = la prima attività "transport"
+// (di solito l'andata). Serve a NON proporre voli quando il viaggio è in auto/
+// treno/bus/traghetto (es. Isernia → Vieste, 3h d'auto): i link voli toglierebbero
+// credibilità. Ritorna "flight"|"train"|"ferry"|"bus"|"taxi"|"car" oppure null.
+function itineraryPrimaryTransportMode(itinerary) {
+  const days = Array.isArray(itinerary?.days) ? itinerary.days : [];
+  for (const d of days) {
+    const acts = Array.isArray(d?.activities) ? d.activities : [];
+    for (const a of acts) {
+      if ((a?.category || "").toLowerCase() === "transport") return inferTransportMode(a);
+    }
+  }
+  return null;
+}
+
 function buildTransportAffiliate(activity, destination) {
   const mode = inferTransportMode(activity);
   const q = encodeURIComponent(`${activity?.title || ""} ${destination || ""}`.trim());
@@ -256,6 +271,14 @@ function buildFlightBlock(messages, itinerary) {
   const explicitLink = LINK_ASK_RX.test(lastText);
   const fire = directIntent || (aiAskedFlights && lastFlightDetails) || (explicitLink && flightRecent);
   if (!fire) return null;
+
+  // Credibilità: se l'itinerario viaggia in auto/treno/bus/traghetto (NON aereo)
+  // e l'utente non ha chiesto ESPLICITAMENTE i voli, non proporre voli. Evita il
+  // classico "✈️ Voli da Isernia a Vieste" su un viaggio di 3h d'auto, innescato
+  // dalla domanda discovery "da dove parti?" + risposta con una città.
+  const explicitFlightWord = /\b(vol[oi]|aere[oi]|aeroport|flight)\b/i.test(lastText);
+  const primaryMode = itineraryPrimaryTransportMode(itinerary);
+  if (!explicitFlightWord && primaryMode && primaryMode !== "flight") return null;
 
   // Se l'ultimo messaggio apre una NUOVA tratta/destinazione, leggi tutto da lì
   // (non far colare tratta/date di una richiesta precedente). Se invece è un
@@ -624,9 +647,11 @@ ECCEZIONI: il nome proprio di un POI può restare nella lingua locale ("Senso-ji
 Valori ammessi per "category": stay, food, experience, transport, sightseeing, nightlife, shopping, culture, nature.
 
 ━━━ POI E CITY — OBBLIGATORI ━━━
-- title: SEMPRE il nome REALE e SPECIFICO del posto.
-  ✅ "Trattoria Da Enzo al 29", "Colosseo", "Teatro alla Scala", "Mercato Centrale Firenze"
+- title: SEMPRE il nome REALE e SPECIFICO del posto, IN ITALIANO (o nome proprio locale).
+  ✅ "Trattoria Da Enzo al 29", "Colosseo", "Teatro alla Scala", "Mercato Centrale Firenze", "Centro storico di Vieste"
   ❌ "Ristorante locale", "Museo del centro", "Caffè caratteristico"
+  ❌ MAI titoli generici in INGLESE tipo "Apartment in the historic center of Vieste", "Hotel near the beach", "Restaurant in the old town": sono placeholder, non luoghi reali → tolgono credibilità. Se non c'è un nome proprio verificabile, usa una descrizione italiana del luogo/zona ("Centro storico di Vieste", "Lungomare di Vieste") oppure ometti l'attività.
+- NON inserire alloggi (stay) di tua iniziativa nell'itinerario: gli hotel/appartamenti si gestiscono SOLO quando l'utente li chiede (vedi sezione HOTEL).
 - city (per giorno): OBBLIGATORIO. Nome inglese internazionale della città+paese in cui si svolgono le attività di QUEL giorno. Es. "Athens, Greece", "Santorini, Greece", "Rome, Italy". Se in un giorno cambi città (transfer), usa la città di DESTINAZIONE. Serve per geocoding accurato.
 - NON includere coordinate (lat/lng): le aggiungiamo noi server-side via Google Places per massima precisione.
 - description: 1-2 frasi vivaci, perché l'utente dovrebbe andarci. NON ripetere il nome.

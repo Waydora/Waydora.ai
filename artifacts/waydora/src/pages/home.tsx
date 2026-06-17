@@ -283,16 +283,16 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
         </button>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: isMobile ? "14px" : "12px" }}>
+      <div style={{ padding: isMobile ? "14px" : "12px", flexShrink: 0 }}>
         <button onClick={() => { onNewTrip(); if (isMobile) onClose(); }}
           style={{ width: "100%", display: "flex", alignItems: "center", gap: "12px", padding: itemPadding, borderRadius: "14px", border: "none", cursor: "pointer", fontSize, fontWeight: 600, transition: "all 0.15s", ...(activeView === "chat" ? activeTabStyle : inactiveTabStyle) }}>
           <PlusCircle style={{ width: iconSize, height: iconSize, flexShrink: 0 }} />Nuova chat
         </button>
       </div>
       {sessions.length > 0 && (
-        <div style={{ padding: isMobile ? "0 14px 10px" : "0 12px 8px", display: "flex", flexDirection: "column", minHeight: 0, flex: "0 1 auto" }}>
+        <div style={{ padding: isMobile ? "0 14px 10px" : "0 12px 8px", display: "flex", flexDirection: "column", minHeight: 0, flex: isMobile ? "1 1 auto" : "0 1 auto" }}>
           <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(255,255,255,0.28)", padding: "4px 4px 8px", flexShrink: 0 }}>Recenti</div>
-          <div style={{ maxHeight: isMobile ? "200px" : "180px", minHeight: 0, flex: "1 1 auto", overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: "3px" }}>
+          <div style={{ maxHeight: isMobile ? "none" : "180px", minHeight: 0, flex: "1 1 auto", overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: "3px" }}>
               {sessions.map((s) => (
                 <div key={s.id} className="group" style={{ display: "flex", alignItems: "stretch", borderRadius: "12px", overflow: "hidden", transition: "background 0.12s" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
@@ -317,8 +317,8 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
           </div>
         </div>
       )}
-      <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: `4px ${isMobile ? "14px" : "12px"}` }} />
-      <div style={{ padding: isMobile ? "10px 14px" : "8px 12px", display: "flex", flexDirection: "column", gap: "4px" }}>
+      <div style={{ height: "1px", background: "rgba(255,255,255,0.06)", margin: `4px ${isMobile ? "14px" : "12px"}`, flexShrink: 0 }} />
+      <div style={{ padding: isMobile ? "10px 14px" : "8px 12px", display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0 }}>
         {([
           { id: "inspire", label: "Lasciati ispirare", icon: Compass },
           // Nascosto temporaneamente — riattivare per future funzionalità (componente e routing restano attivi)
@@ -335,7 +335,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
         })}
       </div>
       {user && (
-        <div style={{ padding: isMobile ? "8px 16px 12px" : "8px 12px 10px", marginTop: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+        <div style={{ padding: isMobile ? "8px 16px 12px" : "8px 12px 10px", marginTop: "auto", display: "flex", flexDirection: "column", gap: "8px", flexShrink: 0 }}>
           {isPaid ? (
             <button onClick={() => { onManage?.(); if (isMobile) onClose(); }} title="Gestisci o disdici l'abbonamento"
               style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "8px", borderRadius: "10px", background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.3)", color: "#fbbf24", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>
