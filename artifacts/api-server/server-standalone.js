@@ -785,7 +785,7 @@ async function enrichWithTikTok(messages) {
 // Reply che ANNUNCIA/presenta un viaggio come pronto o imminente ("ecco il vostro
 // viaggio!", "vi creo un itinerario", "ho creato 6 giorni…"). Serve sia al router
 // (handshake di generazione) sia al safety-net "annuncio senza consegna" lato handler.
-const GEN_ANNOUNCE_RX = /ecco\s+(il|i|lo|la|qui|il tuo|il vostro|i vostri|i tuoi)\b|ho creato|vi sorprendo|ti sorprendo|vi creo|ti creo|cre[oa](?:no)?\s+(?:un|l['’]|lo|il|i)\s*itinerar|il (tuo|vostro)\s+(viaggio|itinerari)|pronti a partir|preparatevi|divertitevi|ecco il vostro|ecco i vostri|sto creando|lo creo|generando/i;
+const GEN_ANNOUNCE_RX = /ecco\s+(il|i|lo|la|qui|il tuo|il vostro|i vostri|i tuoi)\b|eccol[oaie]\b|eccot[ie]\b|eccov[ie]\b|eccoci\b|riecco\w*|ho creato|vi sorprendo|ti sorprendo|vi creo|ti creo|cre[oa](?:no)?\s+(?:un|l['’]|lo|il|i)\s*itinerar|il (tuo|vostro)\s+(viaggio|itinerari)|pronti a partir|preparatevi|divertitevi|ecco il vostro|ecco i vostri|sto creando|lo creo|generando/i;
 // Intent "voglio un viaggio" emerso in QUALSIASI turno utente.
 const ITINERARY_INTENT_RX = /itinerar|viagg|pianifica|organizza|programm|vacanz|weekend|trip|tour|destinazion|vado\s+a|andare\s+a/i;
 
@@ -1063,7 +1063,7 @@ async function callAI(messages, existingItinerary, mediaContent, userTier = "gue
   try {
     const result = await callOpenRouter({ model: route.model, system: systemPrompt, messages: orMessages, maxTokens: route.maxTokens });
     console.log(`[callAI] OK in=${result.usage.prompt_tokens || "?"} out=${result.usage.completion_tokens || "?"} stop=${result.stopReason}`);
-    return { ...result, model: route.model };
+    return { ...result, model: route.model, kind: route.kind };
   } catch (e) {
     console.error(`[callAI] primo tentativo fallito (${route.model}):`, e.message);
     if (route.model === M.SONNET) throw e;
@@ -1074,7 +1074,7 @@ async function callAI(messages, existingItinerary, mediaContent, userTier = "gue
       messages: orMessages,
       maxTokens: SONNET_MAX_TOKENS,
     });
-    return { ...result, model: M.SONNET, fallback: true };
+    return { ...result, model: M.SONNET, fallback: true, kind: route.kind };
   }
 }
 
@@ -1759,6 +1759,7 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
         let raw = "";
         let stopReason = "end_turn";
         let usedModel = null;
+        let usedKind = null;
 
         // #5: "aggiungi un giorno" → genera SOLO i nuovi giorni e fai il merge lato
         // server (pochi token, nessun drift). Se fallisce → rigenerazione completa.
@@ -1795,6 +1796,7 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
           raw = aiResult.text;
           stopReason = aiResult.stopReason;
           usedModel = aiResult.model;
+          usedKind = aiResult.kind;
           payload = extractJsonPayload(raw);
         }
 
@@ -1842,17 +1844,23 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
         // conferme, il modello entra in loop di reply entusiaste ("Ecco il vostro
         // viaggio!", "Vi creo un itinerario…") ma con itinerary:null. Essendo un JSON
         // valido CON reply, nessun retry scatta e l'utente non vede mai il viaggio.
-        // Qui lo rileviamo e forziamo UNA generazione vera con Sonnet. Solo quando:
-        // non esiste già un itinerario, non è append/progressive/media, la reply
-        // annuncia un viaggio e in cronologia c'è un intent viaggio.
+        // Qui lo rileviamo e forziamo UNA generazione vera con Sonnet. Scatta quando
+        // non esiste già un itinerario, non è append/progressive/media e c'è in
+        // cronologia un intent viaggio, in DUE casi:
+        //   a) il router aveva già classificato la richiesta come creazione
+        //      (kind "create-*": create-small/large/confirmed) ma il modello ha
+        //      restituito itinerary:null → segnale affidabile, indipendente dal testo.
+        //   b) la reply ANNUNCIA un viaggio (GEN_ANNOUNCE_RX) anche se il router non
+        //      era in modalità creazione (es. "Eccolo!" su un turno di conferma corto).
+        const routedAsCreate = typeof usedKind === "string" && usedKind.startsWith("create");
         if (!payload.itinerary && !existingItinerary && !progressive && !mediaContent
-            && GEN_ANNOUNCE_RX.test(payload.reply)) {
+            && (routedAsCreate || GEN_ANNOUNCE_RX.test(payload.reply))) {
           const usersJoined = enrichedMessages
             .filter(m => m.role === "user")
             .map(m => typeof m.content === "string" ? m.content : "")
             .join(" ");
           if (ITINERARY_INTENT_RX.test(usersJoined)) {
-            console.warn(`[chat] annuncio-senza-consegna da ${usedModel} → forzo generazione Sonnet`);
+            console.warn(`[chat] annuncio-senza-consegna da ${usedModel} (kind=${usedKind}) → forzo generazione Sonnet`);
             try {
               const dm = usersJoined.toLowerCase().match(/(\d+)\s*(giorni|day|notti|notte|gg)/i);
               const ndays = dm ? Math.min(parseInt(dm[1], 10), 21) : 3;
@@ -1863,9 +1871,13 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
                 role: "user",
                 content: "Genera ORA l'itinerario completo come JSON dello schema, con il campo \"itinerary\" valorizzato (days → activities con coordinates). NON limitarti ad annunciarlo a parole, NON chiedere altre conferme: restituisci direttamente l'oggetto itinerary completo.",
               });
+              // System prompt mirato: la discovery è conclusa, l'unico compito è EMETTERE
+              // il JSON itinerario. Bypassa le regole di discovery che facevano "annunciare
+              // senza consegnare", mantenendo schema e regole link/affiliate.
+              const forceSystem = SYSTEM_PROMPT + "\n\n━━━ OVERRIDE GENERAZIONE FORZATA ━━━\nLa fase di discovery è CONCLUSA: hai già tutti i dati necessari nella conversazione. NON entrare in modalità testo, NON fare domande, NON limitarti ad annunciare il viaggio. DEVI restituire ORA un JSON in MODALITÀ ITINERARIO con il campo \"itinerary\" pienamente valorizzato (days con activities). Se mancasse un dettaglio, usa default sensati invece di chiedere.";
               const forced = await callOpenRouter({
                 model: M.SONNET,
-                system: SYSTEM_PROMPT,
+                system: forceSystem,
                 messages: forceMsgs,
                 maxTokens: forceTokens,
               });
