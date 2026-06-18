@@ -670,7 +670,7 @@ REGOLE GENERALI:
   • le attività devono susseguirsi con senso: se un'escursione/visita lunga finisce in mattinata, fai seguire il pranzo (in un posto vicino al punto in cui finisce l'escursione), poi le attività del pomeriggio, poi l'aperitivo/cena la sera.
   • combina i due criteri: prima rispetta la fascia oraria/tipo di attività, poi DENTRO quella fascia scegli e ordina le tappe per prossimità, così il percorso a piedi resta fluido e i pasti capitano vicino a dove ti trovi in quel momento.
   Quando MODIFICHI un itinerario esistente (aggiungi/togli/sposti una tappa), RI-VALUTA sempre l'ordine del giorno coinvolto applicando queste stesse regole, così l'itinerario resta percorribile e coerente.
-- COERENZA ITINERARIO: se nella reply dici di aver creato/costruito un itinerario o "una giornata", l'oggetto itinerary STRUTTURATO DEVE essere presente nella stessa risposta. È VIETATO annunciare un itinerario solo a parole lasciando itinerary: null.
+- COERENZA ITINERARIO: se nella reply dici di aver creato/costruito un itinerario o "una giornata", l'oggetto itinerary STRUTTURATO DEVE essere presente nella stessa risposta. È VIETATO annunciare un itinerario solo a parole lasciando itinerary: null. Vale anche per gli annunci IMMINENTI ("vi creo un itinerario", "ecco i vostri 3 giorni", "vi sorprendo con…", "pronti a partire"): se stai per presentare un viaggio, EMETTI subito l'oggetto itinerary completo nello STESSO messaggio — NON rimandare a un turno successivo e non aspettare un'ulteriore conferma. Hai già le info essenziali (destinazione + durata)? Allora genera, non annunciare.
 - MODIFICHE (CRITICO per la mappa): quando l'utente modifica/aggiunge/toglie/sposta qualcosa in un itinerario esistente, restituisci SEMPRE l'oggetto itinerary COMPLETO e aggiornato — TUTTI i giorni e TUTTE le attività, anche quelle NON modificate — mai un frammento, mai solo il giorno cambiato, mai itinerary: null. Per le attività che NON cambi, RICOPIA identici "title", "time" e "category" dell'originale (NON riformularli): così la mappa conserva i punti già posizionati. Cambia solo ciò che l'utente ha chiesto.
 - Sii amichevole e naturale.
 
@@ -782,6 +782,13 @@ async function enrichWithTikTok(messages) {
   return enriched;
 }
 
+// Reply che ANNUNCIA/presenta un viaggio come pronto o imminente ("ecco il vostro
+// viaggio!", "vi creo un itinerario", "ho creato 6 giorni…"). Serve sia al router
+// (handshake di generazione) sia al safety-net "annuncio senza consegna" lato handler.
+const GEN_ANNOUNCE_RX = /ecco\s+(il|i|lo|la|qui|il tuo|il vostro|i vostri|i tuoi)\b|ho creato|vi sorprendo|ti sorprendo|vi creo|ti creo|cre[oa](?:no)?\s+(?:un|l['’]|lo|il|i)\s*itinerar|il (tuo|vostro)\s+(viaggio|itinerari)|pronti a partir|preparatevi|divertitevi|ecco il vostro|ecco i vostri|sto creando|lo creo|generando/i;
+// Intent "voglio un viaggio" emerso in QUALSIASI turno utente.
+const ITINERARY_INTENT_RX = /itinerar|viagg|pianifica|organizza|programm|vacanz|weekend|trip|tour|destinazion|vado\s+a|andare\s+a/i;
+
 // ── Router: classifica richiesta → modello + maxTokens ───────────────────
 // Richiede l'INTERA conversazione, non solo l'ultimo messaggio:
 // in discovery flow ("vado a Lisbona" → "con chi?" → "in 2" → "che budget?" → "medio"),
@@ -840,8 +847,7 @@ function routeRequest({ messages, existingItinerary, hasMedia, tier, progressive
   // vedo niente") e si aspetta il viaggio. Senza questo, quella conferma corta finiva su
   // chat-cheap (Haiku, 1200 token) e l'AI rispondeva "ecco il viaggio!" SENZA generare
   // nulla → bug "viaggio mai generato su Telegram". Lo instradiamo a Sonnet creazione.
-  const genAnnounceRx = /ecco\s*(lo|qui|il|la|i\b|il tuo|il vostro)|ho creato|vi sorprendo|ti sorprendo|il (tuo|vostro)\s+(viaggio|itinerari)|pronti a partire|preparatevi|sto creando|lo creo|generando|ecco il vostro|divertitevi/i;
-  const aiAnnouncedItinerary = !existingItinerary && genAnnounceRx.test(lastAssistantText);
+  const aiAnnouncedItinerary = !existingItinerary && GEN_ANNOUNCE_RX.test(lastAssistantText);
   if (aiAnnouncedItinerary) {
     const tokens = Math.min(cap, Math.max(10000, days * 2200 + 5000));
     return { model: M.SONNET, maxTokens: tokens, kind: "create-confirmed", days };
@@ -1829,6 +1835,52 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
           res.writeHead(502, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Risposta incompleta. Riprova." }));
           return;
+        }
+
+        // ── Safety-net "annuncio senza consegna" ───────────────────────────
+        // Bug ricorrente (es. Gargano su Telegram): in un flusso discovery con più
+        // conferme, il modello entra in loop di reply entusiaste ("Ecco il vostro
+        // viaggio!", "Vi creo un itinerario…") ma con itinerary:null. Essendo un JSON
+        // valido CON reply, nessun retry scatta e l'utente non vede mai il viaggio.
+        // Qui lo rileviamo e forziamo UNA generazione vera con Sonnet. Solo quando:
+        // non esiste già un itinerario, non è append/progressive/media, la reply
+        // annuncia un viaggio e in cronologia c'è un intent viaggio.
+        if (!payload.itinerary && !existingItinerary && !progressive && !mediaContent
+            && GEN_ANNOUNCE_RX.test(payload.reply)) {
+          const usersJoined = enrichedMessages
+            .filter(m => m.role === "user")
+            .map(m => typeof m.content === "string" ? m.content : "")
+            .join(" ");
+          if (ITINERARY_INTENT_RX.test(usersJoined)) {
+            console.warn(`[chat] annuncio-senza-consegna da ${usedModel} → forzo generazione Sonnet`);
+            try {
+              const dm = usersJoined.toLowerCase().match(/(\d+)\s*(giorni|day|notti|notte|gg)/i);
+              const ndays = dm ? Math.min(parseInt(dm[1], 10), 21) : 3;
+              const cap = TIER_TOKENS[userTier] ?? TIER_TOKENS.guest;
+              const forceTokens = Math.min(cap, Math.max(10000, ndays * 2200 + 5000));
+              const forceMsgs = buildORMessages(enrichedMessages, mediaContent);
+              forceMsgs.push({
+                role: "user",
+                content: "Genera ORA l'itinerario completo come JSON dello schema, con il campo \"itinerary\" valorizzato (days → activities con coordinates). NON limitarti ad annunciarlo a parole, NON chiedere altre conferme: restituisci direttamente l'oggetto itinerary completo.",
+              });
+              const forced = await callOpenRouter({
+                model: M.SONNET,
+                system: SYSTEM_PROMPT,
+                messages: forceMsgs,
+                maxTokens: forceTokens,
+              });
+              const fp = extractJsonPayload(forced.text);
+              if (fp && fp.itinerary) {
+                payload = fp;
+                usedModel = M.SONNET;
+                console.log("[chat] generazione forzata OK");
+              } else {
+                console.warn("[chat] generazione forzata: nessun itinerary prodotto");
+              }
+            } catch (e) {
+              console.error("[chat] generazione forzata fallita:", e.message);
+            }
+          }
         }
 
         if (payload.itinerary) {
