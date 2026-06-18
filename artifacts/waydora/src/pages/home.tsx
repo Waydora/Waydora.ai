@@ -294,7 +294,7 @@ function Sidebar({ open, onClose, onNewTrip, sessions, onLoadSession, onDeleteSe
           <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em", color: "rgba(255,255,255,0.28)", padding: "4px 4px 8px", flexShrink: 0 }}>Recenti</div>
           <div style={{ maxHeight: isMobile ? "none" : "180px", minHeight: 0, flex: "1 1 auto", overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: "3px" }}>
               {sessions.map((s) => (
-                <div key={s.id} className="group" style={{ display: "flex", alignItems: "stretch", borderRadius: "12px", overflow: "hidden", transition: "background 0.12s" }}
+                <div key={s.id} className="group" style={{ flexShrink: 0, display: "flex", alignItems: "stretch", borderRadius: "12px", overflow: "hidden", transition: "background 0.12s" }}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
                   <button onClick={() => { onLoadSession(s); onChangeView("chat"); if (isMobile) onClose(); }}

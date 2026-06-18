@@ -29,6 +29,10 @@ type ItineraryData = {
 const ROAD_MODES = ["car", "taxi", "bus", "ferry"];
 // Mezzi non guidabili (in linea d'aria / su rotaia) → linea tratteggiata diretta.
 const DASHED_MODES = ["flight", "train"];
+// Oltre questa distanza una tratta NON è plausibile su strada (es. Lisbona→Roma,
+// ~1870km): anche se l'AI l'ha etichettata "car/bus", la rendiamo tratteggiata
+// (di fatto è un volo o un traghetto). Evita la linea stradale assurda da capo a capo.
+const MAX_ROAD_KM = 1000;
 const CONNECTOR_COLOR = "#334155"; // slate-700, distinto dalle route a piedi colorate per giorno
 
 type Connector = {
@@ -56,6 +60,27 @@ function haversineKm(a: google.maps.LatLngLiteral, b: google.maps.LatLngLiteral)
   const dLng = toRad(b.lng - a.lng);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// Riordina le tappe di un giorno con "nearest neighbour": parte dalla prima tappa
+// (di solito l'arrivo / alloggio) e ad ogni passo aggancia la più vicina non ancora
+// visitata. Così i numeri sulla mappa (1→2→3…) seguono un percorso fisico sensato,
+// senza zig-zag (es. 1→3→5→2→4). Migliora sia i pin sia la linea a piedi del giorno.
+function nearestNeighborOrder<T extends { lat: number; lng: number }>(points: T[]): T[] {
+  if (points.length <= 2) return points;
+  const remaining = points.slice();
+  const ordered: T[] = [remaining.shift()!];
+  while (remaining.length > 0) {
+    const cur = ordered[ordered.length - 1]!;
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const d = haversineKm(cur, remaining[i]!);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    ordered.push(remaining.splice(bestIdx, 1)[0]!);
+  }
+  return ordered;
 }
 
 type MarkerData = {
@@ -92,27 +117,36 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
       // ordine cronologico (le attività arrivano già ordinate mattino→sera). Così il
       // marker mostra 1,2,3… per le tappe del giorno (non il numero del giorno ripetuto);
       // il COLORE resta quello del giorno per distinguerli a colpo d'occhio.
-      let seq = 0;
       const dayPoints: google.maps.LatLngLiteral[] = [];
       // Raccoglie TUTTI i mezzi dichiarati nel giorno; il mezzo del connettore tra
       // città viene poi scelto per PRIORITÀ (sotto). Così un giorno con "auto fino
       // all'aeroporto + volo" usa il VOLO per la tratta lunga (non l'auto locale),
       // mentre un giorno con "auto + traghetto" usa il traghetto (percorso reale).
       const dayModes = new Set<string>();
+      // Prima raccogliamo le tappe con coordinate (in ordine cronologico), poi le
+      // riordiniamo per vicinanza così i numeri non zig-zagano sulla mappa.
+      const coordActs: { lat: number; lng: number; title: string; time: string; category: string }[] = [];
       for (const a of day.activities) {
         if ((a.category || "").toLowerCase() === "transport" && a.transportMode) {
           dayModes.add(a.transportMode.toLowerCase());
         }
         if (a.coordinates?.lat && a.coordinates?.lng) {
-          seq++;
-          out.push({
-            key: `${day.day}-${seq}`,
+          coordActs.push({
             lat: a.coordinates.lat, lng: a.coordinates.lng,
-            day: day.day, dayIndex, seq,
             title: a.title, time: a.time, category: a.category,
           });
-          dayPoints.push({ lat: a.coordinates.lat, lng: a.coordinates.lng });
         }
+      }
+      let seq = 0;
+      for (const a of nearestNeighborOrder(coordActs)) {
+        seq++;
+        out.push({
+          key: `${day.day}-${seq}`,
+          lat: a.lat, lng: a.lng,
+          day: day.day, dayIndex, seq,
+          title: a.title, time: a.time, category: a.category,
+        });
+        dayPoints.push({ lat: a.lat, lng: a.lng });
       }
       // Priorità: volo > treno > traghetto > auto > bus > taxi. Il mezzo a lunga
       // percorrenza vince su quello locale per rappresentare la tratta tra città.
@@ -137,11 +171,15 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
     // Classifica un mezzo in stile linea: strada (piena) vs tratteggiata.
     // Senza mezzo esplicito: < 200km in auto (piena), oltre → tratteggiata (volo).
     const classify = (mode: string | null, from: google.maps.LatLngLiteral, to: google.maps.LatLngLiteral): "road" | "dashed" => {
-      // Rispetta SEMPRE il mezzo dichiarato: volo/treno → tratteggiata; auto/bus/taxi/
-      // traghetto → percorso reale su strada (Google, traghetto incluso). Solo se il
-      // mezzo non è noto si stima dalla distanza (>200km → probabile volo).
-      if (mode && ROAD_MODES.includes(mode)) return "road";
+      // Rispetta il mezzo dichiarato: volo/treno → tratteggiata; auto/bus/taxi/
+      // traghetto → percorso reale su strada (Google, traghetto incluso). MA se la
+      // tratta è troppo lunga per essere guidata (> MAX_ROAD_KM) la forziamo
+      // tratteggiata: è di fatto un volo/traghetto, non un viaggio in auto.
       if (mode && DASHED_MODES.includes(mode)) return "dashed";
+      if (mode && ROAD_MODES.includes(mode)) {
+        return haversineKm(from, to) > MAX_ROAD_KM ? "dashed" : "road";
+      }
+      // Mezzo non noto: si stima dalla distanza (>200km → probabile volo).
       return haversineKm(from, to) <= 200 ? "road" : "dashed";
     };
 
@@ -277,7 +315,9 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
         const waypoints   = points.slice(1, -1).map(p => ({ location: p, stopover: true }));
 
         directionsService.route(
-          { origin, destination, waypoints, optimizeWaypoints: true, travelMode: google.maps.TravelMode.WALKING },
+          // optimizeWaypoints:false → la linea segue l'ordine dei pin (già riordinati
+          // per vicinanza con nearestNeighborOrder), così numeri e percorso coincidono.
+          { origin, destination, waypoints, optimizeWaypoints: false, travelMode: google.maps.TravelMode.WALKING },
           (result, status) => {
             if (status === "OK" && result) directionsRenderer.setDirections(result);
           }

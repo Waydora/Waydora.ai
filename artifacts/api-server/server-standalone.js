@@ -199,6 +199,32 @@ function tidyCity(s) {
     .replace(/\b(il|lo|la|i|gli|le|per|circa)\b\s*$/i, "").trim();
 }
 
+// Parole che NON sono città: espressioni temporali ("inizi", "metà luglio"…), mesi,
+// avverbi e termini di logistica voli. Servono a scartare falsi positivi del parser
+// di tratta/destinazione (es. "da Isernia a inizi luglio" → dest "inizi"). Senza
+// questo filtro nascevano link assurdi tipo "✈️ Voli da Isernia a inizi".
+const NON_CITY = new Set([
+  "inizio", "inizi", "meta", "metà", "fine", "primi", "primo", "ultimo", "ultimi",
+  "ultima", "circa", "oggi", "domani", "dopodomani", "mattina", "pomeriggio", "sera",
+  "notte", "pranzo", "cena", "scalo", "scali", "diretto", "diretta", "casa", "qui",
+  "qua", "poi", "ecco", "settimana", "weekend", "ponte", "estate", "inverno",
+  ...Object.keys(IT_MONTHS),
+]);
+
+// Normalizza per il confronto: minuscolo, senza accenti. "Metà" → "meta".
+function deburr(s) {
+  return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// Una stringa è plausibilmente una città/meta? Almeno 2 lettere e NON una parola
+// temporale/logistica. Usato da cityFromText e parseRoute per evitare destinazioni
+// finte estratte da frasi come "a inizi luglio" o "uno scalo".
+function isCityLike(s) {
+  const first = deburr(s).split(/\s+/)[0] || "";
+  if (first.length < 2) return false;
+  return !NON_CITY.has(first);
+}
+
 // Estrae una città nominata ESPLICITAMENTE nel testo ("a/in/per Berlino").
 // Solo nomi propri (iniziale maiuscola) → evita falsi positivi su parole comuni
 // (notti, persone, tenda…). Serve a capire se l'ultimo messaggio apre un NUOVO
@@ -206,7 +232,9 @@ function tidyCity(s) {
 function cityFromText(text) {
   if (!text) return null;
   const m = text.match(/\b(?:a|ad|in|per|verso)\s+([\p{Lu}][\p{L}'’.-]+(?:\s+[\p{Lu}][\p{L}'’.-]+){0,2})/u);
-  return m ? tidyCity(m[1]) : null;
+  if (!m) return null;
+  const city = tidyCity(m[1]);
+  return isCityLike(city) ? city : null;
 }
 
 // Aggancia il contesto al TOPIC corrente: scorre i messaggi dall'ultimo all'indietro
@@ -238,7 +266,12 @@ function lastIdx(userMsgs, rx) {
 function parseRoute(fullText, itinerary) {
   let origin = null, dest = null;
   const m = fullText.match(/\bda\s+([\p{L}][\p{L}'’ .-]{1,28}?)\s+a\s+([\p{L}][\p{L}'’ .-]{1,28}?)(?=[\s,.;!?]|$| il | per | dal | a giugno)/iu);
-  if (m) { origin = tidyCity(m[1]); dest = tidyCity(m[2]); }
+  if (m) {
+    const o = tidyCity(m[1]); const d = tidyCity(m[2]);
+    // Scarta tratte finte: "da Isernia a inizi (luglio)" → dest "inizi" non è una città.
+    if (isCityLike(o)) origin = o;
+    if (isCityLike(d)) dest = d;
+  }
   if (!dest && itinerary?.destination) dest = String(itinerary.destination).split(",")[0].trim();
   if (!origin && itinerary?.departure) origin = String(itinerary.departure).split(",")[0].trim();
   return { origin, dest };
@@ -294,11 +327,19 @@ function buildFlightBlock(messages, itinerary) {
     const r = parseRoute(t.text, null);
     const itinDest = itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : null;
     origin = r.origin || (itinerary?.departure ? String(itinerary.departure).split(",")[0].trim() : null);
-    // Se c'è un itinerario, la SUA destinazione è la fonte di verità: l'utente la sta
-    // guardando. Va preferita all'ultima città citata nello storico (topicContext),
-    // che può essere una meta vecchia poi abbandonata (es. "Cilento" → poi Cicladi).
-    dest = r.dest || itinDest || t.city;
     ctx = t.text;
+    if (itinDest) {
+      // C'è un itinerario in chat: la SUA destinazione è la fonte di verità (l'utente
+      // la sta guardando), preferita a qualsiasi città vecchia nello storico.
+      dest = itinDest;
+    } else {
+      // Discovery, nessun itinerario: la destinazione può solo venire dallo storico
+      // (topicContext). MA se l'AI ha appena proposto un'altra meta e NON nomina questa
+      // città, è un cambio di destinazione → niente voli incoerenti (es. l'AI consiglia
+      // la Croazia/Spalato ma lo storico aveva "Amorgos" → non mostrare voli per Amorgos).
+      dest = r.dest || t.city;
+      if (dest && aiText && !deburr(aiText).includes(deburr(dest))) return null;
+    }
   }
   if (!dest) return null; // senza destinazione non costruiamo nulla
 
@@ -673,6 +714,7 @@ Per OGNI activity compila il campo "affiliate" usando ESATTAMENTE questi formati
 - category "transport" → AGGIUNGI SEMPRE il campo "transportMode" con uno tra: "flight" (aereo), "train" (treno), "ferry" (traghetto/aliscafo), "bus" (autobus/pullman/FlixBus), "taxi" (taxi/Uber/Bolt), "car" (auto/noleggio).
   Il "title" di un transport deve descrivere lo SPOSTAMENTO (es. "Volo Napoli → Istanbul", "Trasferimento in auto a Tropea", "Treno per Firenze"), MAI il nome di un'agenzia viaggi, tour operator o compagnia (es. NON "Agenzia X", NON "Trenitalia"): sono tragitti, non luoghi da mettere sulla mappa.
   Se la partenza ("departure") e la destinazione sono raggiungibili in auto in modo sensato (stessa area/regione/nazione, es. Isernia → Calabria), usa transportMode "car" per il primo spostamento; usa "flight" solo per tratte lunghe/intercontinentali o via mare obbligata.
+  AEROPORTO/PORTO PIÙ VICINO: quando il primo spostamento è "flight" o "ferry", NON saltare direttamente dalla città di partenza alla destinazione. Inserisci PRIMA una tappa transport "car" verso l'aeroporto/porto reale più vicino alla partenza (title con il nome vero, es. "Trasferimento in auto all'Aeroporto di Napoli-Capodichino", "Trasferimento in auto al Porto di Bari"), POI la tappa "flight"/"ferry" dall'aeroporto/porto di partenza a quello di arrivo (es. "Volo Napoli → Spalato", "Traghetto Bari → Dubrovnik"). Così la mappa traccia l'auto fino allo scalo e una linea tratteggiata per la tratta aerea/marittima. Usa aeroporti/porti realmente esistenti e serviti da quella rotta.
   Il backend genererà link e label coerenti (es. traghetto → "Cerca traghetti" Direct Ferries, treno → Trainline, bus → FlixBus, volo → Kiwi). NON forzare mai "Cerca voli" su un traghetto/treno/bus.
   Lascia l'oggetto affiliate placeholder: {
     "provider": "auto",
@@ -790,6 +832,20 @@ function routeRequest({ messages, existingItinerary, hasMedia, tier, progressive
   const lastAssistantText = (typeof lastAssistant?.content === "string" ? lastAssistant.content : "").toLowerCase();
   const discoveryRx = /con chi|in che periodo|da dove parti|che budget|fascia di prezzo|quante persone|quando pensavi|che mese/;
   const inDiscovery = !existingItinerary && discoveryRx.test(lastAssistantText);
+
+  // ── Handshake di generazione ────────────────────────────────────────────
+  // L'AI ha appena ANNUNCIATO/presentato un itinerario ("vi sorprendo con Spalato e
+  // Hvar, ho creato 6 giorni…", "ecco il vostro viaggio!") ma NON ne esiste ancora uno
+  // salvato. L'utente dà l'ok con un messaggio corto ("sono pronto", "sì pronti", "non
+  // vedo niente") e si aspetta il viaggio. Senza questo, quella conferma corta finiva su
+  // chat-cheap (Haiku, 1200 token) e l'AI rispondeva "ecco il viaggio!" SENZA generare
+  // nulla → bug "viaggio mai generato su Telegram". Lo instradiamo a Sonnet creazione.
+  const genAnnounceRx = /ecco\s*(lo|qui|il|la|i\b|il tuo|il vostro)|ho creato|vi sorprendo|ti sorprendo|il (tuo|vostro)\s+(viaggio|itinerari)|pronti a partire|preparatevi|sto creando|lo creo|generando|ecco il vostro|divertitevi/i;
+  const aiAnnouncedItinerary = !existingItinerary && genAnnounceRx.test(lastAssistantText);
+  if (aiAnnouncedItinerary) {
+    const tokens = Math.min(cap, Math.max(10000, days * 2200 + 5000));
+    return { model: M.SONNET, maxTokens: tokens, kind: "create-confirmed", days };
+  }
 
   // Chat-cheap fast-path SOLO se davvero conversazione banale (saluto/ack) E nessun intent viaggio mai emerso.
   if (!hasItineraryIntent && !inDiscovery && (greetRx.test(lastText) || lastText.length < 60)) {
