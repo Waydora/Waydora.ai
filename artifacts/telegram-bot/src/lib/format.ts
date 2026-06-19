@@ -8,11 +8,16 @@ export function md(s: string): string {
   return String(s).replace(/([_*\[\]`])/g, "\\$1");
 }
 
-export function summarizeItinerary(it: any): string {
+export function summarizeItinerary(it: any, opts?: { accountEmail?: string | null }): string {
   if (!it) return "Itinerario vuoto.";
   const days = Array.isArray(it.days) ? it.days.length : 0;
   const slug = it.shareSlug ?? it.share_slug;
   const webUrl = slug ? `https://www.waydora.com/trip/${slug}` : null;
+  // Account su cui e' salvato il viaggio: se sul sito non compare, quasi sempre
+  // l'utente e' loggato con un account diverso da quello collegato al bot.
+  const acct = opts?.accountEmail
+    ? `\n💾 Salvato sul tuo account *${md(opts.accountEmail)}* — se sul sito non lo vedi, accedi con questo account.`
+    : null;
   return [
     `${it.heroEmoji ?? "🗺️"} *${md(it.title ?? "Viaggio")}*`,
     it.destination ? `📍 ${md(it.destination)}` : null,
@@ -21,6 +26,7 @@ export function summarizeItinerary(it: any): string {
     it.bestSeason ? `🌤 Stagione: ${md(it.bestSeason)}` : null,
     it.vibe ? `\n_${md(it.vibe)}_` : null,
     webUrl ? `\n🌐 [Apri su Waydora](${webUrl}) — mappa, foto e modifica live` : null,
+    acct,
   ]
     .filter(Boolean)
     .join("\n");

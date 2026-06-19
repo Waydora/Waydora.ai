@@ -67,6 +67,19 @@ export async function deleteBindingByTelegramId(telegramUserId: number): Promise
   cache.delete(telegramUserId);
 }
 
+// Email dell'account Supabase legato (via Auth admin). Serve a far capire
+// all'utente SU QUALE account il bot sta salvando i viaggi: se sul sito non li
+// vede, quasi sempre e' loggato con un account diverso da quello collegato qui.
+export async function getAccountEmail(userId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.auth.admin.getUserById(userId);
+    if (error) return null;
+    return data.user?.email ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function touchLastSeen(telegramUserId: number): Promise<void> {
   await supabase
     .from("telegram_bindings")

@@ -4,6 +4,7 @@ import type { BoundContext } from "../bot.js";
 import { callAI, type ChatMessage } from "../lib/chat-bridge.js";
 import { loadOrCreateSession, saveSession, trimHistory, upsertSavedTripFromSession } from "../lib/persistence.js";
 import { listTrips } from "../lib/trips.js";
+import { getAccountEmail } from "../lib/bindings.js";
 import { buildTravelProfile } from "../lib/travel-profile.js";
 import { summarizeItinerary, formatDay } from "../lib/format.js";
 import { getDone } from "../lib/done-set.js";
@@ -144,6 +145,7 @@ export function registerChatAI(bot: Composer<BoundContext>) {
 
       // Auto-salva su saved_trips → appare in "Viaggi salvati" del sito.
       // Stabile per sessione: stesso slug se la chat continua, nuovo dopo /nuovo.
+      let savedOk = false;
       try {
         const slug = await upsertSavedTripFromSession({
           userId,
@@ -155,13 +157,24 @@ export function registerChatAI(bot: Composer<BoundContext>) {
         (it as any).shareSlug = slug;
         session.itinerary = it;
         await saveSession(session);
+        savedOk = true;
       } catch (e) {
-        console.warn("[chat-ai] auto-save saved_trip failed", e);
+        console.error("[chat-ai] auto-save saved_trip failed", e);
+        // Non lasciare il fallimento invisibile: senza questo avviso l'utente
+        // vedrebbe il viaggio in chat ma non sul sito, senza capire perché.
+        await ctx.reply(
+          "⚠️ Ho creato il viaggio ma non sono riuscito a salvarlo sul sito. Riprova tra poco: se il problema persiste, faccelo sapere.",
+        ).catch(() => {});
       }
+
+      // Email dell'account su cui è stato salvato: la mostriamo nel riepilogo
+      // così un eventuale mismatch di account (causa #1 dei "viaggi che non
+      // compaiono sul sito") è immediatamente evidente.
+      const accountEmail = savedOk ? await getAccountEmail(userId).catch(() => null) : null;
 
       // Fallback robusto: se Telegram rigetta il Markdown (caratteri non escaped, parentesi, etc),
       // ritenta senza parse_mode così l'utente vede comunque l'itinerario.
-      const summary = summarizeItinerary(it);
+      const summary = summarizeItinerary(it, { accountEmail });
       try {
         await ctx.reply(summary, {
           parse_mode: "Markdown",
