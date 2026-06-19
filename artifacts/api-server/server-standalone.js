@@ -325,20 +325,22 @@ function buildFlightBlock(messages, itinerary) {
   } else {
     const t = topicContext(userMsgs);
     const r = parseRoute(t.text, null);
+    const topicCity = r.dest || t.city; // città nominata nel topic CORRENTE della chat
     const itinDest = itinerary?.destination ? String(itinerary.destination).split(",")[0].trim() : null;
     origin = r.origin || (itinerary?.departure ? String(itinerary.departure).split(",")[0].trim() : null);
     ctx = t.text;
-    if (itinDest) {
-      // C'è un itinerario in chat: la SUA destinazione è la fonte di verità (l'utente
-      // la sta guardando), preferita a qualsiasi città vecchia nello storico.
-      dest = itinDest;
+    if (topicCity) {
+      // Il TOPIC corrente vince sull'itinerario in sessione: quest'ultimo può essere un
+      // viaggio precedente NON resettato (es. Vieste) mentre l'utente sta già pianificando
+      // un'altra meta (es. Barcellona). Prima qui vinceva sempre l'itinerario → usciva il
+      // famigerato "✈️ Voli da Isernia a Vieste" su una richiesta per Barcellona.
+      dest = topicCity;
+      // Se l'AI ha appena proposto un'ALTRA meta e NON nomina questa città è un cambio di
+      // destinazione in corso → niente voli incoerenti.
+      if (aiText && !deburr(aiText).includes(deburr(dest))) return null;
     } else {
-      // Discovery, nessun itinerario: la destinazione può solo venire dallo storico
-      // (topicContext). MA se l'AI ha appena proposto un'altra meta e NON nomina questa
-      // città, è un cambio di destinazione → niente voli incoerenti (es. l'AI consiglia
-      // la Croazia/Spalato ma lo storico aveva "Amorgos" → non mostrare voli per Amorgos).
-      dest = r.dest || t.city;
-      if (dest && aiText && !deburr(aiText).includes(deburr(dest))) return null;
+      // Nessuna città nominata nel discorso: ripiega sull'itinerario in sessione.
+      dest = itinDest;
     }
   }
   if (!dest) return null; // senza destinazione non costruiamo nulla
@@ -788,6 +790,13 @@ async function enrichWithTikTok(messages) {
 const GEN_ANNOUNCE_RX = /ecco\s+(il|i|lo|la|qui|il tuo|il vostro|i vostri|i tuoi)\b|eccol[oaie]\b|eccot[ie]\b|eccov[ie]\b|eccoci\b|riecco\w*|ho creato|vi sorprendo|ti sorprendo|vi creo|ti creo|cre[oa](?:no)?\s+(?:un|l['’]|lo|il|i)\s*itinerar|il (tuo|vostro)\s+(viaggio|itinerari)|pronti a partir|preparatevi|divertitevi|ecco il vostro|ecco i vostri|sto creando|lo creo|generando/i;
 // Intent "voglio un viaggio" emerso in QUALSIASI turno utente.
 const ITINERARY_INTENT_RX = /itinerar|viagg|pianifica|organizza|programm|vacanz|weekend|trip|tour|destinazion|vado\s+a|andare\s+a/i;
+// Annuncio di un viaggio NUOVO (non un edit del viaggio corrente). Stretto apposta:
+// deve nominare "itinerario/viaggio" o "ecco i tuoi N giorni", così NON scatta su
+// modifiche ("ti creo un giorno in più") né su consulti ("ecco i ristoranti"). Serve a
+// far ripartire handshake e safety-net ANCHE quando in sessione c'è un itinerario vecchio
+// non resettato (cambio meta senza /nuovo): senza, la conferma corta dell'utente finisce
+// su Haiku-consult e l'AI ri-annuncia il viaggio senza mai generarlo (bug "non vedo nulla").
+const NEW_TRIP_ANNOUNCE_RX = /(?:\b(?:ti|vi)\s+cre[oa]|\bcre[oa]|sto\s+creando)\s+(?:\w+\s+){0,2}?(?:itinerari|viagg)|ecco\s+i\s+(?:tuoi|vostri)\s+\d+\s+giorni|ecco\s+(?:il|i)\s+(?:tuo|tuoi|vostro|vostri)\s+(?:viagg|itinerari)/i;
 
 // ── Router: classifica richiesta → modello + maxTokens ───────────────────
 // Richiede l'INTERA conversazione, non solo l'ultimo messaggio:
@@ -847,7 +856,13 @@ function routeRequest({ messages, existingItinerary, hasMedia, tier, progressive
   // vedo niente") e si aspetta il viaggio. Senza questo, quella conferma corta finiva su
   // chat-cheap (Haiku, 1200 token) e l'AI rispondeva "ecco il viaggio!" SENZA generare
   // nulla → bug "viaggio mai generato su Telegram". Lo instradiamo a Sonnet creazione.
-  const aiAnnouncedItinerary = !existingItinerary && GEN_ANNOUNCE_RX.test(lastAssistantText);
+  // Caso classico: nessun itinerario ancora (handshake di prima generazione). Caso
+  // aggiuntivo: ESISTE un itinerario in sessione ma l'AI sta annunciando un viaggio NUOVO
+  // (meta diversa non resettata) → la conferma corta ("sì vai") deve comunque andare su
+  // Sonnet-creazione, non su Haiku-consult (troppo pochi token → l'AI ri-annuncia senza
+  // generare). NEW_TRIP_ANNOUNCE_RX è stretto per non scattare sugli edit del corrente.
+  const aiAnnouncedItinerary = (!existingItinerary && GEN_ANNOUNCE_RX.test(lastAssistantText))
+    || NEW_TRIP_ANNOUNCE_RX.test(lastAssistantText);
   if (aiAnnouncedItinerary) {
     const tokens = Math.min(cap, Math.max(10000, days * 2200 + 5000));
     return { model: M.SONNET, maxTokens: tokens, kind: "create-confirmed", days };
@@ -1853,8 +1868,16 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
         //   b) la reply ANNUNCIA un viaggio (GEN_ANNOUNCE_RX) anche se il router non
         //      era in modalità creazione (es. "Eccolo!" su un turno di conferma corto).
         const routedAsCreate = typeof usedKind === "string" && usedKind.startsWith("create");
-        if (!payload.itinerary && !existingItinerary && !progressive && !mediaContent
-            && (routedAsCreate || GEN_ANNOUNCE_RX.test(payload.reply))) {
+        // Annuncio di un viaggio NUOVO anche con un itinerario (vecchio) già in sessione:
+        // la reply corrente promette un viaggio ma torna itinerary:null → forziamo la
+        // generazione vera. La force-gen NON include l'itinerario vecchio nel system prompt
+        // (forceSystem), quindi crea da zero dalla conversazione (meta nuova) senza ereditare
+        // lo stale → niente più "Ecco i tuoi 2 giorni" senza che appaia il viaggio.
+        const newTripAnnounce = NEW_TRIP_ANNOUNCE_RX.test(payload.reply)
+          || NEW_TRIP_ANNOUNCE_RX.test(lastAssistantText(enrichedMessages));
+        if (!payload.itinerary && !progressive && !mediaContent
+            && ((!existingItinerary && (routedAsCreate || GEN_ANNOUNCE_RX.test(payload.reply)))
+                || newTripAnnounce)) {
           const usersJoined = enrichedMessages
             .filter(m => m.role === "user")
             .map(m => typeof m.content === "string" ? m.content : "")
@@ -1911,9 +1934,12 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
           payload.reply = fixPastDatesInReply(payload.reply);
           // Voli: appendi i link generati lato codice DOPO il rewrite, così il link
           // Google Flights (risultati reali) non viene riscritto in Kiwi generico.
-          const flightBlock = buildFlightBlock(messages, existingItinerary || payload.itinerary);
+          // Preferisci l'itinerario CORRENTE (appena generato) a quello in sessione: se
+          // l'utente ha cambiato meta, payload.itinerary è la nuova, existingItinerary la vecchia.
+          const itinForBlocks = payload.itinerary || existingItinerary;
+          const flightBlock = buildFlightBlock(messages, itinForBlocks);
           if (flightBlock) payload.reply += flightBlock;
-          const lodgingBlock = buildLodgingBlock(messages, existingItinerary || payload.itinerary);
+          const lodgingBlock = buildLodgingBlock(messages, itinForBlocks);
           if (lodgingBlock) payload.reply += lodgingBlock;
         }
 
