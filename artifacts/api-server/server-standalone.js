@@ -559,6 +559,9 @@ REGOLE DISCOVERY:
 
 ECCEZIONE: se esiste già un itinerario in chat (modifiche, aggiunte, consigli sul viaggio in corso) → NON entrare in discovery, gestisci come edit normale.
 
+━━━ DURATA DEL VIAGGIO (default corto se non indicata) ━━━
+Se l'utente NON ha indicato quanti giorni/notti vuole stare (nessun numero, né "weekend"/"settimana"/"ponte"), genera un itinerario BREVE di 3 giorni come PUNTO DI PARTENZA: si vede subito ed è veloce. In quel caso, nella "reply" di' che hai preparato 3 giorni come assaggio e che basta chiedere per aggiungerne altri. NON inventare durate lunghe (5+ giorni) se l'utente non le ha richieste. Se invece la durata è indicata (es. "5 giorni", "una settimana"), rispetta ESATTAMENTE quella.
+
 ━━━ MODALITÀ ITINERARIO (solo quando chiede di creare/modificare/aggiungere giorni) ━━━
 
 {
@@ -1433,6 +1436,26 @@ function stripeVerifySignature(rawBody, sigHeader, secret) {
   catch { return false; }
 }
 
+// ── [LAB] Prompt NDJSON: itinerario in streaming (un oggetto JSON per riga) ──
+// Esperimento "Mindtrip-style": il modello emette righe NDJSON che il client
+// renderizza man mano (header → giorni → attività). Isolato, non tocca /api/chat.
+const NDJSON_ITINERARY_PROMPT = `Sei Waydora, assistente di viaggio. Genera un itinerario in formato NDJSON: UN oggetto JSON per riga, in italiano. NIENTE markdown, NIENTE testo fuori dalle righe JSON, NIENTE virgole tra le righe.
+
+Emetti le righe ESATTAMENTE in questo ordine:
+1) Una riga meta:
+{"t":"meta","title":"titolo breve","destination":"City, Country (nome inglese internazionale)","departure":"Città di partenza se nota dal contesto, altrimenti ometti il campo","durationDays":N,"vibe":"atmosfera in 2-3 parole","heroEmoji":"🗺️"}
+2) Per OGNI giorno, prima la riga del giorno poi le sue attività:
+{"t":"day","day":1,"title":"titolo giorno","summary":"una frase","city":"City, Country (inglese)"}
+{"t":"act","day":1,"time":"09:00-11:00","title":"Nome PROPRIO reale del posto","description":"1-2 frasi vivaci, niente indirizzo","category":"sightseeing","estimatedCost":"€15"}
+3) Una riga finale: {"t":"end"}
+
+REGOLE:
+- category ∈ sightseeing | food | experience | transport | stay | nightlife | shopping | culture | nature
+- 3-5 attività per giorno, ordinate per vicinanza geografica e fasce orarie sensate (pasti all'ora giusta).
+- SOLO luoghi REALI ed esistenti (nomi propri verificabili). Niente placeholder generici ("Ristorante in centro"). Se non sei certo del nome, usa una descrizione della zona ("Centro storico di …").
+- Tutto in italiano TRANNE i campi "destination" e "city" (nome inglese internazionale, per il geocoding).
+- Se l'utente NON ha indicato la durata, usa 3 giorni. Se l'ha indicata, rispettala ESATTAMENTE.`;
+
 // ── HTTP Server ───────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -1630,6 +1653,93 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
   // Trasmette i token via SSE per saluti/meteo/consigli/domande sul viaggio.
   // Se la richiesta NON è semplice (genererebbe/modificherebbe un itinerario),
   // risponde 409 {fallback:true}: il client riprova sull'endpoint JSON classico.
+  // ── [LAB] Streaming itinerario NDJSON (esperimento, isolato) ──────────────
+  // Genera l'itinerario con Sonnet e ri-emette OGNI riga NDJSON completa al client
+  // appena è disponibile → l'itinerario "si scrive" a schermo. Non tocca /api/chat.
+  if (req.url === "/api/lab/stream-itinerary" && req.method === "POST") {
+    const clientIP = getClientIP(req);
+    const rateCheck = checkRateLimit(clientIP);
+    if (!rateCheck.allowed) {
+      res.writeHead(429, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: `Hai raggiunto il limite di ${MAX_REQUESTS} richieste per ora. Riprova tra ${rateCheck.waitMin} minuti.`, retryAfter: rateCheck.waitMin }));
+      return;
+    }
+    if (inFlightAI >= MAX_CONCURRENT_AI) {
+      res.writeHead(503, { "Content-Type": "application/json", "Retry-After": "5" });
+      res.end(JSON.stringify({ error: "Troppo traffico, riprova tra pochi secondi 🚀", retryAfter: 5 }));
+      return;
+    }
+    inFlightAI++;
+    let aiReleased = false;
+    const releaseAI = () => { if (!aiReleased) { aiReleased = true; inFlightAI = Math.max(0, inFlightAI - 1); } };
+    res.on("close", releaseAI);
+
+    let body = "";
+    req.on("data", c => { body += c; });
+    req.on("end", async () => {
+      try {
+        const { messages, userTier, userProfile } = JSON.parse(body);
+        const cap = TIER_TOKENS[userTier || "guest"] ?? TIER_TOKENS.guest;
+        const userText = (messages || []).filter(m => m.role === "user").map(m => typeof m.content === "string" ? m.content : "").join(" ");
+        const dm = userText.toLowerCase().match(/(\d+)\s*(giorni|giorno|gg|notti|notte)/);
+        const days = dm ? Math.min(parseInt(dm[1], 10), 21) : 3;
+        const maxTokens = Math.min(cap, Math.max(8000, days * 2200 + 4000));
+
+        const today = new Date().toISOString().slice(0, 10);
+        const dateHint = `\n\n━━━ DATA OGGI ━━━\nOggi è ${today}. Non usare date passate.`;
+        const profileHint = (typeof userProfile === "string" && userProfile.trim())
+          ? `\n\n━━━ PROFILO VIAGGIATORE (usalo in modo naturale, senza citarlo) ━━━\n${userProfile.trim().slice(0, 600)}`
+          : "";
+        const sys = NDJSON_ITINERARY_PROMPT + dateHint + profileHint;
+        const orMessages = (messages || []).map(m => ({ role: m.role, content: typeof m.content === "string" ? m.content : "" }));
+
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+          "X-Accel-Buffering": "no",
+        });
+        const send = (obj) => { try { res.write(`data: ${JSON.stringify(obj)}\n\n`); } catch {} };
+
+        console.log(`[lab/stream-itinerary] days=${days} maxTokens=${maxTokens}`);
+        let lineBuf = "";
+        const flushLines = (final) => {
+          let nl;
+          while ((nl = lineBuf.indexOf("\n")) !== -1) {
+            const raw = lineBuf.slice(0, nl).trim();
+            lineBuf = lineBuf.slice(nl + 1);
+            if (!raw) continue;
+            try { send({ line: JSON.parse(raw) }); } catch { /* riga parziale/non-JSON: scarta */ }
+          }
+          if (final) {
+            const tail = lineBuf.trim();
+            if (tail) { try { send({ line: JSON.parse(tail) }); } catch {} }
+          }
+        };
+        try {
+          await callOpenRouterStream({
+            model: M.SONNET,
+            system: sys,
+            messages: orMessages,
+            maxTokens,
+            onToken: (t) => { lineBuf += t; flushLines(false); },
+          });
+          flushLines(true);
+          send({ done: true });
+        } catch (e) {
+          console.error("[lab/stream-itinerary] err:", e.message);
+          send({ error: "stream_failed" });
+        }
+        res.end();
+      } catch (err) {
+        console.error("[lab/stream-itinerary] fatal:", err.message);
+        try { res.writeHead(500, { "Content-Type": "application/json" }); } catch {}
+        res.end(JSON.stringify({ error: "Qualcosa è andato storto. Riprova." }));
+      }
+    });
+    return;
+  }
+
   if (req.url === "/api/chat/stream" && req.method === "POST") {
     const clientIP = getClientIP(req);
     const rateCheck = checkRateLimit(clientIP);

@@ -690,6 +690,9 @@ export default function Home() {
   // Giorni restanti prefetchati in background (generazione progressiva).
   const [moreDays, setMoreDays] = useState<MoreDays | null>(null);
   const [appendPending, setAppendPending] = useState(false); // click "Aggiungi" mentre il prefetch è in corso
+  // Viaggio generato SENZA durata richiesta → default corto (3 gg): mostriamo un chip
+  // "Aggiungi giorni" per allungarlo con un tap (vedi regola DURATA nel prompt server).
+  const [shortTripExtendable, setShortTripExtendable] = useState(false);
   const [streamPending, setStreamPending] = useState(false); // risposta semplice in streaming (testo che appare man mano)
   const appendRequestedRef = useRef(false); // mirror di appendPending leggibile nelle callback async
   const [apiMessages,      setApiMessages]      = useState<ChatMessage[]>([]);
@@ -916,7 +919,7 @@ export default function Home() {
     // senza media. Mostriamo prima i primi giorni, poi prefetchiamo il resto.
     const reqDays = parseRequestedDays(`${promptText} ${apiMessages.map(m => typeof m.content === "string" ? m.content : "").join(" ")}`);
     const useProgressive = !currentItinerary && !mediaForBackend && reqDays >= PROGRESSIVE_THRESHOLD;
-    setMoreDays(null); appendRequestedRef.current = false;
+    setMoreDays(null); appendRequestedRef.current = false; setShortTripExtendable(false);
     const userTier = user ? (isPaid ? "paid" : "free") : "guest";
 
     // ── Risposta SEMPLICE in streaming (saluti, meteo, consigli, domande sul
@@ -945,6 +948,9 @@ export default function Home() {
             // precedente nello storico così "Annulla" può ripristinarla.
             if (currentItinerary) setItineraryHistory(prev => [...prev, currentItinerary].slice(-10));
             setCurrentItinerary(data.itinerary);
+            // CREAZIONE senza durata richiesta → viaggio "assaggio" corto: abilita il chip
+            // "Aggiungi giorni". Sugli edit non lo tocchiamo (resta nascosto/invariato).
+            if (!currentItinerary) setShortTripExtendable(reqDays === 0 && (data.itinerary.durationDays ?? 0) <= 3);
 
             // Generazione progressiva: se abbiamo mostrato solo i primi giorni,
             // prefetcha in background i restanti così "Aggiungi" è istantaneo.
@@ -1073,7 +1079,7 @@ export default function Home() {
     setInput(""); setMediaContent(null); setCurrentSessionId(undefined);
     setActiveView("chat"); setMobileScreen("chat");
     setMapReady(false); setMapNotifShown(false);
-    setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false;
+    setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false; setShortTripExtendable(false);
     // Reset stato analytics di sessione: nuova chat = nuovo funnel.
     sessionStartedRef.current = false;
     firstItineraryDoneRef.current = false;
@@ -1089,14 +1095,14 @@ export default function Home() {
     }
     if (currentSessionId && String(currentSessionId) === String(id)) {
       setTurns([]); setApiMessages([]); setCurrentItinerary(undefined); setCurrentSessionId(undefined); setItineraryHistory([]);
-      setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false;
+      setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false; setShortTripExtendable(false);
     }
   }, [user, removeDbSession, localSessions, currentSessionId]);
 
   const handleLoadSession = (s: any) => {
     setTurns(s.turns ?? []); setApiMessages(s.apiMessages ?? s.api_messages ?? []);
     setCurrentItinerary(s.itinerary); setCurrentSessionId(s.id?.toString()); setItineraryHistory([]);
-    setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false;
+    setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false; setShortTripExtendable(false);
     enterApp(); setActiveView("chat"); setMobileScreen("chat");
     // Sessione già avviata in passato: non rilanciare chat_started / AHA.
     sessionStartedRef.current = true;
@@ -1127,7 +1133,7 @@ export default function Home() {
       { role: "assistant", content: reply },
     ]);
     setCurrentItinerary(it); setItineraryHistory([]);
-    setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false;
+    setMoreDays(null); setAppendPending(false); appendRequestedRef.current = false; setShortTripExtendable(false);
     setCurrentSessionId(undefined);
     enterApp(); setActiveView("chat"); setMobileScreen("chat");
     sessionStartedRef.current = true;
@@ -1254,6 +1260,16 @@ export default function Home() {
                 : (moreDays.status === "loading" || appendPending)
                   ? <><Loader2 className="animate-spin" style={{ width: "14px", height: "14px" }} />{appendPending ? "Aggiungo gli altri giorni…" : "Preparo gli altri giorni in background…"}</>
                   : <><Plus style={{ width: "14px", height: "14px" }} />Aggiungi gli altri giorni ({moreDays.range.to - moreDays.range.from + 1})</>}
+            </button>
+          </div>
+        )}
+        {/* Default corto (3 gg generati senza durata richiesta): un tap per allungarlo. */}
+        {shortTripExtendable && !!currentItinerary && !moreDays && !chatMutation.isPending && !streamPending && (
+          <div style={{ display: "flex", justifyContent: "center", padding: "4px 0 8px" }}>
+            <button onClick={() => handleSubmit("Aggiungi 2 giorni al viaggio")}
+              style={{ display: "flex", alignItems: "center", gap: "7px", fontSize: "13px", fontWeight: 700, padding: "10px 18px", borderRadius: "9999px", cursor: "pointer",
+                background: "var(--wd-grad-warm)", color: "#fff", border: "none" }}>
+              <Plus style={{ width: "14px", height: "14px" }} />Aggiungi giorni
             </button>
           </div>
         )}

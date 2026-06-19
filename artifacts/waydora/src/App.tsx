@@ -8,6 +8,7 @@ import Home from "@/pages/home";
 import Trip from "@/pages/trip";
 import Legal from "@/pages/legal";
 import Start from "@/pages/start";
+import Lab from "@/pages/lab";
 import { ThemeProvider } from "@/lib/theme";
 
 const queryClient = new QueryClient();
@@ -17,6 +18,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/start" component={Start} />
+      <Route path="/lab" component={Lab} />
       <Route path="/trip/:slug" component={Trip} />
       <Route path="/legale/:slug" component={Legal} />
       <Route component={NotFound} />
