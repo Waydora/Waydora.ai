@@ -1447,7 +1447,9 @@ Emetti le righe ESATTAMENTE in questo ordine:
 2) Per OGNI giorno, prima la riga del giorno poi le sue attività:
 {"t":"day","day":1,"title":"titolo giorno","summary":"una frase","city":"City, Country (inglese)"}
 {"t":"act","day":1,"time":"09:00-11:00","title":"Nome PROPRIO reale del posto","description":"1-2 frasi vivaci, niente indirizzo","category":"sightseeing","estimatedCost":"€15"}
-3) Una riga finale: {"t":"end"}
+3) DOPO tutti i giorni, 2-4 righe lista bagaglio (una per categoria):
+{"t":"packing","category":"Essenziali","items":["Passaporto","Powerbank"]}
+4) Una riga finale: {"t":"end"}
 
 REGOLE:
 - category ∈ sightseeing | food | experience | transport | stay | nightlife | shopping | culture | nature
@@ -1653,6 +1655,29 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
   // Trasmette i token via SSE per saluti/meteo/consigli/domande sul viaggio.
   // Se la richiesta NON è semplice (genererebbe/modificherebbe un itinerario),
   // risponde 409 {fallback:true}: il client riprova sull'endpoint JSON classico.
+  // ── [LAB] Arricchimento itinerario (coordinate Places + affiliati) ────────
+  // Chiamato dal client DOPO lo stream: aggiunge le coordinate (per i pin mappa) e
+  // gli affiliati alle attività. Stessi helper della produzione. Niente AI → leggero.
+  if (req.url === "/api/lab/enrich" && req.method === "POST") {
+    let body = "";
+    req.on("data", c => { body += c; });
+    req.on("end", async () => {
+      try {
+        const { itinerary } = JSON.parse(body);
+        let it = itinerary;
+        try { it = await enrichWithGooglePlaces(it); } catch (e) { console.error("[lab/enrich] places:", e.message); }
+        try { ensureAffiliateOnItinerary(it); } catch (e) { console.error("[lab/enrich] affiliate:", e.message); }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ itinerary: it }));
+      } catch (err) {
+        console.error("[lab/enrich] fatal:", err.message);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "enrich_failed" }));
+      }
+    });
+    return;
+  }
+
   // ── [LAB] Streaming itinerario NDJSON (esperimento, isolato) ──────────────
   // Genera l'itinerario con Sonnet e ri-emette OGNI riga NDJSON completa al client
   // appena è disponibile → l'itinerario "si scrive" a schermo. Non tocca /api/chat.
