@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   useListSuggestions, useChat, useSaveItinerary, fetchChatChunk,
-  streamSimpleChat, isSimpleChat,
+  streamSimpleChat, isSimpleChat, streamCreateItinerary, enrichItinerary,
   type ChatMessage, type ItineraryData,
 } from "@/hooks/api";
 import { useAuth } from "@/hooks/auth";
@@ -660,6 +660,18 @@ function LandingNavActions({ onLoginClick, onEnterChat }: { onLoginClick: () => 
 const PROGRESSIVE_THRESHOLD = 5; // da 5 giorni in su
 const FIRST_CHUNK_DAYS = 2;      // "un paio di giorni" subito
 
+// [Streaming creazione] flag: SPENTO di default → la produzione non cambia per nessuno.
+// Accendi con ?stream=1 nell'URL (o localStorage wd_stream_create=1) per testare senza
+// redeploy; ?stream=0 forza off. Quando convince, si alza il default.
+const STREAM_CREATE = (() => {
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("stream") === "1") { localStorage.setItem("wd_stream_create", "1"); return true; }
+    if (sp.get("stream") === "0") { localStorage.removeItem("wd_stream_create"); return false; }
+    return localStorage.getItem("wd_stream_create") === "1";
+  } catch { return false; }
+})();
+
 // Estrae il numero di giorni richiesto dal testo (es. "6 giorni", "una settimana").
 function parseRequestedDays(text: string): number {
   if (!text) return 0;
@@ -917,15 +929,19 @@ export default function Home() {
 
     // Generazione progressiva: solo su CREAZIONE di un viaggio lungo (≥ soglia) e
     // senza media. Mostriamo prima i primi giorni, poi prefetchiamo il resto.
+    // (Non si attiva se tryStreamCreate prende il caso: lo streaming NDJSON mostra
+    // già tutti i giorni via via, non serve il chunking a parte.)
     const reqDays = parseRequestedDays(`${promptText} ${apiMessages.map(m => typeof m.content === "string" ? m.content : "").join(" ")}`);
-    const useProgressive = !currentItinerary && !mediaForBackend && reqDays >= PROGRESSIVE_THRESHOLD;
+    const isSimple = isSimpleChat(promptText, !!currentItinerary);
+    const tryStreamCreate = STREAM_CREATE && !currentItinerary && !mediaForBackend && !isSimple;
+    const useProgressive = !currentItinerary && !mediaForBackend && !tryStreamCreate && reqDays >= PROGRESSIVE_THRESHOLD;
     setMoreDays(null); appendRequestedRef.current = false; setShortTripExtendable(false);
     const userTier = user ? (isPaid ? "paid" : "free") : "guest";
 
     // ── Risposta SEMPLICE in streaming (saluti, meteo, consigli, domande sul
     // viaggio): il testo appare man mano. La creazione/modifica di itinerari resta
     // sul flusso JSON normale (runJsonChat). Niente streaming con media/progressive.
-    const trySimpleStream = !mediaForBackend && !useProgressive && isSimpleChat(promptText, !!currentItinerary);
+    const trySimpleStream = !mediaForBackend && !useProgressive && isSimple;
 
     const runJsonChat = () => {
     chatMutation.mutate(
@@ -1001,6 +1017,72 @@ export default function Home() {
       }
     );
     }; // fine runJsonChat
+
+    // ── [Streaming creazione] Itinerario NDJSON: i giorni/attività appaiono man
+    // mano nella card in chat invece di aspettare la risposta intera (~1 min).
+    // Solo CREAZIONE (l'endpoint non conosce un itinerario esistente da editare).
+    if (tryStreamCreate) {
+      setStreamPending(true);
+      let sawAnyLine = false;
+      streamCreateItinerary(
+        { messages: newMsgs, userTier, userProfile },
+        (partial) => {
+          sawAnyLine = true;
+          setTurns(prev => prev.map(t => (t.id === turnId
+            ? { ...t, assistantReply: t.assistantReply || `Ecco il tuo itinerario per ${partial.destination || "il tuo viaggio"}! 🗺️`, itinerary: partial }
+            : t)));
+        },
+      )
+        .then(async (r) => {
+          setStreamPending(false);
+          if (r.kind === "ask") {
+            const updatedTurns = [...turns.filter(t => t.id !== turnId), { id: turnId, userMessage: promptText || "📎 Media allegato", assistantReply: r.reply, mediaPreview }];
+            setApiMessages(prev => [...prev, { role: "assistant", content: r.reply }]);
+            setTurns(updatedTurns);
+            // Stessa regola del consulto in streaming: persisti solo se la sessione esiste
+            // già, così una domanda di chiarimento non crea una sessione vuota.
+            if (currentSessionId) {
+              const sid = await persistSession(updatedTurns, undefined, [...newMsgs, { role: "assistant" as const, content: r.reply }], currentSessionId);
+              if (sid) setCurrentSessionId(sid);
+            }
+            return;
+          }
+          const enriched = await enrichItinerary(r.itinerary);
+          const reply = `Ecco il tuo itinerario per ${enriched.destination}! 🗺️`;
+          setApiMessages(prev => [...prev, { role: "assistant", content: reply }]);
+          // Freemium: la creazione in streaming conta come una "generazione" esattamente
+          // come quella via runJsonChat (qui è sempre creazione: mai un edit).
+          if (!isPaid) incFreeGeneration(user?.id);
+          setCurrentItinerary(enriched);
+          // Default corto (durata non richiesta) → stesso chip "Aggiungi giorni" del flusso normale.
+          setShortTripExtendable(reqDays === 0 && (enriched.durationDays ?? 0) <= 3);
+          const updatedTurns = [...turns.filter(t => t.id !== turnId), { id: turnId, userMessage: promptText || "📎 Media allegato", assistantReply: reply, itinerary: enriched, mediaPreview }];
+          setTurns(updatedTurns);
+          if (!firstItineraryDoneRef.current) {
+            firstItineraryDoneRef.current = true;
+            track("first_itinerary_generated", {
+              is_authenticated: !!user,
+              destination_country: destinationCountry(enriched.destination),
+              duration_days: enriched.durationDays,
+              used_railway: true,
+              ttv_ms: sessionFirstSeenRef.current ? Date.now() - sessionFirstSeenRef.current : 0,
+            });
+          }
+          const sid = await persistSession(updatedTurns, enriched, [...newMsgs, { role: "assistant" as const, content: reply }], currentSessionId);
+          if (sid) setCurrentSessionId(sid);
+        })
+        .catch((err: any) => {
+          setStreamPending(false);
+          // Niente mostrato ancora (errore prima del primo token) → riprova trasparente
+          // sul flusso JSON, esattamente come il fallback del consulto in streaming.
+          if (!sawAnyLine) { runJsonChat(); return; }
+          setTurns(prev => prev.filter(t => t.id !== turnId));
+          setApiMessages(prev => prev.slice(0, -1));
+          const m = typeof err?.message === "string" ? err.message.trim() : "";
+          toast({ title: (m && m !== "Errore chat") ? m : "Qualcosa è andato storto. Riprova.", variant: "destructive" });
+        });
+      return;
+    }
 
     if (!trySimpleStream) { runJsonChat(); return; }
 

@@ -1247,7 +1247,7 @@ function carryOverCoordinates(newItin, oldItin) {
   return newItin;
 }
 
-function enrichWithGooglePlaces(itinerary) {
+function enrichWithGooglePlaces(itinerary, opts = {}) {
   return new Promise(async (resolve) => {
     const apiKey = process.env.GOOGLE_MAPS_KEY;
     if (!apiKey) { resolve(itinerary); return; }
@@ -1304,6 +1304,11 @@ function enrichWithGooglePlaces(itinerary) {
       } else if (cityCoords) {
         // Fallback: pin sul centro della città del giorno (mai un pin in posto sbagliato)
         activity.coordinates = cityCoords;
+        // Places NON ha confermato il luogo nella città giusta → possibile allucinazione
+        // (nome inesistente o di un'altra città). Opt-in: marca come "da verificare".
+        if (opts.flagUnverified) activity.unverified = true;
+      } else if (opts.flagUnverified) {
+        activity.unverified = true;
       }
     };
 
@@ -1439,8 +1444,14 @@ function stripeVerifySignature(rawBody, sigHeader, secret) {
 // ── [LAB] Prompt NDJSON: itinerario in streaming (un oggetto JSON per riga) ──
 // Esperimento "Mindtrip-style": il modello emette righe NDJSON che il client
 // renderizza man mano (header → giorni → attività). Isolato, non tocca /api/chat.
-const NDJSON_ITINERARY_PROMPT = `Sei Waydora, assistente di viaggio. Genera un itinerario in formato NDJSON: UN oggetto JSON per riga, in italiano. NIENTE markdown, NIENTE testo fuori dalle righe JSON, NIENTE virgole tra le righe.
+const NDJSON_ITINERARY_PROMPT = `Sei Waydora, assistente di viaggio. Rispondi in formato NDJSON: UN oggetto JSON per riga, in italiano. NIENTE markdown, NIENTE testo fuori dalle righe JSON, NIENTE virgole tra le righe.
 
+━━━ PRIMA DI GENERARE: DISCOVERY ━━━
+Se nella conversazione mancano 2 o più dati tra: compagnia (con chi) · periodo (mese/stagione) · partenza (città) · budget, OPPURE il messaggio NON è una richiesta di viaggio (saluto, ringraziamento, domanda generica), allora NON generare l'itinerario: emetti UNA SOLA riga e fermati:
+{"t":"ask","reply":"messaggio amichevole e breve, max 2 domande insieme, come un'amica curiosa (niente elenco di 4 cose)"}
+Se invece i dati ci sono (3+) o l'utente dice "sorprendimi/scegli tu", genera SUBITO l'itinerario completo come sotto.
+
+━━━ ITINERARIO ━━━
 Emetti le righe ESATTAMENTE in questo ordine:
 1) Una riga meta:
 {"t":"meta","title":"titolo breve","destination":"City, Country (nome inglese internazionale)","departure":"Città di partenza se nota dal contesto, altrimenti ometti il campo","durationDays":N,"vibe":"atmosfera in 2-3 parole","heroEmoji":"🗺️"}
@@ -1455,6 +1466,7 @@ REGOLE:
 - category ∈ sightseeing | food | experience | transport | stay | nightlife | shopping | culture | nature
 - 3-5 attività per giorno, ordinate per vicinanza geografica e fasce orarie sensate (pasti all'ora giusta).
 - SOLO luoghi REALI ed esistenti (nomi propri verificabili). Niente placeholder generici ("Ristorante in centro"). Se non sei certo del nome, usa una descrizione della zona ("Centro storico di …").
+- CENTRI PICCOLI / POCO NOTI (es. Isernia, Campobasso): per ristoranti/bar NON inventare nomi se non sei certo che esistano IN QUELLA città. Meglio descrivere la zona ("Cena nel centro storico di Isernia") che un nome falso o di un'altra città.
 - Tutto in italiano TRANNE i campi "destination" e "city" (nome inglese internazionale, per il geocoding).
 - Se l'utente NON ha indicato la durata, usa 3 giorni. Se l'ha indicata, rispettala ESATTAMENTE.`;
 
@@ -1658,15 +1670,27 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
   // ── [LAB] Arricchimento itinerario (coordinate Places + affiliati) ────────
   // Chiamato dal client DOPO lo stream: aggiunge le coordinate (per i pin mappa) e
   // gli affiliati alle attività. Stessi helper della produzione. Niente AI → leggero.
-  if (req.url === "/api/lab/enrich" && req.method === "POST") {
+  if ((req.url === "/api/lab/enrich" || req.url === "/api/chat/itinerary-enrich") && req.method === "POST") {
     let body = "";
     req.on("data", c => { body += c; });
     req.on("end", async () => {
       try {
         const { itinerary } = JSON.parse(body);
         let it = itinerary;
-        try { it = await enrichWithGooglePlaces(it); } catch (e) { console.error("[lab/enrich] places:", e.message); }
+        // flagUnverified: marca i POI che Places non conferma nella città giusta
+        // (nome inesistente / di un'altra città → es. ristorante "di Isernia" a Campobasso).
+        try { it = await enrichWithGooglePlaces(it, { flagUnverified: true }); } catch (e) { console.error("[lab/enrich] places:", e.message); }
         try { ensureAffiliateOnItinerary(it); } catch (e) { console.error("[lab/enrich] affiliate:", e.message); }
+        // I POI non confermati NON devono sembrare certi: niente bottone "prenota",
+        // ma una ricerca su Maps così l'utente verifica da sé invece di fidarsi di un nome falso.
+        for (const day of (it.days ?? [])) {
+          for (const a of (day.activities ?? [])) {
+            if (a && a.unverified) {
+              const q = encodeURIComponent(`${a.title || ""} ${day.city || it.destination || ""}`.trim());
+              a.affiliate = { provider: "Google Maps", label: "Cerca su Maps", url: `https://www.google.com/maps/search/?api=1&query=${q}` };
+            }
+          }
+        }
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ itinerary: it }));
       } catch (err) {
@@ -1681,7 +1705,7 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
   // ── [LAB] Streaming itinerario NDJSON (esperimento, isolato) ──────────────
   // Genera l'itinerario con Sonnet e ri-emette OGNI riga NDJSON completa al client
   // appena è disponibile → l'itinerario "si scrive" a schermo. Non tocca /api/chat.
-  if (req.url === "/api/lab/stream-itinerary" && req.method === "POST") {
+  if ((req.url === "/api/lab/stream-itinerary" || req.url === "/api/chat/stream-itinerary") && req.method === "POST") {
     const clientIP = getClientIP(req);
     const rateCheck = checkRateLimit(clientIP);
     if (!rateCheck.allowed) {

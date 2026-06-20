@@ -228,6 +228,90 @@ export async function streamSimpleChat(
   return { reply: finalReply || acc };
 }
 
+// ── [Streaming creazione] NDJSON: l'itinerario si scrive man mano ────────────
+// Chiama /api/chat/stream-itinerary (Railway): il modello emette una riga JSON per
+// oggetto (meta→day→act→packing→end) oppure UNA riga {t:"ask"} se serve discovery.
+// onProgress riceve l'oggetto itinerario PARZIALE a ogni riga (per il render live).
+// Throwa su errori di rete/stream → il chiamante ricade sul flusso JSON.
+function assembleStreamItinerary(meta: any, dayHeads: any[], acts: any[], packing: any[]): ItineraryData {
+  const days = [...dayHeads].sort((a, b) => a.day - b.day).map((dh) => ({
+    day: dh.day, title: dh.title, summary: dh.summary, city: dh.city,
+    activities: acts.filter((a) => a.day === dh.day).map((a) => ({
+      time: a.time, title: a.title, description: a.description, category: a.category, estimatedCost: a.estimatedCost,
+    })),
+  })) as any;
+  return {
+    title: meta?.title ?? meta?.destination ?? "Viaggio",
+    destination: meta?.destination ?? "",
+    durationDays: meta?.durationDays ?? days.length,
+    vibe: meta?.vibe ?? "", totalBudget: "", bestSeason: "",
+    heroEmoji: meta?.heroEmoji ?? "🗺️",
+    ...(meta?.departure ? { departure: meta.departure } : {}),
+    days, packingList: packing,
+  } as ItineraryData;
+}
+
+export async function streamCreateItinerary(
+  data: { messages: ChatMessage[]; userTier: string; userProfile?: string | null },
+  onProgress: (partial: ItineraryData) => void,
+): Promise<{ kind: "ask"; reply: string } | { kind: "itinerary"; itinerary: ItineraryData }> {
+  const res = await fetch(`${API_BASE}/chat/stream-itinerary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages: data.messages, userTier: data.userTier, userProfile: data.userProfile ?? undefined }),
+  });
+  if (!res.ok || !res.body) {
+    const e = await res.json().catch(() => ({} as any));
+    if (res.status === 502 || res.status === 503) throw new Error(e.error || "Troppo traffico, riprova tra pochi secondi 🚀");
+    if (res.status === 429) throw new Error(e.error || "Hai raggiunto il limite orario di richieste. Riprova più tardi.");
+    throw new Error(e.error || "stream_failed");
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let meta: any = null; const dayHeads: any[] = []; const acts: any[] = []; const packing: any[] = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buf.indexOf("\n\n")) !== -1) {
+      const frame = buf.slice(0, sep).trim();
+      buf = buf.slice(sep + 2);
+      if (!frame.startsWith("data:")) continue;
+      let obj: any;
+      try { obj = JSON.parse(frame.slice(5).trim()); } catch { continue; }
+      if (obj.error) throw new Error("stream_failed");
+      if (obj.done) return { kind: "itinerary", itinerary: assembleStreamItinerary(meta, dayHeads, acts, packing) };
+      const l = obj.line;
+      if (!l || typeof l.t !== "string") continue;
+      if (l.t === "ask") return { kind: "ask", reply: typeof l.reply === "string" ? l.reply : "Dimmi qualcosa di più sul viaggio 🌍" };
+      if (l.t === "meta") meta = l;
+      else if (l.t === "day") dayHeads.push(l);
+      else if (l.t === "act") acts.push(l);
+      else if (l.t === "packing" && Array.isArray(l.items)) packing.push({ category: l.category || "Bagaglio", items: l.items });
+      else continue;
+      onProgress(assembleStreamItinerary(meta, dayHeads, acts, packing));
+    }
+  }
+  if (meta || dayHeads.length) return { kind: "itinerary", itinerary: assembleStreamItinerary(meta, dayHeads, acts, packing) };
+  throw new Error("stream_empty");
+}
+
+// Arricchisce l'itinerario assemblato con coordinate (pin mappa) + affiliati. I POI
+// non confermati da Places vengono declassati a "Cerca su Maps" lato server.
+export async function enrichItinerary(itinerary: ItineraryData): Promise<ItineraryData> {
+  try {
+    const res = await fetch(`${API_BASE}/chat/itinerary-enrich`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itinerary }),
+    });
+    const j = await res.json().catch(() => ({} as any));
+    return (j && j.itinerary) ? (j.itinerary as ItineraryData) : itinerary;
+  } catch { return itinerary; }
+}
+
 // Chiamata singola (senza retry/stato mutation): usata per il prefetch in background
 // dei giorni restanti, in parallelo al turno principale gestito da useChat.
 export async function fetchChatChunk(data: ChatData, useRailway?: boolean): Promise<{ reply: string; itinerary?: ItineraryData }> {
