@@ -11,6 +11,7 @@ import waydoraLogo from "@assets/LOGO1.png";
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from "@/components/ui/accordion";
+import { useGetStats } from "@/hooks/api";
 
 // ── Costanti ────────────────────────────────────────────────────────────
 
@@ -21,7 +22,7 @@ const STEPS = [
 ];
 
 const PARTNERS = [
-  "Booking.com", "GetYourGuide", "Skyscanner", "Kiwi", "Stay22", "Go City", "Yesim", "Amazon",
+  "Booking.com", "GetYourGuide", "Skyscanner", "Kiwi", "Go City", "Yesim", "Amazon",
 ];
 
 const REVIEWS = [
@@ -32,9 +33,12 @@ const REVIEWS = [
 ];
 
 const FAQ = [
-  { q: "Waydora è gratuito?",                        a: "Sì, pianificare un itinerario con Waydora è completamente gratuito. Quando prenoti hotel o esperienze tramite i nostri link partner riceviamo una piccola commissione, senza nessun sovrapprezzo per te." },
+  { q: "Waydora è gratuito?",                        a: "Sì, puoi pianificare gratis fino a 3 itinerari al mese, con mappa, lista bagaglio e link di prenotazione inclusi. Per andare oltre c'è Waydora Pro, con itinerari illimitati e funzioni avanzate. Quando prenoti hotel o esperienze tramite i nostri link partner riceviamo una piccola commissione, senza nessun sovrapprezzo per te." },
+  { q: "Cosa include Waydora Pro?",                  a: "Pro sblocca itinerari illimitati ogni mese, modifiche AI senza limiti ai tuoi viaggi, la scansione degli scontrini con l'AI per le spese, una personalizzazione avanzata sui tuoi gusti ed esportazione senza limiti." },
+  { q: "Quanto costa la versione Pro?",              a: "Waydora Pro costa 5,99 € al mese, oppure 34,99 € all'anno (solo 2,92 € al mese, risparmi il 51%). Puoi passare a Pro quando vuoi e disdire in qualsiasi momento." },
+  { q: "Come funzionano i pagamenti?",               a: "I pagamenti dell'abbonamento Pro sono gestiti in modo sicuro da Stripe: non salviamo mai i dati della tua carta. Le prenotazioni di hotel, voli ed esperienze avvengono invece direttamente sui siti dei nostri partner, con i loro metodi di pagamento. Puoi gestire o disdire l'abbonamento quando vuoi dal portale clienti." },
   { q: "Posso modificare l'itinerario dopo averlo creato?", a: "Certo. Continua a chattare con Waydora per aggiungere giorni, cambiare destinazioni, ridurre il budget, aggiungere musei o ristoranti specifici. L'itinerario si aggiorna in tempo reale." },
-  { q: "I link di prenotazione sono affidabili?",    a: "Usiamo solo partner ufficiali e affidabili come Booking.com, GetYourGuide, Skyscanner, Kiwi, Stay22, Go City, Yesim e Amazon. Le prenotazioni avvengono direttamente sui loro siti." },
+  { q: "I link di prenotazione sono affidabili?",    a: "Usiamo solo partner ufficiali e affidabili come Booking.com, GetYourGuide, Skyscanner, Kiwi, Go City, Yesim e Amazon. Le prenotazioni avvengono direttamente sui loro siti." },
   { q: "Posso condividere un itinerario con un amico?", a: "Sì, ogni itinerario salvato ha un link pubblico univoco che puoi condividere via WhatsApp, email o copiando l'URL. L'amico vede l'itinerario completo, mappa e lista bagaglio inclusi." },
   { q: "Funziona per viaggi di lavoro o solo per vacanze?", a: "Funziona per qualsiasi tipo di viaggio: business, weekend, luna di miele, viaggio di gruppo, viaggio con bambini. Più dettagli dai nella chat, più l'itinerario sarà su misura." },
 ];
@@ -800,7 +804,11 @@ function useAnimatedNumber(target: number, durationMs = 1400) {
 }
 
 export function TripCounter() {
-  const target    = 12_847;
+  // Contatore dinamico: legge il numero reale di viaggi pianificati da /api/stats
+  // (il backend somma una base organica che cresce nel tempo + gli itinerari reali).
+  // Fallback al valore base se l'API non risponde, così non resta mai vuoto.
+  const { data }  = useGetStats();
+  const target    = data?.tripsPlanned ?? 12_847;
   const animated  = useAnimatedNumber(target);
   const formatted = new Intl.NumberFormat("it-IT").format(animated);
 

@@ -114,6 +114,11 @@ export function useGetStats() {
       if (!res.ok) return { tripsPlanned: 12847 };
       return res.json();
     },
+    // Contatore "in tempo reale": ricarica ogni 60s così il numero sale mentre
+    // l'utente resta sulla landing (il backend cresce di ~1 viaggio ogni 3 min).
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+    staleTime: 30_000,
   });
 }
 
