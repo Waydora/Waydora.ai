@@ -1,0 +1,54 @@
+-- 008_owner_pro_flag.sql
+--
+-- ============================================================================
+-- BOZZA — applicare SOLO dopo revisione, MAI in automatico su prod.
+-- Eseguire a mano dal Supabase SQL editor.
+-- ============================================================================
+--
+-- Scopo (gating free vs Pro nei viaggi CONDIVISI):
+--   Le funzioni Pro di un viaggio condiviso (meteo, calendario, spese, modifica AI)
+--   sono sbloccate dal piano del PROPRIETARIO del viaggio, così gli amici che aprono
+--   il link — anche guest non registrati — possono collaborare quando l'owner è Pro.
+--
+--   Il tier dell'utente vive in auth (app_metadata.tier), NON leggibile dal client per
+--   un utente arbitrario. Lo denormalizziamo quindi sulla riga del viaggio con un flag
+--   booleano `owner_pro`, che la webapp legge in trip.tsx insieme al resto della riga.
+--
+-- Come viene popolato (lato client, webapp):
+--   • Self-heal: quando il PROPRIETARIO apre il proprio viaggio, se owner_pro non
+--     combacia col suo piano attuale la webapp esegue un UPDATE best-effort di
+--     owner_pro (vedi artifacts/waydora/src/pages/trip.tsx). Nessun INSERT scrive
+--     owner_pro, così se questa migration non è ancora applicata la creazione dei
+--     viaggi continua a funzionare (l'UPDATE fallisce in silenzio).
+--   • Default false: un viaggio è "non Pro" finché l'owner Pro non lo apre almeno una
+--     volta. Per i Pro esistenti si può forzare il backfill (vedi sotto).
+--
+-- RLS:
+--   • SELECT: la policy pubblica esistente (003) restituisce la riga intera, quindi
+--     owner_pro è già leggibile da chi può vedere il viaggio. Nessuna modifica.
+--   • UPDATE: la policy owner ALL (auth.uid() = user_id) copre già l'update del flag
+--     da parte del proprietario loggato. Nessuna modifica.
+
+-- ── 1) Colonna flag ─────────────────────────────────────────────────────────
+alter table public.saved_trips
+  add column if not exists owner_pro boolean not null default false;
+
+
+-- ── 2) (Opzionale) Backfill per i proprietari già Pro ───────────────────────
+-- Il flag si auto-allinea quando l'owner riapre il viaggio. Se vuoi anticiparlo per
+-- i Pro attuali, e SE il tier è materializzato da qualche parte leggibile via SQL
+-- (es. una tabella profiles.tier o auth.users.raw_app_meta_data->>'tier'), puoi fare
+-- un backfill una tantum. Esempio con app_metadata (adatta ai tuoi nomi reali):
+--
+--   update public.saved_trips st
+--   set owner_pro = true
+--   from auth.users u
+--   where u.id = st.user_id
+--     and (u.raw_app_meta_data ->> 'tier') = 'paid';
+--
+-- ============================================================================
+-- EFFETTO DOPO L'APPLICAZIONE:
+--   - saved_trips.owner_pro disponibile (default false).
+--   - I viaggi dei proprietari Pro sbloccano le funzioni Pro per tutti quelli col link
+--     dalla prima volta che il proprietario riapre il viaggio (o dopo il backfill).
+-- ============================================================================

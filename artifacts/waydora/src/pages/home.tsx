@@ -16,6 +16,7 @@ import { SavedTripsPage } from "@/components/saved-trips-page";
 import { useChatSessions, useUserTrips, useSavedTrips, useLocalSessions } from "@/hooks/trips";
 import { shouldUseRailway, buildActivityAffiliate } from "@/lib/affiliates";
 import { buildTravelProfile } from "@/lib/travel-profile";
+import { isToolLocked, visibleTools } from "@/lib/entitlements";
 import { UpgradeModal } from "@/components/upgrade-modal";
 import { freeGenerationsLeft, incFreeGeneration, FREE_MONTHLY_GENERATIONS, openBillingPortal } from "@/lib/billing";
 import { supabase } from "@/lib/supabase";
@@ -26,7 +27,7 @@ import {
   Lightbulb, CheckSquare, LogOut, LogIn, User,
   Mic, MicOff, ImagePlus, X, Link, ExternalLink,
   Navigation, Download, Plus, MessageSquare, Edit3, ArrowLeft,
-  Sparkles, Bell, Undo2,
+  Sparkles, Bell, Undo2, Lock,
 } from "lucide-react";
 import { Layout, Logo } from "@/components/layout";
 import { ItineraryResults, PackingList } from "@/components/itinerary-results";
@@ -60,7 +61,10 @@ const QUICK_SUGGESTIONS = [
   { label: "💰 Più economico",   prompt: "Rendi l'itinerario più economico mantenendo le esperienze migliori" },
 ];
 
-const MAP_TOOLS = [
+// Idee e media sono nascosti a tutti per ora (lib/entitlements HIDDEN_TOOLS).
+// Calendario, Meteo e Spese sono funzioni Pro (PRO_TOOLS): in fase di creazione il
+// gate è sul piano dell'utente stesso (è lui il futuro proprietario del viaggio).
+const MAP_TOOLS = visibleTools([
   { id: "map",      label: "Mappa",      icon: Map },
   { id: "calendar", label: "Calendario", icon: Calendar },
   { id: "weather",  label: "Meteo",      icon: Cloud },
@@ -68,7 +72,7 @@ const MAP_TOOLS = [
   { id: "expenses", label: "Spese",      icon: DollarSign },
   { id: "ideas",    label: "Idee",       icon: Lightbulb },
   { id: "media",    label: "Media",      icon: Camera },
-];
+]);
 
 function generateTitle(turns: ChatTurn[], itinerary?: ItineraryData): string {
   if (itinerary?.destination) return `${itinerary.destination.split(",")[0]} · ${itinerary.durationDays ?? "?"} giorni`;
@@ -76,13 +80,14 @@ function generateTitle(turns: ChatTurn[], itinerary?: ItineraryData): string {
   return first.length > 32 ? first.substring(0, 32) + "..." : first || "Nuova chat";
 }
 
-function MapToolbar({ active, onChange }: { active: string; onChange: (id: string) => void }) {
+function MapToolbar({ active, onChange, proUnlocked, onLocked }: { active: string; onChange: (id: string) => void; proUnlocked: boolean; onLocked: () => void }) {
   return (
     <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto [&::-webkit-scrollbar]:hidden shrink-0"
       style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", ...glassDark }}>
       {MAP_TOOLS.map((t) => {
         const Icon = t.icon; const isActive = active === t.id;
-        return <button key={t.id} onClick={() => onChange(t.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all" style={isActive ? activeTabStyle : inactiveTabStyle}><Icon className="w-3.5 h-3.5" />{t.label}</button>;
+        const locked = isToolLocked(t.id, proUnlocked);
+        return <button key={t.id} onClick={() => (locked ? onLocked() : onChange(t.id))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all" style={{ ...(isActive ? activeTabStyle : inactiveTabStyle), opacity: locked ? 0.6 : 1 }}><Icon className="w-3.5 h-3.5" />{t.label}{locked && <Lock className="w-3 h-3" style={{ color: "#fbbf24" }} />}</button>;
       })}
     </div>
   );
@@ -231,6 +236,19 @@ function MediaTool({ files, onUpload, onRemove }: { files: Array<{ name: string;
   );
 }
 
+// Lock di un tool Pro in fase di creazione (utente free). La toolbar di norma evita
+// di arrivarci, ma copre il caso in cui il tool attivo diventi bloccato (es. logout).
+function ProToolLock({ onUpgrade }: { onUpgrade: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
+      <div style={{ fontSize: "2.8rem" }}>✨</div>
+      <div style={{ fontSize: "15px", fontWeight: 800, color: "#fff" }}>Funzione Pro</div>
+      <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.45)", maxWidth: "260px" }}>Meteo, calendario e spese sono inclusi in Waydora Pro.</div>
+      <button onClick={onUpgrade} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "11px 22px", borderRadius: "9999px", background: "var(--wd-grad-warm)", color: "#fff", border: "none", fontSize: "13.5px", fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 18px rgba(249,115,22,0.35)" }}>✨ Passa a Pro</button>
+    </div>
+  );
+}
+
 function PlaceholderTool({ emoji, title, desc }: { emoji: string; title: string; desc: string }) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
@@ -242,12 +260,15 @@ function PlaceholderTool({ emoji, title, desc }: { emoji: string; title: string;
   );
 }
 
-function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFiles, onUploadMedia, onRemoveMedia, onItineraryUpdate, userTier, authorName }: {
+function ToolContent({ tool, itinerary, ideas, onAddIdea, onRemoveIdea, mediaFiles, onUploadMedia, onRemoveMedia, onItineraryUpdate, userTier, authorName, proUnlocked = true, onUpgrade }: {
   tool: string; itinerary?: ItineraryData;
   ideas: string[]; onAddIdea: (i: string) => void; onRemoveIdea: (idx: number) => void;
   mediaFiles: Array<{ name: string; preview: string }>; onUploadMedia: (f: Array<{ name: string; preview: string }>) => void; onRemoveMedia: (idx: number) => void;
   onItineraryUpdate: (it: ItineraryData) => void; userTier: "guest" | "free" | "paid"; authorName?: string;
+  proUnlocked?: boolean; onUpgrade?: () => void;
 }) {
+  // Guard funzioni Pro: se il tool richiede Pro e non è sbloccato, mostra l'upsell.
+  if (isToolLocked(tool, proUnlocked)) return <ProToolLock onUpgrade={onUpgrade ?? (() => {})} />;
   if (tool === "map")      return <MapTool itinerary={itinerary} />;
   if (tool === "calendar") return <CalendarTool itinerary={itinerary} />;
   if (tool === "weather")  return <WeatherTool itinerary={itinerary} />;
@@ -1389,12 +1410,14 @@ export default function Home() {
           <>
             <section className="flex flex-col min-h-0 shrink-0" style={{ width: "clamp(360px, 36vw, 480px)", borderRight: "1px solid rgba(255,255,255,0.07)" }}>{chatSection}</section>
             <aside className="flex flex-col min-h-0 flex-1" style={{ minWidth: 0 }}>
-              <MapToolbar active={activeTool} onChange={setActiveTool} />
+              <MapToolbar active={activeTool} onChange={setActiveTool} proUnlocked={isPaid}
+                onLocked={() => { setUpgradeReason("Meteo, calendario e spese sono inclusi in Waydora Pro."); setUpgradeOpen(true); }} />
               <div className="flex-1 min-h-0">
                 <ToolContent tool={activeTool} itinerary={currentItinerary}
                   ideas={ideas} onAddIdea={i => setIdeas(prev => [...prev, i])} onRemoveIdea={idx => setIdeas(prev => prev.filter((_, i) => i !== idx))}
                   mediaFiles={mediaFiles} onUploadMedia={f => setMediaFiles(prev => [...prev, ...f])} onRemoveMedia={idx => setMediaFiles(prev => prev.filter((_, i) => i !== idx))}
-                  onItineraryUpdate={setCurrentItinerary} userTier={user ? (isPaid ? "paid" : "free") : "guest"} authorName={user?.name} />
+                  onItineraryUpdate={setCurrentItinerary} userTier={user ? (isPaid ? "paid" : "free") : "guest"} authorName={user?.name}
+                  proUnlocked={isPaid} onUpgrade={() => { setUpgradeReason("Meteo, calendario e spese sono inclusi in Waydora Pro."); setUpgradeOpen(true); }} />
               </div>
             </aside>
           </>
@@ -1476,18 +1499,21 @@ export default function Home() {
               <ToolContent tool={activeTool} itinerary={currentItinerary}
                 ideas={ideas} onAddIdea={i => setIdeas(prev => [...prev, i])} onRemoveIdea={idx => setIdeas(prev => prev.filter((_, i) => i !== idx))}
                 mediaFiles={mediaFiles} onUploadMedia={f => setMediaFiles(prev => [...prev, ...f])} onRemoveMedia={idx => setMediaFiles(prev => prev.filter((_, i) => i !== idx))}
-                  onItineraryUpdate={setCurrentItinerary} userTier={user ? (isPaid ? "paid" : "free") : "guest"} authorName={user?.name} />
+                  onItineraryUpdate={setCurrentItinerary} userTier={user ? (isPaid ? "paid" : "free") : "guest"} authorName={user?.name}
+                  proUnlocked={isPaid} onUpgrade={() => { setUpgradeReason("Meteo, calendario e spese sono inclusi in Waydora Pro."); setUpgradeOpen(true); }} />
             </div>
             {/* Toolbar bassa — nessun swipe listener qui, il problema era nel window listener */}
             <div style={{ flexShrink: 0, padding: "10px 12px 20px", display: "flex", justifyContent: "center", ...glassDark, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
               <div style={{ display: "flex", gap: "2px", overflowX: "auto", scrollbarWidth: "none", maxWidth: "100%" }}>
                 {MAP_TOOLS.map(t => {
                   const Icon = t.icon; const isActive = activeTool === t.id;
+                  const locked = isToolLocked(t.id, isPaid);
                   return (
-                    <button key={t.id} onClick={() => setActiveTool(t.id)}
-                      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "8px 12px", borderRadius: "12px", border: "none", flexShrink: 0, cursor: "pointer", transition: "all 0.15s", background: isActive ? "rgba(255,255,255,0.12)" : "transparent", color: isActive ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "54px" }}>
+                    <button key={t.id} onClick={() => { if (locked) { setUpgradeReason("Meteo, calendario e spese sono inclusi in Waydora Pro."); setUpgradeOpen(true); } else setActiveTool(t.id); }}
+                      style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "8px 12px", borderRadius: "12px", border: "none", flexShrink: 0, cursor: "pointer", transition: "all 0.15s", background: isActive ? "rgba(255,255,255,0.12)" : "transparent", color: isActive ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "54px", opacity: locked ? 0.6 : 1 }}>
                       <Icon style={{ width: "18px", height: "18px" }} />
                       <span style={{ fontSize: "10px", fontWeight: 600 }}>{t.label}</span>
+                      {locked && <Lock style={{ position: "absolute", top: "5px", right: "8px", width: "9px", height: "9px", color: "#fbbf24" }} />}
                     </button>
                   );
                 })}

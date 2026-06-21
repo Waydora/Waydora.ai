@@ -4,16 +4,18 @@ import {
   Loader2, MessageSquare, Copy, Navigation, ExternalLink,
   CheckSquare, Square, Lightbulb, Camera, DollarSign,
   Plus, X, ShoppingBag, Check, Send, Download, Cloud,
-  Calendar, FileText, Pencil, ChevronDown, ChevronUp,
+  Calendar, FileText, Pencil, ChevronDown, ChevronUp, Lock,
 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { ItineraryResults } from "@/components/itinerary-results";
 import { TripMap } from "@/components/trip-map";
 import { ExpensesPanel } from "@/components/expenses-panel";
+import { UpgradeModal } from "@/components/upgrade-modal";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { fetchWeather, type WeatherData } from "@/lib/weather";
 import { useAuth } from "@/hooks/auth";
+import { isToolLocked, visibleTools, proUnlockedFor } from "@/lib/entitlements";
 import { shouldUseRailway, AFFILIATES } from "@/lib/affiliates";
 import { track, hashSlug, destinationCountry } from "@/lib/analytics";
 
@@ -37,7 +39,10 @@ type TripMessage = {
   created_at: string;
 };
 
-const TOOLS = [
+// Idee e media sono nascosti a tutti per ora (vedi lib/entitlements HIDDEN_TOOLS):
+// li teniamo fuori dalla toolbar. Calendario, Meteo e Spese sono funzioni Pro
+// (PRO_TOOLS) — sbloccate dal piano del proprietario del viaggio.
+const TOOLS = visibleTools([
   { id: "itinerary", label: "Itinerario", icon: FileText },
   { id: "map",       label: "Mappa",      icon: Navigation },
   { id: "calendar",  label: "Calendario", icon: Calendar },
@@ -46,7 +51,7 @@ const TOOLS = [
   { id: "bagaglio",  label: "Bagaglio",   icon: CheckSquare },
   { id: "media",     label: "Media",      icon: Camera },
   { id: "expenses",  label: "Spese",      icon: DollarSign },
-];
+]);
 
 // Genera ID canale univoco — evita conflitti quando React StrictMode
 // monta/smonta due volte lo stesso componente
@@ -463,8 +468,8 @@ function IdeasPanel({ slug }: { slug: string }) {
 
 // ── MapPanel ──────────────────────────────────────────────────────────────
 function MapPanel({ itinerary, toolbarH = 0 }: { itinerary: any; toolbarH?: number }) {
-  const [ready, setReady] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setReady(true), 80); return () => clearTimeout(t); }, []);
+  // Niente più gate a tempo (80ms): TripMap si auto-inizializza quando il suo
+  // container ha dimensioni reali (ResizeObserver), così non serve aspettare.
   const openMaps = () => {
     const pts = (itinerary.days?.flatMap((d: any) => d.activities) ?? [])
       .filter((a: any) => a.coordinates?.lat && a.coordinates?.lng)
@@ -480,13 +485,7 @@ function MapPanel({ itinerary, toolbarH = 0 }: { itinerary: any; toolbarH?: numb
         </button>
       </div>
       <div style={{ position: "absolute", inset: 0, paddingBottom: toolbarH > 0 ? `${toolbarH}px` : "0" }}>
-        {ready ? <TripMap itinerary={itinerary} /> : (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", gap: "10px", color: "rgba(255,255,255,0.4)" }}>
-            <Loader2 style={{ width: "22px", height: "22px", animation: "wds 0.8s linear infinite" }} />
-            <span style={{ fontSize: "13px" }}>Caricamento...</span>
-            <style>{`@keyframes wds{to{transform:rotate(360deg)}}`}</style>
-          </div>
-        )}
+        <TripMap itinerary={itinerary} />
       </div>
     </div>
   );
@@ -639,20 +638,51 @@ function MediaPanel({ slug }: { slug: string }) {
   );
 }
 
-function ToolbarDesktop({ active, onChange }: { active: string; onChange: (id: string) => void }) {
+function ToolbarDesktop({ active, onChange, proUnlocked, onLocked }: { active: string; onChange: (id: string) => void; proUnlocked: boolean; onLocked: () => void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", width: "56px", borderRight: "1px solid rgba(255,255,255,0.07)", gap: "4px", padding: "12px 6px", flexShrink: 0, background: "rgba(10,10,18,0.95)" }}>
       {TOOLS.map(t => {
         const Icon = t.icon; const on = active === t.id;
+        const locked = isToolLocked(t.id, proUnlocked);
         return (
-          <button key={t.id} onClick={() => onChange(t.id)} title={t.label}
-            style={{ width: "44px", height: "44px", borderRadius: "12px", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s", background: on ? "rgba(255,255,255,0.12)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.38)" }}
+          <button key={t.id} onClick={() => (locked ? onLocked() : onChange(t.id))} title={locked ? `${t.label} · Pro` : t.label}
+            style={{ position: "relative", width: "44px", height: "44px", borderRadius: "12px", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s", background: on ? "rgba(255,255,255,0.12)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.38)", opacity: locked ? 0.55 : 1 }}
             onMouseEnter={e => { if (!on) e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
             onMouseLeave={e => { if (!on) e.currentTarget.style.background = "transparent"; }}>
             <Icon style={{ width: "18px", height: "18px" }} />
+            {locked && <Lock style={{ position: "absolute", bottom: "5px", right: "5px", width: "10px", height: "10px", color: "#fbbf24" }} />}
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// Pannello mostrato quando un tool Pro è bloccato (proprietario free, o link di un
+// proprietario non-Pro). Per l'owner → CTA di upgrade; per i guest/amici → invito a
+// creare il proprio viaggio (l'upgrade lo deve fare il proprietario del link).
+function ProLockPanel({ isOwner, onUpgrade }: { isOwner: boolean; onUpgrade: () => void }) {
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 24px", gap: "14px", textAlign: "center" }}>
+      <div style={{ fontSize: "3rem" }}>✨</div>
+      <div style={{ fontSize: "16px", fontWeight: 800, color: "#fff" }}>Funzione Pro</div>
+      <div style={{ fontSize: "13px", color: "rgba(255,255,255,0.5)", maxWidth: "300px", lineHeight: 1.55 }}>
+        {isOwner
+          ? "Meteo, calendario, spese e modifica con l'AI sono inclusi in Waydora Pro."
+          : "Questa funzione è disponibile sui viaggi creati con Waydora Pro."}
+      </div>
+      {isOwner ? (
+        <button onClick={onUpgrade}
+          style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px 24px", borderRadius: "9999px", background: "var(--wd-grad-warm)", color: "#fff", border: "none", fontSize: "14px", fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 20px rgba(249,115,22,0.4)" }}>
+          ✨ Passa a Pro
+        </button>
+      ) : (
+        <Link href="/">
+          <button style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px 24px", borderRadius: "9999px", background: "var(--wd-grad-warm)", color: "#fff", border: "none", fontSize: "14px", fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 20px rgba(249,115,22,0.4)" }}>
+            Crea il tuo viaggio
+          </button>
+        </Link>
+      )}
     </div>
   );
 }
@@ -822,6 +852,9 @@ export default function Trip() {
   const [aiCollapsed,   setAiCollapsed]   = useState(true); // desktop: dock AI ridotto di default
   const [msgCount,    setMsgCount]    = useState(0);
   const [forking,     setForking]     = useState(false);
+  const [ownerId,     setOwnerId]     = useState<string | null>(null);
+  const [ownerPro,    setOwnerPro]    = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   // Carica dati viaggio
   useEffect(() => {
@@ -833,6 +866,21 @@ export default function Trip() {
           setItinerary(data.itinerary);
           setIsTemplate(!!data.is_template);
           setTripTitle(data.title ?? data.itinerary?.title ?? "");
+          // Gating funzioni Pro nei viaggi condivisi: chi apre il link sblocca le
+          // funzioni Pro se il PROPRIETARIO del viaggio è Pro (flag owner_pro,
+          // denormalizzato sulla riga). Vedi migration 008_owner_pro_flag.sql.
+          setOwnerId(data.user_id ?? null);
+          setOwnerPro(!!data.owner_pro);
+          // Self-heal del flag: se l'owner sta guardando il proprio viaggio e il flag
+          // non combacia col suo piano attuale, lo riallinea (best-effort). Update di
+          // SOLO owner_pro: non tocca l'itinerario, quindi non scatena toast realtime.
+          if (user && data.user_id === user.id) {
+            const paid = user.tier === "paid";
+            if (!!data.owner_pro !== paid) {
+              supabase.from("saved_trips").update({ owner_pro: paid }).eq("share_slug", slug)
+                .then(() => setOwnerPro(paid), () => { /* colonna assente / RLS: ignora */ });
+            }
+          }
           // Analytics (spec §3 · Referral): itinerary_viewed sempre; se chi apre
           // NON è l'owner del viaggio → shared_link_opened (invite acceptance).
           if (!viewTrackedRef.current) {
@@ -934,6 +982,19 @@ export default function Trip() {
   }, [slug]);
   const expensesOpts = { onItineraryUpdate: onBudgetUpdate, userTier: (user ? (user.tier === "paid" ? "paid" : "free") : "guest") as "guest" | "free" | "paid", authorName: user?.name };
 
+  // ── Gating funzioni Pro ────────────────────────────────────────────────────
+  // proUnlocked = il viaggio ha le funzioni Pro attive per chi lo sta guardando.
+  // Owner → conta il suo piano (isPaid); chi apre il link → conta il flag owner_pro.
+  const isPaid = user?.tier === "paid";
+  const isOwner = !!user && !!ownerId && ownerId === user.id;
+  const proUnlocked = proUnlockedFor(isOwner, isPaid, ownerPro);
+  // Click su una funzione Pro bloccata: owner → modale di upgrade; altrimenti messaggio
+  // (sbloccarla dipende dal proprietario del link, non da chi guarda).
+  const handleLocked = useCallback(() => {
+    if (isOwner) setUpgradeOpen(true);
+    else toast({ title: "✨ Funzione Pro — disponibile sui viaggi creati con Waydora Pro" });
+  }, [isOwner, toast]);
+
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/trip/${slug}` : "";
   const copy = async () => {
     await navigator.clipboard.writeText(shareUrl);
@@ -1030,24 +1091,31 @@ export default function Trip() {
       <div className="flex-1 min-h-0 hidden lg:flex flex-col">
         {hdr(false)}
         <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
-          <ToolbarDesktop active={activeTool} onChange={setActiveTool} />
+          <ToolbarDesktop active={activeTool} onChange={setActiveTool} proUnlocked={proUnlocked} onLocked={handleLocked} />
           {/* Colonna centrale: contenuto + chat modifiche AI in basso */}
           <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
             <div style={{ flex: 1, minHeight: 0, overflow: activeTool === "map" ? "hidden" : "auto" }}>
               {/* Intro per nuovi visitatori — solo template, sulla scheda Itinerario */}
-              {isTemplate && (activeTool === "itinerary" || activeTool === "ideas") && (
+              {isTemplate && activeTool === "itinerary" && (
                 <TemplateIntro destination={itinerary.destination} onFork={forkTemplate} forking={forking} />
               )}
-              {/* Nei template, le tool "ideas" vengono bloccate — reindirizza all'itinerary */}
-              {renderTool(
-                isTemplate && activeTool === "ideas" ? "itinerary" : activeTool,
-                itinerary, slug, false, expensesOpts
-              )}
+              {/* Funzioni Pro bloccate (owner free) → pannello di upgrade al posto del tool */}
+              {isToolLocked(activeTool, proUnlocked)
+                ? <ProLockPanel isOwner={isOwner} onUpgrade={() => setUpgradeOpen(true)} />
+                : renderTool(activeTool, itinerary, slug, false, expensesOpts)}
             </div>
             {/* Chat modifiche AI in basso — solo viaggio definitivo e solo nella scheda Itinerario.
+                Funzione Pro: se non sbloccata mostra una barra che porta all'upgrade.
                 Collassabile: di default ridotta a una barra per non rubare spazio. */}
             {!isTemplate && activeTool === "itinerary" && (
-              aiCollapsed ? (
+              !proUnlocked ? (
+                <button onClick={handleLocked}
+                  style={{ flexShrink: 0, width: "100%", display: "flex", alignItems: "center", gap: "8px", padding: "12px 16px", background: "var(--wd-glass)", backdropFilter: "blur(24px) saturate(160%)", WebkitBackdropFilter: "blur(24px) saturate(160%)", border: "none", borderTop: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.72)", fontSize: "13px", fontWeight: 700, cursor: "pointer" }}>
+                  <span style={{ fontSize: "15px" }}>✨</span>
+                  <span style={{ flex: 1, textAlign: "left" }}>Modifica con l'AI</span>
+                  <span style={{ fontSize: "10px", fontWeight: 800, padding: "2px 8px", borderRadius: "9999px", background: "rgba(251,191,36,0.18)", color: "#fbbf24", display: "inline-flex", alignItems: "center", gap: "4px" }}><Lock style={{ width: "10px", height: "10px" }} />Pro</span>
+                </button>
+              ) : aiCollapsed ? (
                 <button onClick={() => setAiCollapsed(false)}
                   style={{ flexShrink: 0, width: "100%", display: "flex", alignItems: "center", gap: "8px", padding: "12px 16px", background: "var(--wd-glass)", backdropFilter: "blur(24px) saturate(160%)", WebkitBackdropFilter: "blur(24px) saturate(160%)", border: "none", borderTop: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.72)", fontSize: "13px", fontWeight: 700, cursor: "pointer" }}>
                   <span style={{ fontSize: "15px" }}>✨</span>
@@ -1081,27 +1149,27 @@ export default function Trip() {
           paddingBottom: activeTool === "map" ? "0" : `${TOOLBAR_H + (isTemplate ? 48 : (activeTool === "itinerary" ? 56 : 0))}px`,
         }}>
           {/* Intro per nuovi visitatori — solo template, sulla scheda Itinerario */}
-          {isTemplate && (activeTool === "itinerary" || activeTool === "ideas") && (
+          {isTemplate && activeTool === "itinerary" && (
             <TemplateIntro destination={itinerary.destination} onFork={forkTemplate} forking={forking} />
           )}
-          {/* Nei template, blocca "ideas" — mostra itinerary al posto */}
-          {renderTool(
-            isTemplate && activeTool === "ideas" ? "itinerary" : activeTool,
-            itinerary, slug, true, expensesOpts
-          )}
+          {/* Funzioni Pro bloccate (owner free) → pannello di upgrade al posto del tool */}
+          {isToolLocked(activeTool, proUnlocked)
+            ? <ProLockPanel isOwner={isOwner} onUpgrade={() => setUpgradeOpen(true)} />
+            : renderTool(activeTool, itinerary, slug, true, expensesOpts)}
         </div>
 
         {/* Toolbar fissa */}
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 30, height: `${TOOLBAR_H}px`, display: "flex", alignItems: "center", overflowX: "auto", scrollbarWidth: "none", padding: "0 4px 8px", background: "rgba(10,10,18,0.96)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 -4px 24px rgba(0,0,0,0.5)" }}>
           {TOOLS.map(t => {
             const Icon = t.icon; const on = activeTool === t.id;
-            // In template mode evidenzia "ideas" come disabilitato
-            const blocked = isTemplate && t.id === "ideas";
+            // Funzione Pro non sbloccata → tap porta all'upgrade (badge lucchetto).
+            const locked = isToolLocked(t.id, proUnlocked);
             return (
-              <button key={t.id} onClick={() => { if (!blocked) setActiveTool(t.id); }}
-                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "6px 10px", borderRadius: "10px", border: "none", flexShrink: 0, cursor: blocked ? "default" : "pointer", transition: "all 0.15s", background: on ? "rgba(255,255,255,0.12)" : "transparent", color: blocked ? "rgba(255,255,255,0.18)" : on ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "50px", opacity: blocked ? 0.4 : 1 }}>
+              <button key={t.id} onClick={() => (locked ? handleLocked() : setActiveTool(t.id))}
+                style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", padding: "6px 10px", borderRadius: "10px", border: "none", flexShrink: 0, cursor: "pointer", transition: "all 0.15s", background: on ? "rgba(255,255,255,0.12)" : "transparent", color: on ? "#fff" : "rgba(255,255,255,0.45)", minWidth: "50px", opacity: locked ? 0.55 : 1 }}>
                 <Icon style={{ width: "18px", height: "18px" }} />
                 <span style={{ fontSize: "9px", fontWeight: 600 }}>{t.label}</span>
+                {locked && <Lock style={{ position: "absolute", top: "4px", right: "6px", width: "9px", height: "9px", color: "#fbbf24" }} />}
               </button>
             );
           })}
@@ -1114,10 +1182,11 @@ export default function Trip() {
             solo viaggio definitivo, solo scheda Itinerario. Sopra la toolbar fissa. */}
         {!isTemplate && activeTool === "itinerary" && (
           <div style={{ position: "fixed", bottom: `${TOOLBAR_H}px`, left: 0, right: 0, zIndex: 31, display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "rgba(13,10,24,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-            <button onClick={() => setAiOpen(true)}
+            <button onClick={() => (proUnlocked ? setAiOpen(true) : handleLocked())}
               style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", padding: "9px 14px", borderRadius: "14px", background: "var(--wd-glass)", backdropFilter: "blur(18px) saturate(160%)", WebkitBackdropFilter: "blur(18px) saturate(160%)", border: "1px solid rgba(255,255,255,0.18)", color: "rgba(255,255,255,0.6)", fontSize: "13px", fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
               <span style={{ fontSize: "15px" }}>✨</span>
               <span style={{ flex: 1 }}>Modifica con l'AI…</span>
+              {!proUnlocked && <span style={{ fontSize: "10px", fontWeight: 800, padding: "2px 7px", borderRadius: "9999px", background: "rgba(251,191,36,0.18)", color: "#fbbf24", display: "inline-flex", alignItems: "center", gap: "3px", flexShrink: 0 }}><Lock style={{ width: "9px", height: "9px" }} />Pro</span>}
             </button>
             <button onClick={() => setCompanionsOpen(true)}
               style={{ position: "relative", width: "44px", height: "44px", borderRadius: "13px", flexShrink: 0, background: "var(--wd-grad-warm)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 12px rgba(249,115,22,0.4)" }}>
@@ -1145,6 +1214,10 @@ export default function Trip() {
           </Drawer>
         )}
       </div>
+
+      {/* Modale di upgrade (mostrata quando l'owner tocca una funzione Pro bloccata) */}
+      <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)}
+        reason="Sblocca meteo, calendario, spese e modifica con l'AI su tutti i tuoi viaggi." />
     </Layout>
   );
 }

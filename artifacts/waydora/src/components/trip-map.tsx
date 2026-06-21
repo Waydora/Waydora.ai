@@ -206,9 +206,14 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
 
   useEffect(() => {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_KEY;
-    if (!apiKey || !mapRef.current) return;
+    const el = mapRef.current;
+    if (!apiKey || !el) return;
 
     const mobile = isTouchDevice();
+    let cancelled = false;
+    // Bounds dell'ultimo render: per ri-centrare quando il container cambia dimensione.
+    let fitBoundsRef: google.maps.LatLngBounds | null = null;
+    const observers: ResizeObserver[] = [];
 
     const loadMap = () => {
       if (!mapRef.current) return;
@@ -377,18 +382,50 @@ export function TripMap({ itinerary }: { itinerary: ItineraryData }) {
       // Fit bounds
       if (markers.length > 1 || connectors.length > 0) {
         googleMapRef.current.fitBounds(bounds, 80);
+        fitBoundsRef = bounds;
+      }
+
+      // Sveglia la mappa quando il container cambia dimensione (torna visibile, layout
+      // assestato): senza un resize Google Maps resta grigia. Risolve il bug per cui la
+      // mappa appariva solo dopo aver cambiato strumento e essere tornati indietro.
+      const live = new ResizeObserver(() => {
+        const m = googleMapRef.current;
+        if (!m) return;
+        google.maps.event.trigger(m, "resize");
+        if (fitBoundsRef) m.fitBounds(fitBoundsRef, 80);
+      });
+      live.observe(el);
+      observers.push(live);
+    };
+
+    const start = () => {
+      if (cancelled) return;
+      if (window.google?.maps) {
+        loadMap();
+      } else {
+        const script = document.createElement("script");
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&language=it`;
+        script.async = true;
+        script.onload = () => { if (!cancelled) loadMap(); };
+        document.head.appendChild(script);
       }
     };
 
-    if (window.google?.maps) {
-      loadMap();
+    // Inizializza SOLO quando il container ha dimensioni reali (> 0px). È la causa del
+    // bug "mappa grigia finché non cambi tab e torni": un map creato in un container a
+    // 0px non ridisegna le tile da solo. Se è già dimensionato parte subito, altrimenti
+    // aspetta il primo resize utile.
+    if (el.offsetWidth > 0 && el.offsetHeight > 0) {
+      start();
     } else {
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&language=it`;
-      script.async = true;
-      script.onload = loadMap;
-      document.head.appendChild(script);
+      const gate = new ResizeObserver(() => {
+        if (el.offsetWidth > 0 && el.offsetHeight > 0) { gate.disconnect(); start(); }
+      });
+      gate.observe(el);
+      observers.push(gate);
     }
+
+    return () => { cancelled = true; observers.forEach(o => o.disconnect()); };
   }, [markers, polylinesByDay, connectors]);
 
   if (markers.length === 0) {
