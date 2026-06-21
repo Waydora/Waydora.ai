@@ -871,6 +871,26 @@ function routeRequest({ messages, existingItinerary, hasMedia, tier, progressive
     return { model: M.SONNET, maxTokens: tokens, kind: "create-confirmed", days };
   }
 
+  // ── Turno di DISCOVERY (raccolta requisiti) → modello ECONOMICO ───────────
+  // Prima ogni turno in cui l'AI raccoglieva info ("in che periodo? da dove
+  // parti? quale meta?") cadeva sul default di creazione = Sonnet, bruciando
+  // ~6.800 token di system prompt per produrre SOLO una domanda (~100 token).
+  // Questi turni NON generano un itinerario: li mandiamo su Haiku (~10× meno
+  // costoso). La generazione VERA resta su Sonnet: quando l'utente conferma una
+  // meta scatta l'handshake (sopra) o il path di creazione (sotto), entrambi Sonnet.
+  // NON vale se c'è già un itinerario (lì decidono i rami edit/consult) o media.
+  // Esclude i turni in cui l'utente chiede esplicitamente di generare ORA.
+  const noIdeaRx = /non ho idee|nessuna idea|non so (dove|quale|cosa)|non saprei|consiglia\w*|che mi consigli|dammi (un'|delle |qualche |un )?idee?|dove mi (porteresti|consigli)|sorprendimi|scegli tu|decidi tu|aiutami a scegliere|fai tu/i;
+  const wantsGenerateNow = /\b(crea|genera|fammi|procedi|costruisci|fai l'itinerar|andiamo|si dai|sì dai|ok vai|va bene dai)\b/i.test(lastText);
+  const isDiscoveryTurn = !existingItinerary && !hasMedia && !wantsGenerateNow
+    && (inDiscovery || noIdeaRx.test(lastText));
+  if (isDiscoveryTurn) {
+    // Tetto BASSO di proposito: una domanda/consiglio di discovery costa ~150-600 token.
+    // Se Haiku provasse a GENERARE un itinerario verrebbe tagliato subito qui (spreco
+    // minimo) e l'handler lo rileva e RIGENERA su Sonnet (handoff conversazione→qualità).
+    return { model: M.HAIKU, maxTokens: Math.min(cap, 1500), kind: "discovery", days };
+  }
+
   // Chat-cheap fast-path SOLO se davvero conversazione banale (saluto/ack) E nessun intent viaggio mai emerso.
   if (!hasItineraryIntent && !inDiscovery && (greetRx.test(lastText) || lastText.length < 60)) {
     return { model: M.CHEAP_CHAT, maxTokens: Math.min(cap, 1200), kind: "chat-cheap", days };
@@ -1974,7 +1994,63 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
           payload = extractJsonPayload(raw);
         }
 
-        // Fallback su JSON invalido: retry con Sonnet se non già usato
+        // (1) Salvataggio "risposta in testo libero" — PRIMA di qualsiasi escalation.
+        // Il modello a volte risponde a una domanda di discovery ("da dove parti? budget?")
+        // in PROSA invece che nel JSON {reply, itinerary:null}. NON è un errore: è una
+        // domanda/consiglio legittimo. Se non c'è alcuna graffa (→ nessun itinerario
+        // iniziato) la trattiamo come reply conversazionale. Va fatto QUI così una semplice
+        // domanda NON scatena il retry costoso su Sonnet più sotto (che vanificherebbe il
+        // routing economico della discovery).
+        if (!payload && typeof raw === "string" && !raw.includes("{") && raw.trim().length >= 2) {
+          console.warn("[chat] risposta in testo libero (no JSON) → reply discovery (no escalation)");
+          payload = { reply: raw.trim(), itinerary: null };
+        }
+
+        // (2) Handoff conversazione → generazione (Haiku/DeepSeek → Sonnet). Il turno
+        // girava su un modello ECONOMICO ma il modello ha prodotto — o iniziato a produrre
+        // (troncato col tetto basso della discovery) — un ITINERARIO. La generazione vera
+        // DEVE avvenire su Sonnet (qualità POI/coordinate/affiliate): scartiamo l'itinerario
+        // "povero" del modello cheap e RIGENERIAMO da zero su Sonnet con lo stesso contesto.
+        // È il ponte che garantisce: chat a basso costo, generazione sempre di qualità.
+        const CHEAP_MODELS = [M.HAIKU, M.CHEAP_CHAT];
+        const cheapAttemptedItinerary = CHEAP_MODELS.includes(usedModel)
+          && !existingItinerary && !progressive && !mediaContent
+          && ((payload && payload.itinerary && typeof payload.itinerary === "object")
+              || (!payload && /"itinerary"\s*:\s*\{/.test(raw || "")));
+        if (cheapAttemptedItinerary) {
+          console.warn(`[chat] ${usedKind}/${usedModel} ha avviato una generazione → rigenero su Sonnet per qualità`);
+          try {
+            const usersJoined = enrichedMessages
+              .filter(m => m.role === "user")
+              .map(m => typeof m.content === "string" ? m.content : "")
+              .join(" ");
+            const dm = usersJoined.toLowerCase().match(/(\d+)\s*(giorni|day|notti|notte|gg)/i);
+            const ndays = dm ? Math.min(parseInt(dm[1], 10), 21) : 3;
+            const cap = TIER_TOKENS[userTier] ?? TIER_TOKENS.guest;
+            const genTokens = Math.min(cap, Math.max(10000, ndays * 2200 + 5000));
+            const genSystem = SYSTEM_PROMPT + "\n\n━━━ GENERAZIONE (discovery conclusa) ━━━\nHai già i dati necessari nella conversazione. Restituisci ORA un JSON in MODALITÀ ITINERARIO con il campo \"itinerary\" pienamente valorizzato (days con activities + coordinates). Niente altre domande: usa default sensati per i dettagli minori mancanti.";
+            const gen = await callOpenRouter({
+              model: M.SONNET,
+              system: genSystem,
+              messages: buildORMessages(enrichedMessages, null),
+              maxTokens: genTokens,
+            });
+            const gp = extractJsonPayload(gen.text);
+            if (gp && gp.itinerary) {
+              payload = gp; usedModel = M.SONNET; stopReason = gen.stopReason;
+              console.log("[chat] rigenerazione Sonnet OK");
+            } else if (gp && gp.reply && !payload) {
+              payload = gp; usedModel = M.SONNET;
+            }
+            // Altrimenti: tieni il payload cheap se c'era (meglio un viaggio imperfetto che un errore).
+          } catch (e) {
+            console.error("[chat] rigenerazione Sonnet fallita, tengo l'output cheap:", e.message);
+          }
+        }
+
+        // (3) Fallback su JSON invalido: retry con Sonnet se ANCORA nessun payload valido
+        // e non è già Sonnet. La prosa di discovery è già stata salvata in (1), quindi qui
+        // NON si spreca Sonnet per una semplice domanda.
         if ((!payload || !payload.reply) && usedModel !== M.SONNET) {
           console.warn(`[chat] JSON invalido da ${usedModel}, retry con Sonnet`);
           try {
@@ -1995,6 +2071,8 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
           }
         }
 
+        // (4) Ancora nessun payload valido → errore reale (JSON malformato/troncato non
+        // recuperabile, non una domanda di discovery): solo qui restituiamo 502.
         if (!payload) {
           console.error("[chat] JSON non estraibile. stopReason:", stopReason, "raw:", raw.substring(0, 300));
           if (stopReason === "max_tokens") {
