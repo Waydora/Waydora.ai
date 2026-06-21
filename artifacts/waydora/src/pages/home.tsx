@@ -660,16 +660,17 @@ function LandingNavActions({ onLoginClick, onEnterChat }: { onLoginClick: () => 
 const PROGRESSIVE_THRESHOLD = 5; // da 5 giorni in su
 const FIRST_CHUNK_DAYS = 2;      // "un paio di giorni" subito
 
-// [Streaming creazione] flag: SPENTO di default → la produzione non cambia per nessuno.
-// Accendi con ?stream=1 nell'URL (o localStorage wd_stream_create=1) per testare senza
-// redeploy; ?stream=0 forza off. Quando convince, si alza il default.
+// [Streaming creazione] flag: ACCESO di default per TUTTI → l'itinerario si scrive
+// man mano (esperienza /lab) anche nella chat principale. Resta il fallback automatico
+// al flusso JSON se lo stream fallisce prima del primo token. Kill-switch per-browser:
+// ?stream=0 (persistente) spegne; ?stream=1 riaccende.
 const STREAM_CREATE = (() => {
   try {
     const sp = new URLSearchParams(window.location.search);
-    if (sp.get("stream") === "1") { localStorage.setItem("wd_stream_create", "1"); return true; }
-    if (sp.get("stream") === "0") { localStorage.removeItem("wd_stream_create"); return false; }
-    return localStorage.getItem("wd_stream_create") === "1";
-  } catch { return false; }
+    if (sp.get("stream") === "1") { localStorage.removeItem("wd_stream_off"); return true; }
+    if (sp.get("stream") === "0") { localStorage.setItem("wd_stream_off", "1"); return false; }
+    return localStorage.getItem("wd_stream_off") !== "1"; // default: ON
+  } catch { return true; }
 })();
 
 // Estrae il numero di giorni richiesto dal testo (es. "6 giorni", "una settimana").
