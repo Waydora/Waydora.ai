@@ -282,7 +282,14 @@ export async function streamCreateItinerary(
       let obj: any;
       try { obj = JSON.parse(frame.slice(5).trim()); } catch { continue; }
       if (obj.error) throw new Error("stream_failed");
-      if (obj.done) return { kind: "itinerary", itinerary: assembleStreamItinerary(meta, dayHeads, acts, packing) };
+      // `done` SENZA giorni reali = il modello ha risposto in prosa (nessuna riga NDJSON
+      // valida) o lo stream si è interrotto: NON restituire un itinerario vuoto (che a
+      // schermo diventa "Ecco il tuo itinerario per !" con 0 giorni). Segnaliamo vuoto →
+      // il chiamante ricade in automatico sul flusso JSON robusto (/api/chat).
+      if (obj.done) {
+        if (dayHeads.length === 0) throw new Error("stream_empty");
+        return { kind: "itinerary", itinerary: assembleStreamItinerary(meta, dayHeads, acts, packing) };
+      }
       const l = obj.line;
       if (!l || typeof l.t !== "string") continue;
       if (l.t === "ask") return { kind: "ask", reply: typeof l.reply === "string" ? l.reply : "Dimmi qualcosa di più sul viaggio 🌍" };
@@ -294,7 +301,7 @@ export async function streamCreateItinerary(
       onProgress(assembleStreamItinerary(meta, dayHeads, acts, packing));
     }
   }
-  if (meta || dayHeads.length) return { kind: "itinerary", itinerary: assembleStreamItinerary(meta, dayHeads, acts, packing) };
+  if (dayHeads.length) return { kind: "itinerary", itinerary: assembleStreamItinerary(meta, dayHeads, acts, packing) };
   throw new Error("stream_empty");
 }
 
