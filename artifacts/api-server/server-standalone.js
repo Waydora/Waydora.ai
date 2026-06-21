@@ -554,8 +554,15 @@ REGOLE DISCOVERY:
 - MAX 2 domande in un singolo messaggio. MAI un elenco di 4 cose.
 - Tono leggero, da amica esperta. NIENTE bullet list, NIENTE moduli.
 - Riconosci i dati già dati: non chiedere il budget se ha già detto "low budget".
-- Una volta ricevute le risposte mancanti → genera l'itinerario nello stesso turno (non chiedere conferma).
+- Una volta ricevute le risposte mancanti → genera l'itinerario nello stesso turno (non chiedere conferma), TRANNE nel caso "PROPOSTA META + DURATA" qui sotto.
 - Se l'utente dice esplicitamente "sorprendimi" / "scegli tu" / "non importa" → procedi con default sensati (coppia, prossimo periodo favorevole, budget mid, partenza dal contesto chat o ignora se assente).
+
+━━━ PROPOSTA META + DURATA — quando la destinazione la scegli TU ━━━
+Se l'utente ti ha chiesto di CONSIGLIARE/SCEGLIERE la meta ("quale mi consigli?", "dove mi porteresti?", "non ho idee", "scegli tu") e NON ti ha indicato una DURATA (nessun numero di giorni/notti, né "weekend"/"settimana"), NON generare subito un itinerario di più giorni. Prima PROPONI in MODALITÀ TESTO (itinerary: null):
+- la tua scelta (es. il festival + la zona) in 1-2 frasi, col PERCHÉ è adatta a lui;
+- a grandi linee come ci si arriva (da dove parte, con che mezzo) SENZA inventare porti/voli/orari precisi;
+- poi CHIEDI conferma e quanti giorni ha: es. "Ti ispira? Quanti giorni hai a disposizione — un weekend (2-3 gg) o qualcosa di più lungo?".
+Genera l'itinerario completo SOLO nel turno DOPO che l'utente conferma la meta e/o ti dice la durata. In questa proposta NON usare frasi come "ecco il tuo viaggio", "ti creo l'itinerario", "ho preparato N giorni": è una PROPOSTA, non una consegna. Poi rispetta ESATTAMENTE la durata indicata dall'utente (se dice "2 giorni", fai 2).
 
 ECCEZIONE: se esiste già un itinerario in chat (modifiche, aggiunte, consigli sul viaggio in corso) → NON entrare in discovery, gestisci come edit normale.
 
@@ -849,7 +856,7 @@ function routeRequest({ messages, existingItinerary, hasMedia, tier, progressive
   // Discovery in corso: ultimo assistant ha fatto domande discovery e l'utente sta rispondendo.
   const lastAssistant = (messages || []).slice().reverse().find(m => m.role === "assistant");
   const lastAssistantText = (typeof lastAssistant?.content === "string" ? lastAssistant.content : "").toLowerCase();
-  const discoveryRx = /con chi|in che periodo|da dove parti|che budget|fascia di prezzo|quante persone|quando pensavi|che mese/;
+  const discoveryRx = /con chi|con amici|in coppia|da sol[oa]\b|in che periodo|da dove part|da quale citt|da che citt|che budget|fascia di prezzo|quante persone|quando pensavi|che mese|quanti giorni|quale festival|ti ispira|quanti giorni hai/;
   const inDiscovery = !existingItinerary && discoveryRx.test(lastAssistantText);
 
   // ── Handshake di generazione ────────────────────────────────────────────
