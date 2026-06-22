@@ -801,7 +801,7 @@ async function enrichWithTikTok(messages) {
 // Reply che ANNUNCIA/presenta un viaggio come pronto o imminente ("ecco il vostro
 // viaggio!", "vi creo un itinerario", "ho creato 6 giorni…"). Serve sia al router
 // (handshake di generazione) sia al safety-net "annuncio senza consegna" lato handler.
-const GEN_ANNOUNCE_RX = /ecco\s+(il|i|lo|la|qui|il tuo|il vostro|i vostri|i tuoi)\b|eccol[oaie]\b|eccot[ie]\b|eccov[ie]\b|eccoci\b|riecco\w*|ho creato|vi sorprendo|ti sorprendo|vi creo|ti creo|cre[oa](?:no)?\s+(?:un|l['’]|lo|il|i)\s*itinerar|il (tuo|vostro)\s+(viaggio|itinerari)|pronti a partir|preparatevi|divertitevi|ecco il vostro|ecco i vostri|sto creando|lo creo|generando/i;
+const GEN_ANNOUNCE_RX = /ecco\s+(il|i|lo|la|qui|il tuo|il vostro|i vostri|i tuoi)\b|eccol[oaie]\b|eccot[ie]\b|eccov[ie]\b|eccoci\b|riecco\w*|ho creato|ho preparato|vi sorprendo|ti sorprendo|vi creo|ti creo|cre[oa](?:no)?\s+(?:un|l['’]|lo|il|i)\s*itinerar|il (tuo|vostro)\s+(viaggio|itinerari)|pronti a partir|preparatevi|divertitevi|ecco il vostro|ecco i vostri|sto creando|lo creo|generando|(?:vi|ti)\s+port[oa]\b|(?:vi|ti)\s+accompagn[oa]\b|(?:vi|ti)\s+faccio\s+(?:scoprire|vivere|visitare)/i;
 // Intent "voglio un viaggio" emerso in QUALSIASI turno utente.
 const ITINERARY_INTENT_RX = /itinerar|viagg|pianifica|organizza|programm|vacanz|weekend|trip|tour|destinazion|vado\s+a|andare\s+a/i;
 // Annuncio di un viaggio NUOVO (non un edit del viaggio corrente). Stretto apposta:
@@ -2123,6 +2123,10 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
         // lo stale → niente più "Ecco i tuoi 2 giorni" senza che appaia il viaggio.
         const newTripAnnounce = NEW_TRIP_ANNOUNCE_RX.test(payload.reply)
           || NEW_TRIP_ANNOUNCE_RX.test(lastAssistantText(enrichedMessages));
+        // True quando entriamo nel ramo force-gen (contesto: annuncio di creazione con
+        // itinerary:null). Serve al guardrail finale per non spedire MAI una promessa a
+        // vuoto se anche la generazione forzata fallisce.
+        let triedForceGen = false;
         if (!payload.itinerary && !progressive && !mediaContent
             && ((!existingItinerary && (routedAsCreate || GEN_ANNOUNCE_RX.test(payload.reply)))
                 || newTripAnnounce)) {
@@ -2130,7 +2134,15 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
             .filter(m => m.role === "user")
             .map(m => typeof m.content === "string" ? m.content : "")
             .join(" ");
-          if (ITINERARY_INTENT_RX.test(usersJoined)) {
+          // Il router (kind create-*) ha già deciso, guardando TUTTA la storia, che è
+          // una creazione: in un flusso discovery l'utente può non aver MAI scritto
+          // "viaggio/itinerario" (risponde solo "da Napoli", "4 giorni", "crociera sul
+          // Nilo"), quindi NON pretendiamo ITINERARY_INTENT_RX sul suo testo. Il gate
+          // resta solo per i trigger basati sulla reply (annuncio testuale), dove un
+          // falso positivo è possibile. Senza questo, l'annuncio "Vi porto tra le
+          // piramidi…" con itinerary:null restava senza viaggio (bug Telegram Egitto).
+          if (routedAsCreate || ITINERARY_INTENT_RX.test(usersJoined)) {
+            triedForceGen = true;
             console.warn(`[chat] annuncio-senza-consegna da ${usedModel} (kind=${usedKind}) → forzo generazione Sonnet`);
             try {
               const dm = usersJoined.toLowerCase().match(/(\d+)\s*(giorni|day|notti|notte|gg)/i);
@@ -2152,18 +2164,52 @@ Se non riesci a leggere un totale affidabile, metti "amount": 0.`;
                 messages: forceMsgs,
                 maxTokens: forceTokens,
               });
-              const fp = extractJsonPayload(forced.text);
+              let fp = extractJsonPayload(forced.text);
+              // Secondo tentativo: l'output dell'LLM è stocastico, un retry spesso
+              // basta. Istruzione ancora più rigida (SOLO JSON, niente testo/markdown)
+              // per massimizzare le chance di un payload parsabile prima di arrendersi.
+              if (!(fp && fp.itinerary)) {
+                console.warn("[chat] force-gen 1° tentativo senza itinerary → 2° tentativo");
+                const forceMsgs2 = forceMsgs.slice();
+                forceMsgs2[forceMsgs2.length - 1] = {
+                  role: "user",
+                  content: "Rispondi SOLO con l'oggetto JSON dello schema: niente testo prima o dopo, niente markdown, niente domande. Campo \"itinerary\" valorizzato (days → activities con coordinates). Genera ADESSO.",
+                };
+                try {
+                  const forced2 = await callOpenRouter({
+                    model: M.SONNET,
+                    system: forceSystem,
+                    messages: forceMsgs2,
+                    maxTokens: forceTokens,
+                  });
+                  const fp2 = extractJsonPayload(forced2.text);
+                  if (fp2 && fp2.itinerary) fp = fp2;
+                } catch (e) {
+                  console.error("[chat] force-gen 2° tentativo fallito:", e.message);
+                }
+              }
               if (fp && fp.itinerary) {
                 payload = fp;
                 usedModel = M.SONNET;
                 console.log("[chat] generazione forzata OK");
               } else {
-                console.warn("[chat] generazione forzata: nessun itinerary prodotto");
+                console.warn("[chat] generazione forzata: nessun itinerary prodotto (2 tentativi)");
               }
             } catch (e) {
               console.error("[chat] generazione forzata fallita:", e.message);
             }
           }
+        }
+
+        // ── Guardrail anti "annuncio fantasma" ──────────────────────────────
+        // Abbiamo provato la generazione forzata (eravamo nel contesto: annuncio di un
+        // viaggio nuovo con itinerary:null) ma NON c'è ancora un itinerario nemmeno dopo
+        // i retry. NON spedire la promessa a vuoto ("Vi porto tra le piramidi!") che
+        // lascerebbe l'utente con un annuncio e nessun viaggio: sostituiamola con un
+        // messaggio onesto e azionabile. Meglio un "riprova" chiaro di un finto successo.
+        if (triedForceGen && !payload.itinerary) {
+          console.warn("[chat] force-gen senza esito → reply onesta (no annuncio fantasma)");
+          payload.reply = "Ci sono quasi col tuo itinerario, ma non sono riuscito a completarlo proprio adesso 🙏 Scrivimi \"genera\" o riprova tra qualche secondo e te lo consegno subito.";
         }
 
         if (payload.itinerary) {
